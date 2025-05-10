@@ -9,6 +9,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter, // Added DialogFooter import
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { UserAnime, UserAnimeStatus, JikanAnimeRelation } from '@/types/anime';
@@ -48,7 +49,18 @@ export function AnimeGroupModal({
   const { toast } = useToast();
 
   // Sort items within the modal, e.g., by MAL ID or a derived air date if available
-  const sortedGroupItems = [...groupItems].sort((a, b) => a.mal_id - b.mal_id);
+  const sortedGroupItems = [...groupItems].sort((a, b) => {
+    // Try to sort by Jikan's year, then by title if year is same or missing
+    // This assumes UserAnime might eventually have year/season, or we fetch Jikan data for modal
+    const yearA = a.mal_id; // Placeholder until proper year/season is available on UserAnime
+    const yearB = b.mal_id;
+
+    if (yearA !== yearB) {
+      return yearA - yearB;
+    }
+    return a.title.localeCompare(b.title);
+  });
+
 
   const handleUpdate = (
     mal_id: number, 
@@ -167,3 +179,4 @@ export function AnimeGroupModal({
     </Dialog>
   );
 }
+
