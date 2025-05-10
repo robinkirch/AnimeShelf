@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
-import { GeistMono } from 'geist/font/mono';
+// import { GeistMono } from 'geist/font/mono'; // Removed as it's not used and causes error
 import './globals.css';
 import { Header } from '@/components/layout/Header';
 import { AnimeShelfProvider } from '@/contexts/AnimeShelfContext';
@@ -18,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${GeistSans.variable} ${GeistMono.variable} font-sans antialiased`}>
+      <body className={`${GeistSans.variable} font-sans antialiased`}> {/* Removed GeistMono.variable */}
         <AnimeShelfProvider>
           <div className="flex flex-col min-h-screen">
             <Header />

@@ -3,13 +3,23 @@ import Link from 'next/link';
 import { Clapperboard } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
+import { Badge } from "@/components/ui/badge";
+import React from 'react';
 
 export function Header() {
   const pathname = usePathname();
+  const { upcomingSequels, shelf } = useAnimeShelf(); 
+
+  const shelfMalIds = React.useMemo(() => new Set(shelf.map(a => a.mal_id)), [shelf]);
+  const upcomingCount = React.useMemo(() => {
+    return upcomingSequels.filter(seq => !shelfMalIds.has(seq.mal_id)).length;
+  }, [upcomingSequels, shelfMalIds]);
+
 
   const navLinkClasses = (path: string) =>
     cn(
-      "hover:text-accent-foreground transition-colors px-3 py-2 rounded-md text-sm font-medium",
+      "hover:text-accent-foreground transition-colors px-3 py-2 rounded-md text-sm font-medium relative",
       pathname === path ? "bg-accent text-accent-foreground" : "text-primary-foreground hover:bg-primary/80"
     );
 
@@ -26,6 +36,14 @@ export function Header() {
           </Link>
           <Link href="/seasonal" className={navLinkClasses("/seasonal")}>
             Seasonal
+          </Link>
+          <Link href="/preview" className={navLinkClasses("/preview")}>
+            Preview
+            {upcomingCount > 0 && (
+              <Badge variant="destructive" className="absolute -top-1 -right-2 h-5 min-w-[1.25rem] p-0 flex items-center justify-center text-xs">
+                {upcomingCount > 99 ? '99+' : upcomingCount}
+              </Badge>
+            )}
           </Link>
         </nav>
       </div>

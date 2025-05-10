@@ -12,6 +12,8 @@ interface AnimeShelfContextType {
   isAnimeOnShelf: (mal_id: number) => boolean;
   getAnimeFromShelf: (mal_id: number) => UserAnime | undefined;
   isInitialized: boolean;
+  upcomingSequels: JikanAnime[];
+  setUpcomingSequels: (animeList: JikanAnime[]) => void;
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
@@ -21,6 +23,7 @@ const LOCAL_STORAGE_KEY = 'animeShelf';
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [shelf, setShelf] = useState<UserAnime[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [upcomingSequels, setUpcomingSequelsState] = useState<JikanAnime[]>([]);
 
   useEffect(() => {
     try {
@@ -30,7 +33,6 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error) {
       console.error("Failed to load anime shelf from localStorage:", error);
-      // Initialize with empty array in case of parsing error
       setShelf([]);
     }
     setIsInitialized(true);
@@ -45,6 +47,10 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       }
     }
   }, [shelf, isInitialized]);
+
+  const setUpcomingSequels = useCallback((animeList: JikanAnime[]) => {
+    setUpcomingSequelsState(animeList);
+  }, []);
 
   const addAnimeToShelf = useCallback((anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => {
     setShelf(prevShelf => {
@@ -63,12 +69,14 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       };
       return [...prevShelf, newAnime];
     });
+    // If an anime added to shelf was in upcoming sequels, remove it from there
+    setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
   }, []);
 
   const updateAnimeOnShelf = useCallback((mal_id: number, updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>) => {
     setShelf(prevShelf =>
-      prevShelf.map(anime =>
-        anime.mal_id === mal_id ? { ...anime, ...updates, current_episode: Math.max(0, updates.current_episode ?? anime.current_episode) } : anime
+      prevShelf.map(animeItem => // Renamed 'anime' to 'animeItem' to avoid conflict with 'anime' from JikanAnime
+        animeItem.mal_id === mal_id ? { ...animeItem, ...updates, current_episode: Math.max(0, updates.current_episode ?? animeItem.current_episode) } : animeItem
       )
     );
   }, []);
@@ -86,7 +94,17 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   }, [shelf]);
   
   return (
-    <AnimeShelfContext.Provider value={{ shelf, addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf, getAnimeFromShelf, isInitialized }}>
+    <AnimeShelfContext.Provider value={{ 
+        shelf, 
+        addAnimeToShelf, 
+        updateAnimeOnShelf, 
+        removeAnimeFromShelf, 
+        isAnimeOnShelf, 
+        getAnimeFromShelf, 
+        isInitialized,
+        upcomingSequels,
+        setUpcomingSequels
+      }}>
       {children}
     </AnimeShelfContext.Provider>
   );
