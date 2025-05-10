@@ -11,8 +11,8 @@ import { ProgressBar } from './ProgressBar';
 import { RatingInput } from './RatingInput';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { AddToShelfDialog } from './AddToShelfDialog';
-import { AddAllToShelfDialog } from './AddAllToShelfDialog'; // New import
-import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2 } from 'lucide-react'; // Added Layers, Loader2
+import { AddAllToShelfDialog } from './AddAllToShelfDialog';
+import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -22,8 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from '../ui/input';
-import { jikanApi } from '@/lib/jikanApi'; // New import
-import { Skeleton } from '../ui/skeleton'; // New import
+import { jikanApi } from '@/lib/jikanApi';
+import { Skeleton } from '../ui/skeleton';
 
 interface AnimeCardProps {
   anime: JikanAnime; 
@@ -52,22 +52,25 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
 
   useEffect(() => {
     const fetchRelations = async () => {
-      // Only fetch if not on shelf and anime type suggests it might have relations (e.g. TV, OVA, Movie)
-      // and avoid fetching for things like Music or ONA if not desired.
-      // For simplicity, we fetch for most common types.
       if (!isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '')) {
         setIsLoadingRelations(true);
-        const rels = await jikanApi.getAnimeRelations(anime.mal_id);
-        setRelations(rels);
-        
-        const hasSequelsOrPrequels = rels.some(relation =>
-          (relation.relation === 'Sequel' || relation.relation === 'Prequel') &&
-          relation.entry.some(e => e.type === 'anime')
-        );
-        setShowAddAllButton(hasSequelsOrPrequels);
-        setIsLoadingRelations(false);
+        try {
+            const rels = await jikanApi.getAnimeRelations(anime.mal_id);
+            setRelations(rels);
+            
+            const hasSequelsOrPrequels = rels.some(relation =>
+              (relation.relation === 'Sequel' || relation.relation === 'Prequel') &&
+              relation.entry.some(e => e.type === 'anime')
+            );
+            setShowAddAllButton(hasSequelsOrPrequels);
+        } catch (error) {
+            console.error("Failed to fetch relations:", error);
+            setShowAddAllButton(false);
+        } finally {
+            setIsLoadingRelations(false);
+        }
       } else {
-        setShowAddAllButton(false); // Ensure it's false if conditions aren't met
+        setShowAddAllButton(false);
       }
     };
     fetchRelations();
@@ -81,34 +84,34 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
 
   const handleUpdateStatus = (status: UserAnimeStatus) => {
     if (currentShelfItem) {
-      updateAnimeOnShelf(anime.mal_id, { user_status: status });
+      updateAnimeOnShelf(anime.mal_id, { user_status: status }, anime.episodes);
       toast({ title: "Status Updated", description: `"${anime.title}" status set to ${status}.` });
     }
   };
 
   const handleUpdateRating = (rating: number | null) => {
     if (currentShelfItem) {
-      updateAnimeOnShelf(anime.mal_id, { user_rating: rating });
+      updateAnimeOnShelf(anime.mal_id, { user_rating: rating }, anime.episodes);
       toast({ title: "Rating Updated", description: `"${anime.title}" rating set.` });
     }
   };
 
   const handleIncrementEpisode = () => {
     if (currentShelfItem && (currentShelfItem.total_episodes === null || currentShelfItem.current_episode < currentShelfItem.total_episodes)) {
-      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode + 1 });
+      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode + 1 }, anime.episodes);
     }
   };
 
   const handleDecrementEpisode = () => {
     if (currentShelfItem && currentShelfItem.current_episode > 0) {
-      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode - 1 });
+      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode - 1 }, anime.episodes);
     }
   };
   
   const handleSetEpisode = (episode: number) => {
     if (currentShelfItem) {
       const newEpisode = Math.max(0, Math.min(episode, currentShelfItem.total_episodes ?? Infinity));
-      updateAnimeOnShelf(anime.mal_id, { current_episode: newEpisode });
+      updateAnimeOnShelf(anime.mal_id, { current_episode: newEpisode }, anime.episodes);
     }
   };
 
@@ -131,7 +134,7 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
           height={300}
           className="object-cover w-full h-48 md:h-64"
           data-ai-hint="anime cover art"
-          priority={false}
+          priority={false} // Typically false for lists of images
         />
          {currentShelfItem && StatusIcon && (
           <div className="absolute top-2 right-2 bg-background/80 p-1.5 rounded-full shadow-md">
@@ -145,13 +148,13 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
         </CardTitle>
         <div className="text-xs text-muted-foreground mb-2">
           <span>{anime.type}</span>
-          {anime.episodes && <span> &bull; {anime.episodes} episodes</span>}
+          {anime.episodes !== null && <span> &bull; {anime.episodes} episodes</span>}
           {anime.season && anime.year && <span> &bull; {`${anime.season} ${anime.year}`.replace(/\b\w/g, l => l.toUpperCase())}</span>}
         </div>
         
         <div className="flex flex-wrap gap-1 mb-3">
           {anime.genres?.slice(0, 3).map(genre => (
-            <Badge key={genre.name} variant="secondary" className="text-xs">{genre.name}</Badge>
+            <Badge key={genre.mal_id + '-' + genre.name} variant="secondary" className="text-xs">{genre.name}</Badge>
           ))}
         </div>
 
@@ -213,7 +216,6 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
                 relations={relations.filter(r => (r.relation === 'Sequel' || r.relation === 'Prequel') && r.entry.some(e => e.type === 'anime'))}
                 onAddAllToShelf={(animeSeriesDetails) => {
                   animeSeriesDetails.forEach(item => {
-                    // Ensure not to add if somehow already on shelf (e.g. race condition or manual add during dialog)
                     if (!isAnimeOnShelf(item.animeData.mal_id)) {
                        addAnimeToShelf(item.animeData, item.userProgress);
                     }
@@ -232,4 +234,3 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
     </Card>
   );
 }
-

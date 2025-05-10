@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
@@ -8,7 +7,11 @@ import type { JikanAnime, UserAnime, UserAnimeStatus } from '@/types/anime';
 interface AnimeShelfContextType {
   shelf: UserAnime[];
   addAnimeToShelf: (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => void;
-  updateAnimeOnShelf: (mal_id: number, updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>) => void;
+  updateAnimeOnShelf: (
+    mal_id: number, 
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>,
+    currentJikanTotalEpisodes?: number | null
+  ) => void;
   removeAnimeFromShelf: (mal_id: number) => void;
   isAnimeOnShelf: (mal_id: number) => boolean;
   getAnimeFromShelf: (mal_id: number) => UserAnime | undefined;
@@ -70,42 +73,48 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       };
       return [...prevShelf, newAnime];
     });
-    // If an anime added to shelf was in upcoming sequels, remove it from there
     setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
   }, []);
 
-  const updateAnimeOnShelf = useCallback((mal_id: number, updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>) => {
+  const updateAnimeOnShelf = useCallback((
+    mal_id: number,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>,
+    currentJikanTotalEpisodes?: number | null
+  ) => {
     setShelf(prevShelf =>
-      prevShelf.map(animeItem => {
-        if (animeItem.mal_id === mal_id) {
-          const updatedAnime = { ...animeItem, ...updates };
+      prevShelf.map(animeItemOnShelf => {
+        if (animeItemOnShelf.mal_id === mal_id) {
+          let newAnimeState = { ...animeItemOnShelf };
 
-          // If status is being updated to 'completed' and total_episodes is known,
-          // set current_episode to total_episodes.
-          if (updates.user_status === 'completed' && typeof animeItem.total_episodes === 'number') {
-            updatedAnime.current_episode = animeItem.total_episodes;
-          } else if (updates.current_episode !== undefined) {
-            // If current_episode is being explicitly updated (and status is not 'completed' or total_episodes unknown)
-            let newCurrentEpisode = Math.max(0, updates.current_episode);
-            if (typeof animeItem.total_episodes === 'number') {
-              newCurrentEpisode = Math.min(newCurrentEpisode, animeItem.total_episodes);
+          let mostReliableTotalEpisodes = newAnimeState.total_episodes;
+          if (typeof currentJikanTotalEpisodes === 'number') {
+            mostReliableTotalEpisodes = currentJikanTotalEpisodes;
+            if (newAnimeState.total_episodes !== currentJikanTotalEpisodes) {
+              newAnimeState.total_episodes = currentJikanTotalEpisodes;
             }
-            updatedAnime.current_episode = newCurrentEpisode;
           }
-          // If only other fields are updated, current_episode remains as is from { ...animeItem, ...updates }
-          // or if updates.current_episode was undefined, it remains animeItem.current_episode.
-          // Ensure it's still valid if not touched by 'completed' logic.
-          else if (updatedAnime.user_status !== 'completed' || typeof animeItem.total_episodes !== 'number') {
-             updatedAnime.current_episode = Math.max(0, updatedAnime.current_episode);
-             if(typeof animeItem.total_episodes === 'number') {
-                updatedAnime.current_episode = Math.min(updatedAnime.current_episode, animeItem.total_episodes);
-             }
+          
+          newAnimeState = { ...newAnimeState, ...updates };
+
+          if (updates.user_status === 'completed' && typeof mostReliableTotalEpisodes === 'number') {
+            newAnimeState.current_episode = mostReliableTotalEpisodes;
+          } else if (updates.current_episode !== undefined) {
+            let ep = Math.max(0, updates.current_episode);
+            if (typeof mostReliableTotalEpisodes === 'number') {
+              ep = Math.min(ep, mostReliableTotalEpisodes);
+            }
+            newAnimeState.current_episode = ep;
+          } else {
+            let ep = Math.max(0, newAnimeState.current_episode);
+            if (typeof mostReliableTotalEpisodes === 'number') {
+              ep = Math.min(ep, mostReliableTotalEpisodes);
+            }
+            newAnimeState.current_episode = ep;
           }
-
-
-          return updatedAnime;
+          
+          return newAnimeState;
         }
-        return animeItem;
+        return animeItemOnShelf;
       })
     );
   }, []);
@@ -146,4 +155,3 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
-

@@ -6,15 +6,20 @@ interface ProgressBarProps {
 
 export function ProgressBar({ current, total, height = "h-2.5" }: ProgressBarProps) {
   if (total === null || total === 0) {
-    return <div className={`${height} w-full bg-muted rounded-full shadow-inner`} title={`Progress: ${current} episodes (total unknown)`}>
+    const displayWidth = (current > 0) ? '100%' : '0%';
+    const titleText = total === 0 
+      ? `Progress: ${current} of 0 episodes (e.g., a movie or special)`
+      : `Progress: ${current} episodes (total unknown)`;
+
+    return <div className={`${height} w-full bg-muted rounded-full shadow-inner`} title={titleText}>
         <div
             className="bg-accent h-full rounded-full transition-all duration-300 ease-in-out"
-            style={{ width: `100%` }} // Show as full if total is unknown but progress exists
-            aria-valuenow={current}
+            style={{ width: displayWidth }}
+            aria-valuenow={current > 0 ? 100 : 0} // Simplified ARIA for this case
             aria-valuemin={0}
-            aria-valuemax={total ?? current}
+            aria-valuemax={100} // Represent as percentage when total is unknown/0
             role="progressbar"
-            aria-label={`Progress: ${current} episodes`}
+            aria-label={titleText}
         />
     </div>;
   }
