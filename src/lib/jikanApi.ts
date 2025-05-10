@@ -7,12 +7,12 @@ const JIKAN_API_BASE = 'https://api.jikan.moe/v4';
 // Helper to delay execution, to respect API rate limits
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const API_REQUEST_DELAY = 550; // ms, aiming for <2 requests per second
+const API_REQUEST_DELAY = 1000; // ms, aiming for 1 request per second
 
 export const jikanApi = {
   searchAnime: async (query: string, limit: number = 20): Promise<JikanAnime[]> => {
     try {
-      await delay(API_REQUEST_DELAY); // Jikan API rate limit: ~1-2 requests per second allowed for sustained use
+      await delay(API_REQUEST_DELAY); 
       const response = await axios.get<JikanAPISearchResponse>(`${JIKAN_API_BASE}/anime`, {
         params: { q: query, limit },
       });
