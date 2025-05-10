@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
 
+const ALL_FILTER_VALUE = "_all_";
 
 export default function SeasonalPage() {
   const [seasonalAnime, setSeasonalAnime] = useState<JikanAnime[]>([]);
@@ -26,8 +28,8 @@ export default function SeasonalPage() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [season, setSeason] = useState<string>(getCurrentSeasonName());
 
-  const [genreFilter, setGenreFilter] = useState<string>('');
-  const [studioFilter, setStudioFilter] = useState<string>('');
+  const [genreFilter, setGenreFilter] = useState<string>(ALL_FILTER_VALUE);
+  const [studioFilter, setStudioFilter] = useState<string>(ALL_FILTER_VALUE);
 
   function getCurrentSeasonName(): string {
     const month = new Date().getMonth();
@@ -83,8 +85,8 @@ export default function SeasonalPage() {
 
   const filteredAnime = useMemo(() => {
     return seasonalAnime.filter(anime => {
-      const genreMatch = genreFilter ? anime.genres?.some(g => g.name === genreFilter) : true;
-      const studioMatch = studioFilter ? anime.studios?.some(s => s.name === studioFilter) : true;
+      const genreMatch = genreFilter === ALL_FILTER_VALUE ? true : anime.genres?.some(g => g.name === genreFilter);
+      const studioMatch = studioFilter === ALL_FILTER_VALUE ? true : anime.studios?.some(s => s.name === studioFilter);
       return genreMatch && studioMatch;
     });
   }, [seasonalAnime, genreFilter, studioFilter]);
@@ -131,7 +133,7 @@ export default function SeasonalPage() {
             <Select value={genreFilter} onValueChange={setGenreFilter}>
               <SelectTrigger id="genre-filter-seasonal"><SelectValue placeholder="All Genres" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Genres</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>All Genres</SelectItem>
                 {uniqueGenres.map(genre => <SelectItem key={genre} value={genre}>{genre}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -141,12 +143,12 @@ export default function SeasonalPage() {
             <Select value={studioFilter} onValueChange={setStudioFilter}>
               <SelectTrigger id="studio-filter-seasonal"><SelectValue placeholder="All Studios" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Studios</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>All Studios</SelectItem>
                 {uniqueStudios.map(studio => <SelectItem key={studio} value={studio}>{studio}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-           <Button variant="outline" onClick={() => { setGenreFilter(''); setStudioFilter(''); }} className="self-end">
+           <Button variant="outline" onClick={() => { setGenreFilter(ALL_FILTER_VALUE); setStudioFilter(ALL_FILTER_VALUE); }} className="self-end">
               Clear Filters
             </Button>
         </div>
@@ -185,3 +187,5 @@ export default function SeasonalPage() {
     </div>
   );
 }
+
+    

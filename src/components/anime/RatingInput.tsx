@@ -1,3 +1,4 @@
+
 import {
   Select,
   SelectContent,
@@ -13,15 +14,21 @@ interface RatingInputProps {
   disabled?: boolean;
 }
 
+const NO_RATING_VALUE = "_none_"; // Use a distinct non-empty string
+
 export function RatingInput({ value, onChange, disabled }: RatingInputProps) {
   const handleChange = (selectedValue: string) => {
-    const numericValue = parseInt(selectedValue, 10);
-    onChange(isNaN(numericValue) ? null : numericValue);
+    if (selectedValue === NO_RATING_VALUE) {
+      onChange(null);
+    } else {
+      const numericValue = parseInt(selectedValue, 10);
+      onChange(isNaN(numericValue) ? null : numericValue);
+    }
   };
 
   return (
     <Select
-      value={value?.toString() || ""}
+      value={value?.toString() || NO_RATING_VALUE} // Default to NO_RATING_VALUE if value is null
       onValueChange={handleChange}
       disabled={disabled}
     >
@@ -29,7 +36,7 @@ export function RatingInput({ value, onChange, disabled }: RatingInputProps) {
         <SelectValue placeholder="Rate anime..." />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="">No Rating</SelectItem>
+        <SelectItem value={NO_RATING_VALUE}>No Rating</SelectItem>
         {RATING_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value.toString()}>
             {option.label}
@@ -39,3 +46,5 @@ export function RatingInput({ value, onChange, disabled }: RatingInputProps) {
     </Select>
   );
 }
+
+    

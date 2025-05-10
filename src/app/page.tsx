@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -20,7 +21,9 @@ import {
 } from "@/components/ui/select";
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Label } from '@/components/ui/label';
+import { Label } from "@/components/ui/label";
+
+const ALL_FILTER_VALUE = "_all_";
 
 export default function MyShelfPage() {
   const { shelf, isInitialized: shelfInitialized } = useAnimeShelf();
@@ -29,9 +32,9 @@ export default function MyShelfPage() {
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
   const [isLoadingShelf, setIsLoadingShelf] = useState(true);
   
-  const [genreFilter, setGenreFilter] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<UserAnimeStatus | ''>('');
-  const [ratingFilter, setRatingFilter] = useState<string>(''); // Store as string for select compatibility
+  const [genreFilter, setGenreFilter] = useState<string>(ALL_FILTER_VALUE);
+  const [statusFilter, setStatusFilter] = useState<UserAnimeStatus | typeof ALL_FILTER_VALUE>(ALL_FILTER_VALUE);
+  const [ratingFilter, setRatingFilter] = useState<string>(ALL_FILTER_VALUE); // Store as string for select compatibility
 
   useEffect(() => {
     if (shelfInitialized) {
@@ -62,17 +65,17 @@ export default function MyShelfPage() {
   const filteredShelf = useMemo(() => {
     if (!shelfInitialized) return [];
     return shelf.filter(anime => {
-      const genreMatch = genreFilter ? anime.genres.includes(genreFilter) : true;
-      const statusMatch = statusFilter ? anime.user_status === statusFilter : true;
-      const ratingMatch = ratingFilter ? anime.user_rating === parseInt(ratingFilter) : true;
+      const genreMatch = genreFilter === ALL_FILTER_VALUE ? true : anime.genres.includes(genreFilter);
+      const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
+      const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
       return genreMatch && statusMatch && ratingMatch;
     });
   }, [shelf, genreFilter, statusFilter, ratingFilter, shelfInitialized]);
 
   const clearFilters = () => {
-    setGenreFilter('');
-    setStatusFilter('');
-    setRatingFilter('');
+    setGenreFilter(ALL_FILTER_VALUE);
+    setStatusFilter(ALL_FILTER_VALUE);
+    setRatingFilter(ALL_FILTER_VALUE);
   };
 
   const renderSkeletons = (count: number) => (
@@ -146,17 +149,17 @@ export default function MyShelfPage() {
             <Select value={genreFilter} onValueChange={setGenreFilter}>
               <SelectTrigger id="genre-filter"><SelectValue placeholder="All Genres" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Genres</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>All Genres</SelectItem>
                 {uniqueGenres.map(genre => <SelectItem key={genre} value={genre}>{genre}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label htmlFor="status-filter" className="text-sm font-medium">Status</Label>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as UserAnimeStatus | '')}>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as UserAnimeStatus | typeof ALL_FILTER_VALUE)}>
               <SelectTrigger id="status-filter"><SelectValue placeholder="All Statuses" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>All Statuses</SelectItem>
                 {USER_ANIME_STATUS_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -166,7 +169,7 @@ export default function MyShelfPage() {
             <Select value={ratingFilter} onValueChange={setRatingFilter}>
               <SelectTrigger id="rating-filter"><SelectValue placeholder="All Ratings" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Ratings</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>All Ratings</SelectItem>
                 {RATING_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value.toString()}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -196,7 +199,7 @@ export default function MyShelfPage() {
                 genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
                 studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
                 // Add other required JikanAnime fields with default/empty values
-                url: '', approved: true, titles: [{type: 'Default', title: userAnime.title}], type: 'TV', source: 'Unknown', status: 'Unknown', airing: false, score: null, scored_by: null, synopsis: null, producers: [], licensors: [],
+                url: '', approved: true, titles: [{type: 'Default', title: userAnime.title}], type: 'TV', source: 'Unknown', status: 'Unknown', airing: false, score: null, scored_by: null, synopsis: null, producers: [], licensors: [], season: null, year: null,
               };
               return <AnimeCard key={userAnime.mal_id} anime={partialJikanAnime} shelfItem={userAnime} />;
             })}
@@ -226,3 +229,6 @@ export default function MyShelfPage() {
     </div>
   );
 }
+
+
+    
