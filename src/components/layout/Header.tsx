@@ -1,19 +1,26 @@
 
 "use client";
 import Link from 'next/link';
-import { Clapperboard } from 'lucide-react';
+import { Clapperboard, Moon, Sun } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Badge } from "@/components/ui/badge";
-import React from 'react';
+import { Button } from "@/components/ui/button";
+import React, { useEffect, useState } from 'react';
 
 export function Header() {
   const pathname = usePathname();
-  const { getFilteredUpcomingSequelsCount } = useAnimeShelf(); 
+  const { getFilteredUpcomingSequelsCount } = useAnimeShelf();
+  const { theme, toggleTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const upcomingCount = getFilteredUpcomingSequelsCount();
-
 
   const navLinkClasses = (path: string) =>
     cn(
@@ -28,7 +35,7 @@ export function Header() {
           <Clapperboard size={28} className="text-accent-foreground" />
           <span>AnimeShelf</span>
         </Link>
-        <nav className="flex items-center gap-2 sm:gap-4">
+        <nav className="flex items-center gap-1 sm:gap-2">
           <Link href="/" className={navLinkClasses("/")}>
             My Shelf
           </Link>
@@ -43,9 +50,17 @@ export function Header() {
               </Badge>
             )}
           </Link>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            className="text-primary-foreground hover:bg-primary/80 hover:text-accent-foreground ml-2"
+          >
+            {mounted ? (theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />) : <Moon size={20} /> }
+          </Button>
         </nav>
       </div>
     </header>
   );
 }
-
