@@ -78,24 +78,35 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
     });
     
     const entriesToFetch = Array.from(entriesToFetchMap.values());
+    const fetchedSeasonStates: SeasonEntryState[] = [];
 
-    const initialStatesPromise = entriesToFetch.map(async (entry) => {
-        const animeDetails = entry.mal_id === mainAnime.mal_id ? mainAnime : await jikanApi.getAnimeById(entry.mal_id);
+    for (const entry of entriesToFetch) {
+        let animeDetails: JikanAnime | null | undefined = undefined;
+        if (entry.mal_id === mainAnime.mal_id) {
+            animeDetails = mainAnime; // Use the already available mainAnime data
+        } else {
+            // Fetch details sequentially; jikanApi.getAnimeById has an internal delay
+            animeDetails = await jikanApi.getAnimeById(entry.mal_id);
+        }
+
         if (!animeDetails) {
-            return {
+            console.warn(`Failed to fetch details for ${entry.name} (ID: ${entry.mal_id}), using placeholder.`);
+            fetchedSeasonStates.push({
                 mal_id: entry.mal_id,
                 title: entry.name,
-                cover_image: "https://picsum.photos/100/150",
+                cover_image: "https://picsum.photos/100/150", // Default placeholder
                 total_episodes: null,
                 user_status: 'plan_to_watch' as UserAnimeStatus,
                 current_episode: 0,
                 user_rating: null,
                 genres: [],
                 studios: [],
-                animeData: undefined, 
-            };
+                animeData: undefined, // Mark as not fully loaded
+            });
+            continue; // Skip to the next entry
         }
-        return {
+
+        fetchedSeasonStates.push({
             mal_id: animeDetails.mal_id,
             title: animeDetails.title,
             cover_image: animeDetails.images.webp?.image_url || animeDetails.images.jpg.image_url || "https://picsum.photos/100/150",
@@ -106,21 +117,18 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             genres: animeDetails.genres?.map(g => g.name) || [],
             studios: animeDetails.studios?.map(s => s.name) || [],
             animeData: animeDetails,
-        };
-    });
-
-    let resolvedStates = await Promise.all(initialStatesPromise);
-    resolvedStates = resolvedStates.filter(s => s.animeData); // Only include successfully fetched anime
-
+        });
+    }
+    
     // Sort: Prequels, Main Anime, Sequels
-    resolvedStates.sort((a, b) => {
+    fetchedSeasonStates.sort((a, b) => {
         const getOrderScore = (itemMalId: number) => {
             if (itemMalId === mainAnime.mal_id) return 0; // Main anime in the middle
             const isPrequel = relations.some(r => r.relation === 'Prequel' && r.entry.some(e => e.mal_id === itemMalId));
             if (isPrequel) return -1; // Prequels first
             const isSequel = relations.some(r => r.relation === 'Sequel' && r.entry.some(e => e.mal_id === itemMalId));
             if (isSequel) return 1; // Sequels last
-            return 0; // Other relations (though filtered out before this dialog) or main if not caught
+            return 0; 
         };
 
         const scoreA = getOrderScore(a.mal_id);
@@ -128,7 +136,6 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
 
         if (scoreA !== scoreB) return scoreA - scoreB;
         
-        // If same category (e.g., both prequels), sort by aired date if available, then title
         const dateA = a.animeData?.aired?.from ? new Date(a.animeData.aired.from) : null;
         const dateB = b.animeData?.aired?.from ? new Date(b.animeData.aired.from) : null;
 
@@ -136,7 +143,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             if (dateA < dateB) return -1;
             if (dateA > dateB) return 1;
         } else if (dateA) {
-            return -1; // Ones with dates first
+            return -1; 
         } else if (dateB) {
             return 1;
         }
@@ -144,7 +151,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
         return a.title.localeCompare(b.title);
     });
     
-    setSeasonEntries(resolvedStates);
+    setSeasonEntries(fetchedSeasonStates);
     setIsFetchingDetails(false);
 
   }, [mainAnime, relations, isOpen]);
@@ -154,7 +161,8 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
     if (isOpen) {
       initializeSeasonData();
     } else {
-      setSeasonEntries([]);
+      // Reset state when dialog closes
+      setSeasonEntries([]); 
       setIsFetchingDetails(false);
     }
   }, [isOpen, initializeSeasonData]);
@@ -171,7 +179,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
 
   const handleSubmit = () => {
     const detailsToSubmit = seasonEntries
-      .filter(entry => entry.animeData) 
+      .filter(entry => entry.animeData) // Only submit entries where full animeData was successfully fetched/present
       .map(entry => ({
         animeData: entry.animeData!, 
         userProgress: {
@@ -277,7 +285,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             Set initial progress for each season in the series. Related seasons are fetched and shown below.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-grow max-h-[calc(90vh-200px)] pr-3"> {/* Adjusted max-h for footer */}
+        <ScrollArea className="flex-grow max-h-[calc(90vh-200px)] pr-3">
             <div className="space-y-4 py-2">
             {isFetchingDetails && renderSkeletons(3)}
             {!isFetchingDetails && seasonEntries.length === 0 && (
@@ -286,9 +294,13 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             {!isFetchingDetails && seasonEntries.map(entry => renderSeasonForm(entry))}
             </div>
         </ScrollArea>
-        <DialogFooter className="mt-auto pt-4 border-t"> {/* Ensure footer is at bottom */}
+        <DialogFooter className="mt-auto pt-4 border-t">
           <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-          <Button type="submit" onClick={handleSubmit} disabled={isFetchingDetails || seasonEntries.length === 0}>
+          <Button 
+            type="submit" 
+            onClick={handleSubmit} 
+            disabled={isFetchingDetails || seasonEntries.filter(e => e.animeData).length === 0}
+          >
             {isFetchingDetails && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Add Series to Shelf
           </Button>
@@ -297,3 +309,4 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
     </Dialog>
   );
 }
+
