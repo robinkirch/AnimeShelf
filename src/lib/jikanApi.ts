@@ -1,25 +1,28 @@
 import axios from 'axios';
-import type { JikanAPISearchResponse, JikanAPIByIdResponse, JikanAPISeasonsResponse, JikanAnime } from '@/types/anime';
+import type { JikanAPISearchResponse, JikanAPIByIdResponse, JikanAPISeasonsResponse, JikanAnime, JikanAPIRelationsResponse, JikanAnimeRelation } from '@/types/anime';
 
 const JIKAN_API_BASE = 'https://api.jikan.moe/v4';
+
+// Helper to delay execution, to respect API rate limits
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const jikanApi = {
   searchAnime: async (query: string, limit: number = 20): Promise<JikanAnime[]> => {
     try {
+      await delay(350); // Jikan API rate limit: ~3 requests per second
       const response = await axios.get<JikanAPISearchResponse>(`${JIKAN_API_BASE}/anime`, {
         params: { q: query, limit },
       });
       return response.data.data;
     } catch (error) {
       console.error('Error searching anime:', error);
-      // It's better to throw the error or return a consistent error structure
-      // For now, returning empty array on error to prevent app crash
       return []; 
     }
   },
 
   getAnimeById: async (id: number): Promise<JikanAnime | null> => {
     try {
+      await delay(350);
       const response = await axios.get<JikanAPIByIdResponse>(`${JIKAN_API_BASE}/anime/${id}`);
       return response.data.data;
     } catch (error) {
@@ -30,6 +33,7 @@ export const jikanApi = {
 
   getCurrentSeason: async (): Promise<JikanAnime[]> => {
     try {
+      await delay(350);
       const response = await axios.get<JikanAPISeasonsResponse>(`${JIKAN_API_BASE}/seasons/now`);
       return response.data.data;
     } catch (error) {
@@ -40,10 +44,24 @@ export const jikanApi = {
 
   getSeason: async (year: number, season: string): Promise<JikanAnime[]> => {
     try {
+      await delay(350);
       const response = await axios.get<JikanAPISeasonsResponse>(`${JIKAN_API_BASE}/seasons/${year}/${season}`);
-      return response.data.data;
+      // De-duplicate data based on mal_id to prevent React key errors, Jikan sometimes returns duplicates here
+      const uniqueData = Array.from(new Map(response.data.data.map(anime => [anime.mal_id, anime])).values());
+      return uniqueData;
     } catch (error) {
       console.error(`Error fetching ${season} ${year} season:`, error);
+      return [];
+    }
+  },
+
+  getAnimeRelations: async (id: number): Promise<JikanAnimeRelation[]> => {
+    try {
+      await delay(350);
+      const response = await axios.get<JikanAPIRelationsResponse>(`${JIKAN_API_BASE}/anime/${id}/relations`);
+      return response.data.data;
+    } catch (error) {
+      console.error(`Error fetching relations for anime ID ${id}:`, error);
       return [];
     }
   },

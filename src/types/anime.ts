@@ -58,6 +58,7 @@ export interface JikanAnime {
   explicit_genres?: JikanMALItem[];
   themes?: JikanMALItem[];
   demographics?: JikanMALItem[];
+  relations?: JikanAnimeRelation[]; // Added for convenience, though API might provide separately
 }
 
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
@@ -119,4 +120,21 @@ export interface JikanAPISeasonsResponse {
     last_visible_page: number;
     has_next_page: boolean;
   }
+}
+
+// Types for Anime Relations
+export interface JikanAnimeRelationEntry {
+  mal_id: number;
+  type: string; // e.g., "anime", "manga"
+  name: string;
+  url: string;
+}
+
+export interface JikanAnimeRelation {
+  relation: string; // e.g., "Sequel", "Prequel", "Alternative version"
+  entry: JikanAnimeRelationEntry[];
+}
+
+export interface JikanAPIRelationsResponse {
+  data: JikanAnimeRelation[];
 }

@@ -56,9 +56,8 @@ export default function SeasonalPage() {
       setError(null);
       try {
         const data = await jikanApi.getSeason(year, season);
-        // De-duplicate data based on mal_id to prevent React key errors
-        const uniqueData = Array.from(new Map(data.map(anime => [anime.mal_id, anime])).values());
-        setSeasonalAnime(uniqueData);
+        // De-duplication is now handled within jikanApi.getSeason
+        setSeasonalAnime(data);
       } catch (e) {
         console.error(e);
         setError('Failed to fetch seasonal anime. Please try again later.');

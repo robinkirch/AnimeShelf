@@ -1,16 +1,18 @@
 "use client";
 
 import Image from 'next/image';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { JikanAnime, UserAnime, UserAnimeStatus } from '@/types/anime';
+import type { JikanAnime, UserAnime, UserAnimeStatus, JikanAnimeRelation } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
 import { ProgressBar } from './ProgressBar';
 import { RatingInput } from './RatingInput';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { AddToShelfDialog } from './AddToShelfDialog';
-import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus } from 'lucide-react';
+import { AddAllToShelfDialog } from './AddAllToShelfDialog'; // New import
+import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2 } from 'lucide-react'; // Added Layers, Loader2
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -20,10 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from '../ui/input';
+import { jikanApi } from '@/lib/jikanApi'; // New import
+import { Skeleton } from '../ui/skeleton'; // New import
 
 interface AnimeCardProps {
-  anime: JikanAnime; // Full Jikan data for display
-  shelfItem?: UserAnime; // Optional: if it's on the shelf
+  anime: JikanAnime; 
+  shelfItem?: UserAnime; 
 }
 
 const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
@@ -41,6 +45,33 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
   
   const isOnShelf = shelfItem !== undefined || isAnimeOnShelf(anime.mal_id);
   const currentShelfItem = shelfItem || useAnimeShelf().getAnimeFromShelf(anime.mal_id);
+
+  const [relations, setRelations] = useState<JikanAnimeRelation[]>([]);
+  const [isLoadingRelations, setIsLoadingRelations] = useState(false);
+  const [showAddAllButton, setShowAddAllButton] = useState(false);
+
+  useEffect(() => {
+    const fetchRelations = async () => {
+      // Only fetch if not on shelf and anime type suggests it might have relations (e.g. TV, OVA, Movie)
+      // and avoid fetching for things like Music or ONA if not desired.
+      // For simplicity, we fetch for most common types.
+      if (!isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '')) {
+        setIsLoadingRelations(true);
+        const rels = await jikanApi.getAnimeRelations(anime.mal_id);
+        setRelations(rels);
+        
+        const hasSequelsOrPrequels = rels.some(relation =>
+          (relation.relation === 'Sequel' || relation.relation === 'Prequel') &&
+          relation.entry.some(e => e.type === 'anime')
+        );
+        setShowAddAllButton(hasSequelsOrPrequels);
+        setIsLoadingRelations(false);
+      } else {
+        setShowAddAllButton(false); // Ensure it's false if conditions aren't met
+      }
+    };
+    fetchRelations();
+  }, [anime.mal_id, anime.type, isOnShelf]);
 
 
   const handleAddToShelf = (details: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => {
@@ -97,10 +128,10 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
           src={anime.images.webp?.large_image_url || anime.images.webp?.image_url || anime.images.jpg.large_image_url || "https://picsum.photos/400/600"}
           alt={`Cover image for ${anime.title}`}
           width={400}
-          height={300} // Adjusted for aspect ratio, this effectively becomes max height
-          className="object-cover w-full h-48 md:h-64" // Fixed height for consistency
+          height={300}
+          className="object-cover w-full h-48 md:h-64"
           data-ai-hint="anime cover art"
-          priority={false} // Default to false, set to true for above-the-fold images if needed
+          priority={false}
         />
          {currentShelfItem && StatusIcon && (
           <div className="absolute top-2 right-2 bg-background/80 p-1.5 rounded-full shadow-md">
@@ -157,17 +188,45 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
           </div>
         )}
       </CardContent>
-      <CardFooter className="p-4 pt-0">
+      <CardFooter className="p-4 pt-0 flex flex-col gap-2">
         {isOnShelf && currentShelfItem ? (
           <Button variant="destructive" className="w-full" onClick={handleRemoveFromShelf}>
             <Trash2 size={16} className="mr-2" /> Remove from Shelf
           </Button>
         ) : (
-          <AddToShelfDialog anime={anime} onAddToShelf={handleAddToShelf}>
-            <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
-              <PlusCircle size={16} className="mr-2" /> Add to Shelf
-            </Button>
-          </AddToShelfDialog>
+          <>
+            <AddToShelfDialog anime={anime} onAddToShelf={handleAddToShelf}>
+              <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+                <PlusCircle size={16} className="mr-2" /> Add to Shelf
+              </Button>
+            </AddToShelfDialog>
+
+            {isLoadingRelations && (
+                 <Button variant="outline" className="w-full" disabled>
+                    <Loader2 size={16} className="mr-2 animate-spin" /> Checking for series...
+                 </Button>
+            )}
+
+            {!isLoadingRelations && showAddAllButton && (
+              <AddAllToShelfDialog
+                mainAnime={anime}
+                relations={relations.filter(r => (r.relation === 'Sequel' || r.relation === 'Prequel') && r.entry.some(e => e.type === 'anime'))}
+                onAddAllToShelf={(animeSeriesDetails) => {
+                  animeSeriesDetails.forEach(item => {
+                    // Ensure not to add if somehow already on shelf (e.g. race condition or manual add during dialog)
+                    if (!isAnimeOnShelf(item.animeData.mal_id)) {
+                       addAnimeToShelf(item.animeData, item.userProgress);
+                    }
+                  });
+                  toast({ title: "Series Added to Shelf", description: `"${anime.title}" and related seasons added.` });
+                }}
+              >
+                <Button variant="outline" className="w-full">
+                  <Layers size={16} className="mr-2" /> Add All to Shelf
+                </Button>
+              </AddAllToShelfDialog>
+            )}
+          </>
         )}
       </CardFooter>
     </Card>
