@@ -210,7 +210,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         <p className="text-xs text-muted-foreground mt-1">
           Full list of supported columns (others will be ignored):
         </p>
-        <code className="block bg-muted p-2 rounded-md text-xs mt-1 overflow-x-auto">
+        <code className="block bg-muted p-2 rounded-md text-xs mt-1 break-words">
           {EXPECTED_HEADERS.join(',')}
         </code>
         <p className="text-xs text-muted-foreground mt-1">
