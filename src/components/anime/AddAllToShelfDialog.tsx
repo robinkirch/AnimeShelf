@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -54,6 +55,8 @@ interface AddAllToShelfDialogProps {
   children: React.ReactNode;
 }
 
+const IGNORED_TYPES = ['Music'];
+
 export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, children }: AddAllToShelfDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [seasonEntries, setSeasonEntries] = useState<SeasonEntryState[]>([]);
@@ -65,12 +68,16 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
     setIsFetchingDetails(true);
     const entriesToFetchMap = new Map<number, JikanAnimeRelationEntry>();
     
-    // Add main anime
-    entriesToFetchMap.set(mainAnime.mal_id, { mal_id: mainAnime.mal_id, name: mainAnime.title, type: 'anime', url: mainAnime.url });
+    // Add main anime if not an ignored type
+    if (mainAnime.type && !IGNORED_TYPES.includes(mainAnime.type)) {
+        entriesToFetchMap.set(mainAnime.mal_id, { mal_id: mainAnime.mal_id, name: mainAnime.title, type: 'anime', url: mainAnime.url });
+    }
+
 
     // Add related anime (sequels/prequels)
     relations.forEach(relation => {
       relation.entry.forEach(entry => {
+        // We don't know the type yet for related entries, so fetch them and filter later
         if (entry.type === 'anime' && !entriesToFetchMap.has(entry.mal_id)) {
           entriesToFetchMap.set(entry.mal_id, entry);
         }
@@ -83,28 +90,35 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
     for (const entry of entriesToFetch) {
         let animeDetails: JikanAnime | null | undefined = undefined;
         if (entry.mal_id === mainAnime.mal_id) {
-            animeDetails = mainAnime; // Use the already available mainAnime data
+            animeDetails = mainAnime; 
         } else {
-            // Fetch details sequentially; jikanApi.getAnimeById has an internal delay
             animeDetails = await jikanApi.getAnimeById(entry.mal_id);
         }
 
         if (!animeDetails) {
             console.warn(`Failed to fetch details for ${entry.name} (ID: ${entry.mal_id}), using placeholder.`);
+            // Still add a placeholder so the user knows something was attempted, but it won't be submittable
             fetchedSeasonStates.push({
                 mal_id: entry.mal_id,
                 title: entry.name,
-                cover_image: "https://picsum.photos/100/150", // Default placeholder
+                cover_image: "https://picsum.photos/100/150", 
                 total_episodes: null,
                 user_status: 'plan_to_watch' as UserAnimeStatus,
                 current_episode: 0,
                 user_rating: null,
                 genres: [],
                 studios: [],
-                animeData: undefined, // Mark as not fully loaded
+                animeData: undefined,
             });
-            continue; // Skip to the next entry
+            continue;
         }
+        
+        // Filter out ignored types after fetching details
+        if (animeDetails.type && IGNORED_TYPES.includes(animeDetails.type)) {
+            console.log(`Ignoring ${animeDetails.title} (ID: ${animeDetails.mal_id}) due to type: ${animeDetails.type}`);
+            continue;
+        }
+
 
         fetchedSeasonStates.push({
             mal_id: animeDetails.mal_id,
@@ -123,11 +137,11 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
     // Sort: Prequels, Main Anime, Sequels
     fetchedSeasonStates.sort((a, b) => {
         const getOrderScore = (itemMalId: number) => {
-            if (itemMalId === mainAnime.mal_id) return 0; // Main anime in the middle
+            if (itemMalId === mainAnime.mal_id) return 0; 
             const isPrequel = relations.some(r => r.relation === 'Prequel' && r.entry.some(e => e.mal_id === itemMalId));
-            if (isPrequel) return -1; // Prequels first
+            if (isPrequel) return -1; 
             const isSequel = relations.some(r => r.relation === 'Sequel' && r.entry.some(e => e.mal_id === itemMalId));
-            if (isSequel) return 1; // Sequels last
+            if (isSequel) return 1; 
             return 0; 
         };
 
@@ -161,7 +175,6 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
     if (isOpen) {
       initializeSeasonData();
     } else {
-      // Reset state when dialog closes
       setSeasonEntries([]); 
       setIsFetchingDetails(false);
     }
@@ -179,7 +192,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
 
   const handleSubmit = () => {
     const detailsToSubmit = seasonEntries
-      .filter(entry => entry.animeData) // Only submit entries where full animeData was successfully fetched/present
+      .filter(entry => entry.animeData) 
       .map(entry => ({
         animeData: entry.animeData!, 
         userProgress: {
@@ -289,7 +302,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             <div className="space-y-4 py-2">
             {isFetchingDetails && renderSkeletons(3)}
             {!isFetchingDetails && seasonEntries.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">No related seasons found or failed to load details.</p>
+                <p className="text-center text-muted-foreground py-4">No related seasons found or all were ignored (e.g. Music type).</p>
             )}
             {!isFetchingDetails && seasonEntries.map(entry => renderSeasonForm(entry))}
             </div>

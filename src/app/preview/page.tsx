@@ -19,6 +19,8 @@ type CategorizedAnime = JikanAnime & {
   relatedTo?: string; 
 };
 
+const IGNORED_TYPES_PREVIEW = ['Music'];
+
 export default function PreviewPage() {
   const { 
     shelf, 
@@ -77,7 +79,7 @@ export default function PreviewPage() {
     if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized || shelf.length === 0) {
       setAllFetchedFutureAnime([]);
       setAllFetchedOtherContinuations([]);
-      setUpcomingSequels([]); // Clear context sequels if shelf is empty or not initialized
+      setUpcomingSequels([]); 
       setIsLoading(false);
       return;
     }
@@ -107,6 +109,11 @@ export default function PreviewPage() {
           processedRelatedAnimeMalIds.add(potentialContinuation.mal_id); 
 
           if (animeDetails) {
+            if (animeDetails.type && IGNORED_TYPES_PREVIEW.includes(animeDetails.type)) {
+                console.log(`Ignoring ${animeDetails.title} (ID: ${animeDetails.mal_id}) from preview due to type: ${animeDetails.type}`);
+                continue;
+            }
+
             const categorizedEntry: CategorizedAnime = { 
               ...animeDetails, 
               relationType: potentialContinuation.relationType,
@@ -138,11 +145,16 @@ export default function PreviewPage() {
           }
         }
       }
-      const allUpcomingRaw = Array.from(foundFutureAnimeMap.values()).sort((a,b) => (a.year || Infinity) - (b.year || Infinity) || (a.title.localeCompare(b.title)));
+      const allUpcomingRaw = Array.from(foundFutureAnimeMap.values())
+        .filter(anime => !(anime.type && IGNORED_TYPES_PREVIEW.includes(anime.type)))
+        .sort((a,b) => (a.year || Infinity) - (b.year || Infinity) || (a.title.localeCompare(b.title)));
+        
       setAllFetchedFutureAnime(allUpcomingRaw);
-      setAllFetchedOtherContinuations(Array.from(foundOtherContinuationsMap.values()).sort((a,b) => (b.year || 0) - (a.year || 0) || (a.title.localeCompare(b.title))));
+
+      setAllFetchedOtherContinuations(Array.from(foundOtherContinuationsMap.values())
+        .filter(anime => !(anime.type && IGNORED_TYPES_PREVIEW.includes(anime.type)))
+        .sort((a,b) => (b.year || 0) - (a.year || 0) || (a.title.localeCompare(b.title))));
       
-      // Set upcoming sequels for header badge (unfiltered by ignore status initially)
       setUpcomingSequels(allUpcomingRaw); 
       
     } catch (e) {
@@ -208,7 +220,7 @@ export default function PreviewPage() {
         <Skeleton className="h-7 w-3/4" />
         <Skeleton className="h-5 w-1/2" />
         <Skeleton className="h-10 w-full" />
-         <Skeleton className="h-9 w-full mt-2" /> {/* Skeleton for ignore button */}
+         <Skeleton className="h-9 w-full mt-2" /> 
       </div>
     ))
   );
@@ -244,7 +256,7 @@ export default function PreviewPage() {
     );
   }
   
-  if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) { // Combined check for clarity
+  if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) { 
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
@@ -253,7 +265,7 @@ export default function PreviewPage() {
     );
   }
 
-  if (shelf.length === 0 && shelfInitialized) { // Check shelfInitialized here as well
+  if (shelf.length === 0 && shelfInitialized) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8 bg-card rounded-xl shadow-lg">
         <History className="h-20 w-20 text-primary mb-8" />
@@ -280,7 +292,7 @@ export default function PreviewPage() {
       {renderAnimeList(
         futureAnimeToDisplay, 
         "Upcoming Future Seasons", 
-        "No direct future seasons or announced new entries found (or all are hidden).",
+        "No direct future seasons or announced new entries found (or all are hidden/ignored type).",
         CalendarDays
       )}
 
@@ -289,7 +301,7 @@ export default function PreviewPage() {
       {renderAnimeList(
         otherContinuationsToDisplay,
         "Other Related Series (Current & Past)",
-        "No other direct continuations (like current/past seasons or side stories) found (or all are hidden).",
+        "No other direct continuations (like current/past seasons or side stories) found (or all are hidden/ignored type).",
         Tv
       )}
 
@@ -299,7 +311,7 @@ export default function PreviewPage() {
                 <h3 className="mt-2 text-2xl font-semibold">No Previews Found</h3>
                 <p className="mt-2 text-md text-muted-foreground max-w-lg mx-auto">
                     We couldn't find any relevant upcoming seasons or other related series based on your current shelf,
-                    or all relevant items have been hidden from this page. 
+                    or all relevant items have been hidden or are of an ignored type (e.g. Music). 
                     Ensure your shelf has anime with known relations, or try again later as new announcements happen.
                 </p>
            </div>

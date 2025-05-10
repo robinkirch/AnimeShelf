@@ -10,24 +10,9 @@ import React from 'react';
 
 export function Header() {
   const pathname = usePathname();
-  const { 
-    upcomingSequels, 
-    shelf, 
-    ignoredPreviewAnimeMalIds, 
-    isInitialized: shelfInitialized, 
-    ignoredPreviewAnimeMalIdsInitialized 
-  } = useAnimeShelf(); 
+  const { getFilteredUpcomingSequelsCount } = useAnimeShelf(); 
 
-  const shelfMalIds = React.useMemo(() => new Set(shelf.map(a => a.mal_id)), [shelf]);
-  
-  const upcomingCount = React.useMemo(() => {
-    if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) return 0;
-    
-    return upcomingSequels.filter(seq => 
-      !shelfMalIds.has(seq.mal_id) &&
-      !ignoredPreviewAnimeMalIds.includes(seq.mal_id)
-    ).length;
-  }, [upcomingSequels, shelfMalIds, ignoredPreviewAnimeMalIds, shelfInitialized, ignoredPreviewAnimeMalIdsInitialized]);
+  const upcomingCount = getFilteredUpcomingSequelsCount();
 
 
   const navLinkClasses = (path: string) =>

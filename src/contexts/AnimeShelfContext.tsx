@@ -17,11 +17,12 @@ interface AnimeShelfContextType {
   isAnimeOnShelf: (mal_id: number) => boolean;
   getAnimeFromShelf: (mal_id: number) => UserAnime | undefined;
   isInitialized: boolean;
-  upcomingSequels: JikanAnime[];
-  setUpcomingSequels: (animeList: JikanAnime[]) => void;
+  upcomingSequels: JikanAnime[]; // Raw list from PreviewPage
+  setUpcomingSequels: (animeList: JikanAnime[]) => void; // Raw list from PreviewPage
+  getFilteredUpcomingSequelsCount: () => number; // Filtered count for header badge
   ignoredPreviewAnimeMalIds: number[];
   addIgnoredPreviewAnime: (mal_id: number) => void;
-  removeIgnoredPreviewAnime: (mal_id: number) => void; // For potential future use
+  removeIgnoredPreviewAnime: (mal_id: number) => void; 
   isPreviewAnimeIgnored: (mal_id: number) => boolean;
   ignoredPreviewAnimeMalIdsInitialized: boolean;
 }
@@ -30,6 +31,8 @@ const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undef
 
 const LOCAL_STORAGE_KEY_SHELF = 'animeShelf';
 const LOCAL_STORAGE_KEY_IGNORED_PREVIEW = 'ignoredPreviewAnimeMalIds';
+const IGNORED_TYPES_CONTEXT = ['Music'];
+
 
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [shelf, setShelf] = useState<UserAnime[]>([]);
@@ -109,6 +112,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       };
       return [...prevShelf, newAnime];
     });
+    // When adding to shelf, it might affect the upcoming sequels list (if it was a sequel)
     setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
   }, []);
 
@@ -181,6 +185,18 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const isPreviewAnimeIgnored = useCallback((mal_id: number) => {
     return ignoredPreviewAnimeMalIds.includes(mal_id);
   }, [ignoredPreviewAnimeMalIds]);
+
+  const getFilteredUpcomingSequelsCount = useCallback(() => {
+    if (!isInitialized || !ignoredPreviewAnimeMalIdsInitialized) return 0;
+    
+    const shelfMalIds = new Set(shelf.map(a => a.mal_id));
+    
+    return upcomingSequels.filter(seq => 
+      !shelfMalIds.has(seq.mal_id) && // Not already on shelf
+      !ignoredPreviewAnimeMalIds.includes(seq.mal_id) && // Not ignored in preview
+      !(seq.type && IGNORED_TYPES_CONTEXT.includes(seq.type)) // Not an ignored type
+    ).length;
+  }, [upcomingSequels, shelf, ignoredPreviewAnimeMalIds, isInitialized, ignoredPreviewAnimeMalIdsInitialized]);
   
   return (
     <AnimeShelfContext.Provider value={{ 
@@ -193,6 +209,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         isInitialized,
         upcomingSequels,
         setUpcomingSequels,
+        getFilteredUpcomingSequelsCount,
         ignoredPreviewAnimeMalIds,
         addIgnoredPreviewAnime,
         removeIgnoredPreviewAnime,

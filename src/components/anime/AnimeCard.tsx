@@ -40,6 +40,8 @@ const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
   plan_to_watch: ListPlus,
 };
 
+const IGNORED_TYPES_FOR_ADD_ALL = ['Music'];
+
 
 export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps) {
   const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf } = useAnimeShelf();
@@ -54,7 +56,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
 
   useEffect(() => {
     const fetchRelations = async () => {
-      if (!isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '')) {
+      if (!isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '') && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type))) {
         setIsLoadingRelations(true);
         try {
             const rels = await jikanApi.getAnimeRelations(anime.mal_id);
@@ -202,13 +204,13 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
             </AddToShelfDialog>
         )}
 
-        {isLoadingRelations && !isOnShelf && (
+        {isLoadingRelations && !isOnShelf && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && (
               <Button variant="outline" className="w-full" disabled>
                 <Loader2 size={16} className="mr-2 animate-spin" /> Checking for series...
               </Button>
         )}
 
-        {!isLoadingRelations && showAddAllButton && !isOnShelf && (
+        {!isLoadingRelations && showAddAllButton && !isOnShelf && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && (
           <AddAllToShelfDialog
             mainAnime={anime}
             relations={relations.filter(r => (r.relation === 'Sequel' || r.relation === 'Prequel') && r.entry.some(e => e.type === 'anime'))}
@@ -242,3 +244,4 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
     </Card>
   );
 }
+
