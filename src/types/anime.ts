@@ -104,7 +104,9 @@ export interface UserAnime {
   user_rating: number | null; // 1-10 scale
   genres: string[]; 
   studios: string[];
-  type: string | null; // Added field for anime type
+  type: string | null;
+  year: number | null;
+  season: string | null;
 }
 
 export interface JikanAPISearchResponse {

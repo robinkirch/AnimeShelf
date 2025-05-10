@@ -10,7 +10,7 @@ interface AnimeShelfContextType {
   addAnimeToShelf: (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => void;
   updateAnimeOnShelf: (
     mal_id: number, 
-    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type'>>,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season'>>,
     currentJikanTotalEpisodes?: number | null
   ) => void;
   removeAnimeFromShelf: (mal_id: number) => void;
@@ -49,6 +49,8 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         const migratedShelf = parsedShelf.map(anime => ({
           ...anime,
           type: anime.type ?? null,
+          year: anime.year ?? null, // Ensure year exists, default to null
+          season: anime.season ?? null, // Ensure season exists, default to null
         }));
         setShelf(migratedShelf);
       }
@@ -109,6 +111,8 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         genres: anime.genres?.map(g => g.name) || [],
         studios: anime.studios?.map(s => s.name) || [],
         type: anime.type || null,
+        year: anime.year || null,
+        season: anime.season || null,
       };
       return [...prevShelf, newAnime];
     });
@@ -118,7 +122,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
   const updateAnimeOnShelf = useCallback((
     mal_id: number,
-    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type'>>,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season'>>,
     currentJikanTotalEpisodes?: number | null
   ) => {
     setShelf(prevShelf =>
@@ -228,4 +232,3 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
-
