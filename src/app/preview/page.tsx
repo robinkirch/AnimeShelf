@@ -4,258 +4,273 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
-import type { JikanAnime } from '@/types/anime';
+import type { JikanAnime, JikanAnimeRelation, JikanAnimeRelationEntry } from '@/types/anime';
 import { AnimeCard } from '@/components/anime/AnimeCard';
-import { Loader2, Tv, AlertCircle, CalendarClock, History } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Loader2, CalendarDays, Tv, Film, History, HelpCircle, ListFilter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Skeleton } from '@/components/ui/skeleton';
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Not used
+
+type CategorizedAnime = JikanAnime & {
+  relationType?: string; // e.g., "Sequel", "Prequel"
+  relatedTo?: string; // Title of the anime it's related to on the shelf
+};
 
 export default function PreviewPage() {
-  const { shelf, isInitialized: shelfInitialized, setUpcomingSequels: setContextUpcomingSequels } = useAnimeShelf();
-  
-  const [futureSeasonalAnime, setFutureSeasonalAnime] = useState<JikanAnime[]>([]);
-  const [otherContinuations, setOtherContinuations] = useState<JikanAnime[]>([]);
-  
+  const { shelf, setUpcomingSequels, isInitialized: shelfInitialized } = useAnimeShelf();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string>("Initializing...");
+  const [futureAnime, setFutureAnime] = useState<CategorizedAnime[]>([]);
+  const [otherContinuations, setOtherContinuations] = useState<CategorizedAnime[]>([]);
+  
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+  const currentMonth = useMemo(() => new Date().getMonth(), []); // 0-11
 
-  const shelfMalIds = useMemo(() => new Set(shelf.map(a => a.mal_id)), [shelf]);
+  const getCurrentSeasonName = useCallback((): string => {
+    if (currentMonth < 3) return 'winter'; 
+    if (currentMonth < 6) return 'spring'; 
+    if (currentMonth < 9) return 'summer'; 
+    return 'fall';   
+  }, [currentMonth]);
+  const currentSeason = useMemo(() => getCurrentSeasonName(), [getCurrentSeasonName]);
+  const seasonOrder = useMemo(() => ['winter', 'spring', 'summer', 'fall'], []);
 
-  const monthToSeasonIndex = useCallback((month: number): number => {
-    if (month < 3) return 0; // Winter (Jan, Feb, Mar)
-    if (month < 6) return 1; // Spring (Apr, May, Jun)
-    if (month < 9) return 2; // Summer (Jul, Aug, Sep)
-    return 3; // Fall (Oct, Nov, Dec)
-  }, []);
 
   const isFutureSeasonOrAirDate = useCallback((anime: JikanAnime): boolean => {
-    if (anime.status === "Not yet aired") return true;
-    if (anime.airing && anime.aired?.from && new Date(anime.aired.from) > new Date()) return true;
-    
-    if (anime.year === null || anime.season === null) return false;
+    if (!anime.year && !anime.aired?.from) return false; 
 
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth(); // 0-11
-    const seasonOrder: { [key: string]: number } = { winter: 0, spring: 1, summer: 2, fall: 3 };
-    const currentSeasonIndex = monthToSeasonIndex(currentMonth);
-    
-    const targetSeasonIndex = seasonOrder[anime.season.toLowerCase()];
+    const animeYear = anime.year || (anime.aired?.from ? new Date(anime.aired.from).getFullYear() : 0);
+    const animeSeason = anime.season?.toLowerCase();
 
-    if (targetSeasonIndex === undefined) return false; 
+    if (animeYear > currentYear) return true;
+    if (animeYear === currentYear) {
+      const currentSeasonIndex = seasonOrder.indexOf(currentSeason);
+      const animeSeasonIndex = animeSeason ? seasonOrder.indexOf(animeSeason) : -1;
+      
+      if (animeSeasonIndex > currentSeasonIndex) return true;
 
-    if (anime.year > currentYear) return true;
-    if (anime.year === currentYear && targetSeasonIndex > currentSeasonIndex) return true;
-    
+      if ((animeSeasonIndex === currentSeasonIndex || animeSeasonIndex === -1) && anime.aired?.from) {
+        const airDate = new Date(anime.aired.from);
+        const currentDate = new Date();
+        currentDate.setHours(0,0,0,0); 
+        return airDate > currentDate;
+      }
+    }
     return false;
-  }, [monthToSeasonIndex]);
+  }, [currentYear, currentSeason, seasonOrder]);
 
 
   const fetchAndCategorizeContinuations = useCallback(async () => {
-    if (!shelfInitialized) {
-      setStatusMessage("Waiting for shelf to initialize...");
+    if (!shelfInitialized || shelf.length === 0) {
+      setFutureAnime([]);
+      setOtherContinuations([]);
+      setUpcomingSequels([]);
+      setIsLoading(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
-    setStatusMessage("Analyzing your shelf for related anime...");
-    
-    const foundFutureAnime: JikanAnime[] = [];
-    const foundOtherContinuations: JikanAnime[] = [];
+
+    const foundFutureAnimeMap = new Map<number, CategorizedAnime>();
+    const foundOtherContinuationsMap = new Map<number, CategorizedAnime>();
     const processedRelatedAnimeMalIds = new Set<number>(); 
+    const shelfMalIds = new Set(shelf.map(a => a.mal_id));
 
     try {
-      let itemProcessed = 0;
       for (const userAnime of shelf) {
-        itemProcessed++;
-        setStatusMessage(`Processing ${itemProcessed}/${shelf.length}: ${userAnime.title}`);
+        // No need to check processedRelatedAnimeMalIds for userAnime itself.
+        // It's for relations to avoid fetching the same relation multiple times.
         
         const relations = await jikanApi.getAnimeRelations(userAnime.mal_id);
-        const potentialContinuations = relations
-          .filter(rel => ['Sequel', 'Prequel', 'Alternative version', 'Other', 'Parent story', 'Full story', 'Spin-off', 'Side story'].includes(rel.relation))
-          .flatMap(rel => rel.entry)
-          .filter(entry => entry.type === 'anime');
+        if (!relations || relations.length === 0) continue;
 
+        const potentialContinuations = relations
+            .filter(rel => ['Sequel', 'Prequel', 'Alternative setting', 'Alternative version', "Other", "Side story", "Full story", "Parent story"].includes(rel.relation))
+            .flatMap(rel => rel.entry.map(e => ({ ...e, relationType: rel.relation })))
+            .filter(entry => entry.type === 'anime' && !shelfMalIds.has(entry.mal_id));
+        
         for (const potentialContinuation of potentialContinuations) {
-          if (shelfMalIds.has(potentialContinuation.mal_id) || processedRelatedAnimeMalIds.has(potentialContinuation.mal_id)) {
-            continue; 
-          }
+          if (processedRelatedAnimeMalIds.has(potentialContinuation.mal_id)) continue;
 
           const animeDetails = await jikanApi.getAnimeById(potentialContinuation.mal_id);
+          processedRelatedAnimeMalIds.add(potentialContinuation.mal_id); 
+
           if (animeDetails) {
-            processedRelatedAnimeMalIds.add(animeDetails.mal_id);
-            
+            const categorizedEntry: CategorizedAnime = { 
+              ...animeDetails, 
+              relationType: potentialContinuation.relationType,
+              relatedTo: userAnime.title 
+            };
+
             if (isFutureSeasonOrAirDate(animeDetails)) {
-              if (!foundFutureAnime.some(s => s.mal_id === animeDetails.mal_id)) {
-                  foundFutureAnime.push(animeDetails);
+              if (!foundFutureAnimeMap.has(animeDetails.mal_id)) {
+                foundFutureAnimeMap.set(animeDetails.mal_id, categorizedEntry);
               }
             } else {
-              if (!foundOtherContinuations.some(s => s.mal_id === animeDetails.mal_id)) {
-                  foundOtherContinuations.push(animeDetails);
+               const animeYear = animeDetails.year || (animeDetails.aired?.from ? new Date(animeDetails.aired.from).getFullYear() : 0);
+               const animeSeason = animeDetails.season?.toLowerCase();
+               const airDate = animeDetails.aired?.from ? new Date(animeDetails.aired.from) : null;
+               const currentDate = new Date();
+               currentDate.setHours(0,0,0,0);
+
+               const isCurrentOrPast = 
+                (animeYear < currentYear) ||
+                (animeYear === currentYear && animeSeason && currentSeason && seasonOrder.indexOf(animeSeason) <= seasonOrder.indexOf(currentSeason)) ||
+                (airDate && airDate <= currentDate);
+
+              if (isCurrentOrPast) { 
+                if (!foundOtherContinuationsMap.has(animeDetails.mal_id)) {
+                  foundOtherContinuationsMap.set(animeDetails.mal_id, categorizedEntry);
+                }
               }
             }
           }
         }
       }
-
-      const sortAnime = (a: JikanAnime, b: JikanAnime) => {
-        const dateA = a.aired?.from ? new Date(a.aired.from).getTime() : Infinity;
-        const dateB = b.aired?.from ? new Date(b.aired.from).getTime() : Infinity;
-        
-        if(dateA !== Infinity && dateB !== Infinity) return dateA - dateB;
-        if(dateA !== Infinity) return -1;
-        if(dateB !== Infinity) return 1;
-
-        const yearA = a.year ?? Infinity;
-        const yearB = b.year ?? Infinity;
-        if (yearA !== yearB) return yearA - yearB;
-
-        const seasonOrder: { [key: string]: number } = { winter: 0, spring: 1, summer: 2, fall: 3 };
-        const seasonA = a.season ? seasonOrder[a.season.toLowerCase()] ?? 4 : 4;
-        const seasonB = b.season ? seasonOrder[b.season.toLowerCase()] ?? 4 : 4;
-        return seasonA - seasonB;
-      };
+      const allUpcoming = Array.from(foundFutureAnimeMap.values()).sort((a,b) => (a.year || Infinity) - (b.year || Infinity) || (a.title.localeCompare(b.title)));
+      setFutureAnime(allUpcoming);
+      setOtherContinuations(Array.from(foundOtherContinuationsMap.values()).sort((a,b) => (b.year || 0) - (a.year || 0) || (a.title.localeCompare(b.title))));
+      setUpcomingSequels(allUpcoming);
       
-      foundFutureAnime.sort(sortAnime);
-      // Sort past/ongoing chronologically, with newest first for relevance
-      foundOtherContinuations.sort((a,b) => sortAnime(b,a));
-
-
-      setFutureSeasonalAnime(foundFutureAnime);
-      setOtherContinuations(foundOtherContinuations);
-      setContextUpcomingSequels(foundFutureAnime); // Update context for header badge
-
-      const totalFound = foundFutureAnime.length + foundOtherContinuations.length;
-      setStatusMessage(totalFound > 0 ? `Found ${foundFutureAnime.length} upcoming and ${foundOtherContinuations.length} other related anime.` : "No new related anime found based on your shelf.");
-
-    } catch (e: any) {
-      console.error("Error fetching related anime:", e);
-      setError(`Failed to fetch related anime. ${e.message || 'The Jikan API might be temporarily unavailable or rate limits exceeded.'}`);
-      setStatusMessage("Error occurred.");
+    } catch (e) {
+      console.error("Error fetching continuations:", e);
+      setError("Failed to load upcoming anime. API might be temporarily unavailable or rate limits exceeded.");
     } finally {
       setIsLoading(false);
     }
-  }, [shelf, shelfInitialized, setContextUpcomingSequels, shelfMalIds, isFutureSeasonOrAirDate, monthToSeasonIndex]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shelf, shelfInitialized, isFutureSeasonOrAirDate, setUpcomingSequels, currentYear, currentSeason, seasonOrder]);
 
   useEffect(() => {
-    if(shelfInitialized){ 
-        fetchAndCategorizeContinuations();
-    }
-  }, [shelfInitialized, fetchAndCategorizeContinuations]);
+    fetchAndCategorizeContinuations();
+  }, [fetchAndCategorizeContinuations]);
 
 
+  const renderAnimeList = (animeList: CategorizedAnime[], listTitle: string, emptyMessage: string, IconComponent: React.ElementType) => (
+    <section>
+      <div className="flex items-center gap-3 mb-6">
+        <IconComponent className="h-8 w-8 text-primary" />
+        <h2 className="text-2xl font-semibold text-primary">{listTitle} ({animeList.length})</h2>
+      </div>
+      {animeList.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          {animeList.map(anime => <AnimeCard key={`${anime.mal_id}-${listTitle}`} anime={anime} />)}
+        </div>
+      ) : (
+        <div className="text-center py-10 bg-card p-6 rounded-lg shadow-sm border border-dashed">
+          <ListFilter className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="mt-2 text-xl font-semibold text-muted-foreground">No Anime Found</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{emptyMessage}</p>
+        </div>
+      )}
+    </section>
+  );
+  
   const renderSkeletons = (count: number) => (
     Array.from({ length: count }).map((_, index) => (
-      <div key={index} className="border rounded-lg p-4 space-y-3">
-        <Skeleton className="h-64 w-full" data-ai-hint="anime poster" />
-        <Skeleton className="h-6 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
+      <div key={index} className="border rounded-lg p-4 space-y-3 bg-card shadow">
+        <Skeleton className="h-56 w-full" />
+        <Skeleton className="h-7 w-3/4" />
+        <Skeleton className="h-5 w-1/2" />
         <Skeleton className="h-10 w-full" />
       </div>
     ))
   );
 
+  if (isLoading) {
+    return (
+      <div className="space-y-10">
+        <div>
+            <div className="flex items-center gap-3 mb-6"> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-56" /> </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{renderSkeletons(4)}</div>
+        </div>
+        <Separator />
+        <div>
+            <div className="flex items-center gap-3 mb-6"> <Skeleton className="h-8 w-8 rounded-full" /> <Skeleton className="h-8 w-64" /> </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{renderSkeletons(4)}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive" className="max-w-2xl mx-auto my-10">
+        <HelpCircle className="h-5 w-5" />
+        <AlertTitle className="text-lg">Error Fetching Previews</AlertTitle>
+        <AlertDescription>
+          {error} 
+          <Button variant="link" onClick={fetchAndCategorizeContinuations} className="p-0 h-auto text-destructive-foreground hover:underline ml-1">
+            Try again?
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+  
+  if (!shelfInitialized) {
+     return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
+        <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
+        <p className="text-xl text-muted-foreground">Initializing your shelf data...</p>
+      </div>
+    );
+  }
+
+  if (shelf.length === 0 && shelfInitialized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8 bg-card rounded-xl shadow-lg">
+        <History className="h-20 w-20 text-primary mb-8" />
+        <h2 className="text-3xl font-semibold mb-3">Your Shelf is Empty</h2>
+        <p className="text-lg text-muted-foreground mb-6 max-w-md">
+          Add some anime to your shelf first. Then, this page will show you exciting previews of upcoming seasons and other related shows!
+        </p>
+        <Button asChild size="lg">
+          <a href="/">Go to My Shelf</a>
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8">
-      <section className="bg-card p-6 rounded-lg shadow-sm">
-        <h1 className="text-3xl font-bold text-primary mb-2">Anime Continuations &amp; Previews</h1>
-        <p className="text-muted-foreground mb-3">
-          Discover upcoming seasons, prequels, sequels, and other related anime for series on your shelf.
+    <div className="space-y-10">
+      <header className="pb-2">
+        <h1 className="text-4xl font-bold tracking-tight text-primary mb-2">Anime Preview</h1>
+        <p className="text-lg text-muted-foreground max-w-3xl">
+          Discover future seasons and other continuations for anime you're tracking. Add them to your plan-to-watch list with a click!
         </p>
-        <p className="text-sm text-muted-foreground">
-            Status: {statusMessage}
-        </p>
-      </section>
-
-      {isLoading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {renderSkeletons(8)}
-        </div>
+      </header>
+      
+      {renderAnimeList(
+        futureAnime, 
+        "Upcoming Future Seasons", 
+        "No direct future seasons or announced new entries found for anime on your shelf.",
+        CalendarDays
       )}
 
-      {!isLoading && error && (
-        <div className="text-center py-10 text-destructive bg-destructive/10 p-4 rounded-md">
-          <AlertCircle className="mx-auto h-12 w-12 mb-2" />
-          <h3 className="text-xl font-semibold mb-1">Error Fetching Data</h3>
-          <p>{error}</p>
-          <Button onClick={fetchAndCategorizeContinuations} className="mt-4">Try Again</Button>
-        </div>
+      <Separator className="my-10" />
+
+      {renderAnimeList(
+        otherContinuations,
+        "Other Related Series (Current & Past)",
+        "No other direct continuations (like current, past seasons, or side stories) found for anime on your shelf.",
+        Tv
       )}
 
-      {!isLoading && !error && (
-        <>
-          <section className="space-y-6">
-            <div className='flex items-center gap-2'>
-              <CalendarClock className="h-7 w-7 text-primary" />
-              <h2 className="text-2xl font-semibold text-primary">Upcoming Future Seasons &amp; Series</h2>
-            </div>
-            {futureSeasonalAnime.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {futureSeasonalAnime.map(anime => (
-                  <AnimeCard key={`future-${anime.mal_id}`} anime={anime} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-10 bg-card p-6 rounded-lg shadow-sm">
-                <Tv className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-2 text-xl font-semibold">No New Upcoming Anime Found</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  We couldn't find any new strictly upcoming continuations for the anime on your shelf.
+      {(futureAnime.length === 0 && otherContinuations.length === 0 && shelf.length > 0 && !isLoading) && (
+           <div className="text-center py-16 bg-card p-8 rounded-lg shadow-sm border border-dashed">
+                <ListFilter className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
+                <h3 className="mt-2 text-2xl font-semibold">No Previews Found</h3>
+                <p className="mt-2 text-md text-muted-foreground max-w-lg mx-auto">
+                    We couldn't find any relevant upcoming seasons or other related series based on your current shelf. 
+                    Ensure your shelf has anime with known relations, or try again later as new announcements happen.
                 </p>
-                 {shelf.length === 0 && <p className="mt-1 text-sm text-muted-foreground">Add some anime to your shelf first.</p>}
-              </div>
-            )}
-          </section>
-
-          <Separator className="my-8" />
-
-          <section className="space-y-6">
-            <div className='flex items-center gap-2'>
-              <History className="h-7 w-7 text-primary" />
-              <h2 className="text-2xl font-semibold text-primary">Other Related Series (Past/Ongoing)</h2>
-            </div>
-            {otherContinuations.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {otherContinuations.map(anime => (
-                  <AnimeCard key={`other-${anime.mal_id}`} anime={anime} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-10 bg-card p-6 rounded-lg shadow-sm">
-                <Tv className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-2 text-xl font-semibold">No Other Related Anime Found</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  No past or currently ongoing (but already started) related series were found for items on your shelf.
-                </p>
-                {shelf.length === 0 && <p className="mt-1 text-sm text-muted-foreground">Add some anime to your shelf first.</p>}
-              </div>
-            )}
-          </section>
-          
-          {futureSeasonalAnime.length === 0 && otherContinuations.length === 0 && shelf.length > 0 && !isLoading && !error && (
-             <div className="text-center py-10 bg-card p-6 rounded-lg shadow-sm mt-8">
-                <Tv className="mx-auto h-16 w-16 text-muted-foreground" />
-                <h3 className="mt-4 text-2xl font-semibold">No Related Anime Found</h3>
-                <p className="mt-2 text-md text-muted-foreground">
-                    We checked all anime on your shelf but couldn't find any related series (upcoming, past, or ongoing) that aren't already on your shelf.
-                </p>
-             </div>
-          )}
-           {shelf.length === 0 && !isLoading && !error && (
-             <div className="text-center py-10 bg-card p-6 rounded-lg shadow-sm mt-8">
-                <Tv className="mx-auto h-16 w-16 text-muted-foreground" />
-                <h3 className="mt-4 text-2xl font-semibold">Your Shelf is Empty</h3>
-                <p className="mt-2 text-md text-muted-foreground">
-                    Add some anime to your shelf to discover related series here.
-                </p>
-             </div>
-           )}
-        </>
+           </div>
       )}
     </div>
   );
 }
 
-    
