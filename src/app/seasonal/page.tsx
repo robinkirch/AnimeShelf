@@ -33,16 +33,16 @@ export default function SeasonalPage() {
 
   function getCurrentSeasonName(): string {
     const month = new Date().getMonth();
-    if (month < 3) return 'winter'; // Jan, Feb, Mar
-    if (month < 6) return 'spring'; // Apr, May, Jun
-    if (month < 9) return 'summer'; // Jul, Aug, Sep
-    return 'fall';   // Oct, Nov, Dec
+    if (month < 3) return 'winter'; // Jan, Feb, Mar (0, 1, 2)
+    if (month < 6) return 'spring'; // Apr, May, Jun (3, 4, 5)
+    if (month < 9) return 'summer'; // Jul, Aug, Sep (6, 7, 8)
+    return 'fall';   // Oct, Nov, Dec (9, 10, 11)
   }
   
   const availableYears = useMemo(() => {
     const currentYr = new Date().getFullYear();
     const years = [];
-    for (let y = currentYr + 1; y >= 1980; y--) { // Jikan data goes back far
+    for (let y = currentYr + 1; y >= 1980; y--) { 
       years.push(y);
     }
     return years;
@@ -56,7 +56,9 @@ export default function SeasonalPage() {
       setError(null);
       try {
         const data = await jikanApi.getSeason(year, season);
-        setSeasonalAnime(data);
+        // De-duplicate data based on mal_id to prevent React key errors
+        const uniqueData = Array.from(new Map(data.map(anime => [anime.mal_id, anime])).values());
+        setSeasonalAnime(uniqueData);
       } catch (e) {
         console.error(e);
         setError('Failed to fetch seasonal anime. Please try again later.');
@@ -175,17 +177,25 @@ export default function SeasonalPage() {
         </div>
       )}
       
-      {!isLoading && !error && filteredAnime.length === 0 && (
+      {!isLoading && !error && filteredAnime.length === 0 && seasonalAnime.length > 0 && (
         <div className="text-center py-10">
+          <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-2 text-xl font-semibold">No Anime Match Filters</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Try adjusting your filters for {season.charAt(0).toUpperCase() + season.slice(1)} {year}.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && !error && seasonalAnime.length === 0 && (
+         <div className="text-center py-10">
           <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-2 text-xl font-semibold">No Anime Found</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            There are no anime matching your criteria for {season.charAt(0).toUpperCase() + season.slice(1)} {year}. Try different filters or season.
+            There appears to be no anime data for {season.charAt(0).toUpperCase() + season.slice(1)} {year}. Try a different season or year.
           </p>
         </div>
       )}
     </div>
   );
 }
-
-    
