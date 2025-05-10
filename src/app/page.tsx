@@ -114,7 +114,9 @@ export default function MyShelfPage() {
     setApiError(null);
     try {
         const results = await jikanApi.searchAnime(searchQuery);
-        setSearchResults(results);
+        // De-duplicate results based on mal_id to prevent React key errors
+        const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
+        setSearchResults(uniqueResults);
     } catch (e) {
         console.error("Error searching anime:", e);
         setApiError("Failed to perform search due to API issues. Please try again later.");
