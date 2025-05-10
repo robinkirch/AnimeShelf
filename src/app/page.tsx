@@ -31,7 +31,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
 
-const ALL_FILTER_VALUE = "_all_";
+const ALL_FILTER_VALUE = "_all_"; // Still used by other filters
 
 export default function MyShelfPage() {
   const { shelf, isInitialized: shelfInitialized } = useAnimeShelf();
@@ -40,7 +40,7 @@ export default function MyShelfPage() {
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
   const [isLoadingShelf, setIsLoadingShelf] = useState(true);
   
-  const [genreFilter, setGenreFilter] = useState<string>(ALL_FILTER_VALUE);
+  const [genreFilter, setGenreFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<UserAnimeStatus | typeof ALL_FILTER_VALUE>(ALL_FILTER_VALUE);
   const [ratingFilter, setRatingFilter] = useState<string>(ALL_FILTER_VALUE);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
@@ -75,7 +75,7 @@ export default function MyShelfPage() {
   const filteredShelf = useMemo(() => {
     if (!shelfInitialized) return [];
     return shelf.filter(anime => {
-      const genreMatch = genreFilter === ALL_FILTER_VALUE ? true : anime.genres.includes(genreFilter);
+      const genreMatch = genreFilter.length === 0 ? true : genreFilter.some(selectedGenre => anime.genres.includes(selectedGenre));
       const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
       const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
       const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
@@ -84,7 +84,7 @@ export default function MyShelfPage() {
   }, [shelf, genreFilter, statusFilter, ratingFilter, typeFilter, shelfInitialized]);
 
   const clearFilters = () => {
-    setGenreFilter(ALL_FILTER_VALUE);
+    setGenreFilter([]);
     setStatusFilter(ALL_FILTER_VALUE);
     setRatingFilter(ALL_FILTER_VALUE);
     setTypeFilter([]);
@@ -101,9 +101,31 @@ export default function MyShelfPage() {
     ))
   );
 
+  const getGenreFilterDisplayValue = () => {
+    if (genreFilter.length === 0) {
+      return "All Genres";
+    }
+    if (uniqueGenres.length > 0 && genreFilter.length === uniqueGenres.length) {
+       return "All Genres";
+    }
+    if (genreFilter.length > 2) {
+      return `${genreFilter.slice(0, 2).join(', ')}, +${genreFilter.length - 2} more`;
+    }
+    return genreFilter.join(', ');
+  };
+
   const getTypeFilterDisplayValue = () => {
-    if (typeFilter.length === 0 || typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
+    if (typeFilter.length === 0) {
       return "All Types";
+    }
+    if (ANIME_TYPE_FILTER_OPTIONS.length > 0 && typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
+      return "All Types";
+    }
+    if (typeFilter.length > 2) {
+      const displayedTypes = typeFilter
+        .slice(0, 2)
+        .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val);
+      return `${displayedTypes.join(', ')}, +${typeFilter.length - 2} more`;
     }
     return typeFilter
       .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val)
@@ -166,14 +188,31 @@ export default function MyShelfPage() {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-card rounded-lg shadow-sm">
           <div>
-            <Label htmlFor="genre-filter" className="text-sm font-medium mb-1 block">Genre</Label>
-            <Select value={genreFilter} onValueChange={setGenreFilter}>
-              <SelectTrigger id="genre-filter"><SelectValue placeholder="All Genres" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All Genres</SelectItem>
-                {uniqueGenres.map(genre => <SelectItem key={genre} value={genre}>{genre}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="genre-filter-shelf" className="text-sm font-medium mb-1 block">Genre</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" id="genre-filter-shelf" className="w-full justify-between text-left font-normal">
+                  <span className="truncate flex-grow">{getGenreFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                {uniqueGenres.map((genre) => (
+                  <DropdownMenuCheckboxItem
+                    key={genre}
+                    checked={genreFilter.includes(genre)}
+                    onCheckedChange={(checked) => {
+                      setGenreFilter(prev =>
+                        checked ? [...prev, genre] : prev.filter(g => g !== genre)
+                      );
+                    }}
+                    onSelect={(e) => e.preventDefault()} 
+                  >
+                    {genre}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div>
             <Label htmlFor="status-filter" className="text-sm font-medium mb-1 block">Status</Label>
@@ -196,10 +235,10 @@ export default function MyShelfPage() {
             </Select>
           </div>
           <div>
-            <Label htmlFor="type-filter" className="text-sm font-medium mb-1 block">Type</Label>
+            <Label htmlFor="type-filter-shelf" className="text-sm font-medium mb-1 block">Type</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" id="type-filter" className="w-full justify-between text-left font-normal">
+                <Button variant="outline" id="type-filter-shelf" className="w-full justify-between text-left font-normal">
                   <span className="truncate flex-grow">{getTypeFilterDisplayValue()}</span>
                   <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
                 </Button>
@@ -214,7 +253,7 @@ export default function MyShelfPage() {
                         checked ? [...prev, option.value] : prev.filter(v => v !== option.value)
                       );
                     }}
-                    onSelect={(e) => e.preventDefault()} // Prevent closing on select
+                    onSelect={(e) => e.preventDefault()} 
                   >
                     {option.label}
                   </DropdownMenuCheckboxItem>
@@ -240,7 +279,7 @@ export default function MyShelfPage() {
                 episodes: userAnime.total_episodes,
                 genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
                 studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
-                type: userAnime.type, // Use stored type
+                type: userAnime.type, 
                 url: '', approved: true, titles: [{type: 'Default', title: userAnime.title}], source: 'Unknown', status: 'Unknown', airing: false, score: null, scored_by: null, synopsis: null, producers: [], licensors: [], season: null, year: null,
               };
               return <AnimeCard key={userAnime.mal_id} anime={partialJikanAnime} shelfItem={userAnime} />;
@@ -271,6 +310,3 @@ export default function MyShelfPage() {
     </div>
   );
 }
-
-
-    

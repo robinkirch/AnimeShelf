@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
 
-const ALL_FILTER_VALUE = "_all_";
+const ALL_FILTER_VALUE = "_all_"; // Still used by studio filter
 
 export default function SeasonalPage() {
   const [seasonalAnime, setSeasonalAnime] = useState<JikanAnime[]>([]);
@@ -35,17 +35,17 @@ export default function SeasonalPage() {
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [season, setSeason] = useState<string>(getCurrentSeasonName());
 
-  const [genreFilter, setGenreFilter] = useState<string>(ALL_FILTER_VALUE);
+  const [genreFilter, setGenreFilter] = useState<string[]>([]);
   const [studioFilter, setStudioFilter] = useState<string>(ALL_FILTER_VALUE);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
 
 
   function getCurrentSeasonName(): string {
     const month = new Date().getMonth();
-    if (month < 3) return 'winter'; // Jan, Feb, Mar (0, 1, 2)
-    if (month < 6) return 'spring'; // Apr, May, Jun (3, 4, 5)
-    if (month < 9) return 'summer'; // Jul, Aug, Sep (6, 7, 8)
-    return 'fall';   // Oct, Nov, Dec (9, 10, 11)
+    if (month < 3) return 'winter'; 
+    if (month < 6) return 'spring'; 
+    if (month < 9) return 'summer'; 
+    return 'fall';   
   }
   
   const availableYears = useMemo(() => {
@@ -94,7 +94,7 @@ export default function SeasonalPage() {
 
   const filteredAnime = useMemo(() => {
     return seasonalAnime.filter(anime => {
-      const genreMatch = genreFilter === ALL_FILTER_VALUE ? true : anime.genres?.some(g => g.name === genreFilter);
+      const genreMatch = genreFilter.length === 0 ? true : anime.genres?.some(animeGenre => genreFilter.includes(animeGenre.name));
       const studioMatch = studioFilter === ALL_FILTER_VALUE ? true : anime.studios?.some(s => s.name === studioFilter);
       const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
       return genreMatch && studioMatch && typeMatch;
@@ -102,14 +102,36 @@ export default function SeasonalPage() {
   }, [seasonalAnime, genreFilter, studioFilter, typeFilter]);
 
   const clearFilters = () => {
-    setGenreFilter(ALL_FILTER_VALUE);
+    setGenreFilter([]);
     setStudioFilter(ALL_FILTER_VALUE);
     setTypeFilter([]);
   };
 
+  const getGenreFilterDisplayValue = () => {
+    if (genreFilter.length === 0) {
+      return "All Genres";
+    }
+    if (uniqueGenres.length > 0 && genreFilter.length === uniqueGenres.length) {
+       return "All Genres";
+    }
+    if (genreFilter.length > 2) {
+      return `${genreFilter.slice(0, 2).join(', ')}, +${genreFilter.length - 2} more`;
+    }
+    return genreFilter.join(', ');
+  };
+
   const getTypeFilterDisplayValue = () => {
-    if (typeFilter.length === 0 || typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
+    if (typeFilter.length === 0) {
       return "All Types";
+    }
+    if (ANIME_TYPE_FILTER_OPTIONS.length > 0 && typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
+      return "All Types";
+    }
+     if (typeFilter.length > 2) {
+      const displayedTypes = typeFilter
+        .slice(0, 2)
+        .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val);
+      return `${displayedTypes.join(', ')}, +${typeFilter.length - 2} more`;
     }
     return typeFilter
       .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val)
@@ -155,13 +177,30 @@ export default function SeasonalPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
           <div>
             <Label htmlFor="genre-filter-seasonal" className="text-sm font-medium mb-1 block">Genre</Label>
-            <Select value={genreFilter} onValueChange={setGenreFilter}>
-              <SelectTrigger id="genre-filter-seasonal"><SelectValue placeholder="All Genres" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All Genres</SelectItem>
-                {uniqueGenres.map(genre => <SelectItem key={genre} value={genre}>{genre}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" id="genre-filter-seasonal" className="w-full justify-between text-left font-normal">
+                  <span className="truncate flex-grow">{getGenreFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                {uniqueGenres.map((genre) => (
+                  <DropdownMenuCheckboxItem
+                    key={genre}
+                    checked={genreFilter.includes(genre)}
+                    onCheckedChange={(checked) => {
+                      setGenreFilter(prev =>
+                        checked ? [...prev, genre] : prev.filter(g => g !== genre)
+                      );
+                    }}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {genre}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div>
             <Label htmlFor="studio-filter-seasonal" className="text-sm font-medium mb-1 block">Studio</Label>
