@@ -1,21 +1,20 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AnimeCard } from "@/components/anime/AnimeCard";
+import { AnimeGroupCard } from "@/components/anime/AnimeGroupCard";
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
-import type { JikanAnime, UserAnimeStatus, UserAnime } from '@/types/anime';
+import type { JikanAnime, UserAnimeStatus, UserAnime, JikanAnimeRelation } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, RATING_OPTIONS, ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
-import { Loader2, Search, ListFilter, X, ChevronDown } from 'lucide-react';
+import { Loader2, Search, ListFilter, X, ChevronDown, Info } from 'lucide-react';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -23,15 +22,21 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const ALL_FILTER_VALUE = "_all_"; // Still used by other filters
+const ALL_FILTER_VALUE = "_all_";
+
+interface GroupedShelfItem {
+  id: string; // mal_id of the "representative" anime or a generated group ID
+  isGroup: boolean;
+  items: UserAnime[]; // Array of UserAnime objects, even if isGroup is false (length 1)
+  representativeAnime: UserAnime; // The anime to use for main title/image if it's a group
+}
 
 export default function MyShelfPage() {
   const { shelf, isInitialized: shelfInitialized } = useAnimeShelf();
@@ -39,18 +44,64 @@ export default function MyShelfPage() {
   const [searchResults, setSearchResults] = useState<JikanAnime[]>([]);
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
   const [isLoadingShelf, setIsLoadingShelf] = useState(true);
+  const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   
   const [genreFilter, setGenreFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<UserAnimeStatus | typeof ALL_FILTER_VALUE>(ALL_FILTER_VALUE);
   const [ratingFilter, setRatingFilter] = useState<string>(ALL_FILTER_VALUE);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
 
+  const [relationsMap, setRelationsMap] = useState<Map<number, JikanAnimeRelation[]>>(new Map());
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (shelfInitialized) {
       setIsLoadingShelf(false);
+      if (shelf.length > 0) {
+        fetchRelationsForAllShelfItems();
+      } else {
+        setIsLoadingRelations(false); // No relations to fetch if shelf is empty
+      }
     }
-  }, [shelfInitialized]);
+  }, [shelfInitialized, shelf]);
+
+  const fetchRelationsForAllShelfItems = useCallback(async () => {
+    if (shelf.length === 0) {
+        setRelationsMap(new Map());
+        setIsLoadingRelations(false);
+        return;
+    }
+    setIsLoadingRelations(true);
+    setApiError(null);
+    const newRelationsMap = new Map<number, JikanAnimeRelation[]>();
+    let errorOccurred = false;
+    try {
+      for (const anime of shelf) {
+        // Only fetch if not already fetched or if needed (e.g. context doesn't store this)
+        if (!relationsMap.has(anime.mal_id)) { 
+          const relations = await jikanApi.getAnimeRelations(anime.mal_id);
+          if (relations) { // Jikan API might return null on error, ensure it's an array
+            newRelationsMap.set(anime.mal_id, relations);
+          } else {
+            // Could set a specific error or use a default empty array
+            newRelationsMap.set(anime.mal_id, []);
+          }
+        } else {
+          newRelationsMap.set(anime.mal_id, relationsMap.get(anime.mal_id)!);
+        }
+      }
+      setRelationsMap(newRelationsMap);
+    } catch (e) {
+        console.error("Error fetching relations for shelf items:", e);
+        setApiError("Could not load all series details due to API issues. Some groupings may be incomplete.");
+        errorOccurred = true;
+    } finally {
+        setIsLoadingRelations(false);
+        // If an error occurred, some relations might be missing. The map will contain what was successful.
+        // We merge with potentially existing relations in case of partial success on retry or incremental load
+        setRelationsMap(prev => new Map([...Array.from(prev.entries()), ...Array.from(newRelationsMap.entries())]));
+    }
+  }, [shelf, relationsMap]); // Added relationsMap to dependencies
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -58,8 +109,15 @@ export default function MyShelfPage() {
       return;
     }
     setIsLoadingSearch(true);
-    const results = await jikanApi.searchAnime(searchQuery);
-    setSearchResults(results);
+    setApiError(null);
+    try {
+        const results = await jikanApi.searchAnime(searchQuery);
+        setSearchResults(results);
+    } catch (e) {
+        console.error("Error searching anime:", e);
+        setApiError("Failed to perform search due to API issues. Please try again later.");
+        setSearchResults([]);
+    }
     setIsLoadingSearch(false);
   };
   
@@ -72,16 +130,83 @@ export default function MyShelfPage() {
     return Array.from(allGenres).sort();
   }, [shelf, shelfInitialized]);
 
-  const filteredShelf = useMemo(() => {
-    if (!shelfInitialized) return [];
-    return shelf.filter(anime => {
-      const genreMatch = genreFilter.length === 0 ? true : genreFilter.some(selectedGenre => anime.genres.includes(selectedGenre));
-      const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
-      const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
-      const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
-      return genreMatch && statusMatch && ratingMatch && typeMatch;
+
+  const groupedAndFilteredShelf = useMemo((): GroupedShelfItem[] => {
+    if (!shelfInitialized || (shelf.length > 0 && relationsMap.size === 0 && isLoadingRelations) ) { // Wait for relations if shelf not empty
+        return [];
+    }
+
+    // Filter individual anime first
+    const individuallyFilteredAnime = shelf.filter(anime => {
+        const genreMatch = genreFilter.length === 0 ? true : genreFilter.some(selectedGenre => anime.genres.includes(selectedGenre));
+        const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
+        const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
+        const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
+        return genreMatch && statusMatch && ratingMatch && typeMatch;
     });
-  }, [shelf, genreFilter, statusFilter, ratingFilter, typeFilter, shelfInitialized]);
+
+    if (individuallyFilteredAnime.length === 0) return [];
+
+    const shelfItemsMap = new Map(individuallyFilteredAnime.map(item => [item.mal_id, item]));
+    const visited = new Set<number>();
+    const finalGroupedItems: GroupedShelfItem[] = [];
+
+    // Sort by title to ensure consistent group "representative" if air dates are the same/missing
+    const sortedShelfForGrouping = [...individuallyFilteredAnime].sort((a, b) => {
+        // Basic sort: first by title
+        return a.title.localeCompare(b.title);
+    });
+
+
+    for (const anime of sortedShelfForGrouping) {
+        if (visited.has(anime.mal_id)) continue;
+
+        const currentSeriesMalIds = new Set<number>();
+        const queue: number[] = [anime.mal_id];
+        visited.add(anime.mal_id);
+        currentSeriesMalIds.add(anime.mal_id);
+
+        let head = 0;
+        while(head < queue.length) {
+            const currentMalId = queue[head++];
+            const itemRelations = relationsMap.get(currentMalId);
+
+            if (itemRelations) {
+                for (const relation of itemRelations) {
+                    if (relation.relation === 'Sequel' || relation.relation === 'Prequel' || relation.relation === 'Parent story' || relation.relation === 'Full story' || relation.relation === 'Side story') {
+                        for (const entry of relation.entry) {
+                            if (shelfItemsMap.has(entry.mal_id) && !currentSeriesMalIds.has(entry.mal_id)) {
+                                visited.add(entry.mal_id); // Mark as visited globally to avoid re-processing as a new group start
+                                currentSeriesMalIds.add(entry.mal_id);
+                                queue.push(entry.mal_id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        const groupItems = Array.from(currentSeriesMalIds)
+            .map(id => shelfItemsMap.get(id)!)
+            .filter(Boolean) // Ensure all items are valid
+            .sort((a,b) => (a.mal_id) - (b.mal_id)); // Consistent sort for representative
+
+        if (groupItems.length > 0) {
+             // Determine representative: for now, just the first item after sorting (e.g. by MAL ID, or original `anime`)
+            const representative = groupItems.find(item => item.mal_id === anime.mal_id) || groupItems[0];
+            
+            finalGroupedItems.push({
+                id: representative.mal_id.toString() + (groupItems.length > 1 ? "_group" : "_single"),
+                isGroup: groupItems.length > 1,
+                items: groupItems,
+                representativeAnime: representative
+            });
+        }
+    }
+    // Sort final groups/items by representative anime title for consistent display order
+    return finalGroupedItems.sort((a,b) => a.representativeAnime.title.localeCompare(b.representativeAnime.title));
+  }, [shelf, genreFilter, statusFilter, ratingFilter, typeFilter, relationsMap, shelfInitialized, isLoadingRelations]);
+
 
   const clearFilters = () => {
     setGenreFilter([]);
@@ -90,7 +215,7 @@ export default function MyShelfPage() {
     setTypeFilter([]);
   };
 
-  const renderSkeletons = (count: number) => (
+  const renderShelfSkeletons = (count: number) => (
     Array.from({ length: count }).map((_, index) => (
       <div key={index} className="border rounded-lg p-4 space-y-3">
         <Skeleton className="h-48 w-full" />
@@ -100,36 +225,34 @@ export default function MyShelfPage() {
       </div>
     ))
   );
+  
+  const renderSearchSkeletons = (count: number) => (
+    Array.from({ length: count }).map((_, index) => (
+      <div key={index} className="border rounded-lg p-4 space-y-3">
+        <Skeleton className="h-48 w-full" /> {/* Adjusted for AnimeCard visual */}
+        <Skeleton className="h-6 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    ))
+  );
+
 
   const getGenreFilterDisplayValue = () => {
-    if (genreFilter.length === 0) {
-      return "All Genres";
-    }
-    if (uniqueGenres.length > 0 && genreFilter.length === uniqueGenres.length) {
-       return "All Genres";
-    }
-    if (genreFilter.length > 2) {
-      return `${genreFilter.slice(0, 2).join(', ')}, +${genreFilter.length - 2} more`;
-    }
+    if (genreFilter.length === 0) return "All Genres";
+    if (uniqueGenres.length > 0 && genreFilter.length === uniqueGenres.length) return "All Genres";
+    if (genreFilter.length > 2) return `${genreFilter.slice(0, 2).join(', ')}, +${genreFilter.length - 2} more`;
     return genreFilter.join(', ');
   };
 
   const getTypeFilterDisplayValue = () => {
-    if (typeFilter.length === 0) {
-      return "All Types";
-    }
-    if (ANIME_TYPE_FILTER_OPTIONS.length > 0 && typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
-      return "All Types";
-    }
+    if (typeFilter.length === 0) return "All Types";
+    if (ANIME_TYPE_FILTER_OPTIONS.length > 0 && typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) return "All Types";
     if (typeFilter.length > 2) {
-      const displayedTypes = typeFilter
-        .slice(0, 2)
-        .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val);
+      const displayedTypes = typeFilter.slice(0, 2).map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val);
       return `${displayedTypes.join(', ')}, +${typeFilter.length - 2} more`;
     }
-    return typeFilter
-      .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val)
-      .join(', ');
+    return typeFilter.map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val).join(', ');
   };
 
 
@@ -155,7 +278,7 @@ export default function MyShelfPage() {
 
         {isLoadingSearch && (
            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {renderSkeletons(4)}
+            {renderSearchSkeletons(4)}
           </div>
         )}
 
@@ -169,7 +292,7 @@ export default function MyShelfPage() {
             </div>
           </div>
         )}
-        {!isLoadingSearch && searchQuery && searchResults.length === 0 && (
+        {!isLoadingSearch && searchQuery && searchResults.length === 0 && !apiError && (
           <p className="text-center text-muted-foreground py-4">No results found for "{searchQuery}". Try a different title.</p>
         )}
       </section>
@@ -263,31 +386,49 @@ export default function MyShelfPage() {
           </div>
         </div>
 
-        {isLoadingShelf && (
+        {apiError && (
+          <Alert variant="destructive" className="mb-6">
+            <Info className="h-4 w-4" />
+            <AlertTitle>API Error</AlertTitle>
+            <AlertDescription>
+              {apiError} Some anime may not be grouped correctly.
+              <Button variant="link" size="sm" onClick={fetchRelationsForAllShelfItems} className="p-0 h-auto ml-2 text-destructive-foreground hover:underline">
+                Retry fetching details
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {(isLoadingShelf || (shelf.length > 0 && isLoadingRelations)) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-           {renderSkeletons(8)}
+           {renderShelfSkeletons(8)}
           </div>
         )}
         
-        {!isLoadingShelf && filteredShelf.length > 0 && (
+        {!isLoadingShelf && !isLoadingRelations && groupedAndFilteredShelf.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filteredShelf.map(userAnime => {
-              const partialJikanAnime: JikanAnime = {
-                mal_id: userAnime.mal_id,
-                title: userAnime.title,
-                images: { jpg: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image }, webp: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image } },
-                episodes: userAnime.total_episodes,
-                genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
-                studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
-                type: userAnime.type, 
-                url: '', approved: true, titles: [{type: 'Default', title: userAnime.title}], source: 'Unknown', status: 'Unknown', airing: false, score: null, scored_by: null, synopsis: null, producers: [], licensors: [], season: null, year: null,
-              };
-              return <AnimeCard key={userAnime.mal_id} anime={partialJikanAnime} shelfItem={userAnime} />;
+            {groupedAndFilteredShelf.map(groupedItem => {
+              if (groupedItem.isGroup) {
+                return <AnimeGroupCard key={groupedItem.id} group={groupedItem.items} relationsMap={relationsMap} />;
+              } else {
+                // Standalone anime
+                const userAnime = groupedItem.items[0];
+                 const partialJikanAnime: Partial<JikanAnime> = { // Use Partial as we only have UserAnime fields
+                    mal_id: userAnime.mal_id,
+                    title: userAnime.title,
+                    images: { jpg: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image }, webp: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image } },
+                    episodes: userAnime.total_episodes,
+                    genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
+                    studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
+                    type: userAnime.type,
+                 };
+                return <AnimeCard key={userAnime.mal_id} anime={partialJikanAnime as JikanAnime} shelfItem={userAnime} />;
+              }
             })}
           </div>
         )}
 
-        {!isLoadingShelf && filteredShelf.length === 0 && shelf.length > 0 && (
+        {!isLoadingShelf && !isLoadingRelations && groupedAndFilteredShelf.length === 0 && shelf.length > 0 && (
            <div className="text-center py-10">
             <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-2 text-xl font-semibold">No Anime Match Filters</h3>
@@ -297,7 +438,7 @@ export default function MyShelfPage() {
           </div>
         )}
         
-        {!isLoadingShelf && shelf.length === 0 && (
+        {!isLoadingShelf && !isLoadingRelations && shelf.length === 0 && (
           <div className="text-center py-10">
             <Search className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-2 text-xl font-semibold">Your Shelf is Empty</h3>
