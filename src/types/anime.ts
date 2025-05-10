@@ -84,6 +84,15 @@ export const RATING_OPTIONS = [
     { value: 1, label: '1 (Appalling)'},
 ];
 
+export const ANIME_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: 'TV', label: 'TV Series' },
+  { value: 'OVA', label: 'OVA' },
+  { value: 'ONA', label: 'ONA' },
+  { value: 'Movie', label: 'Movie' },
+  { value: 'Special', label: 'Special' },
+  // { value: 'Music', label: 'Music' }, // Potentially too niche for default filter
+];
+
 
 export interface UserAnime {
   mal_id: number;
@@ -95,6 +104,7 @@ export interface UserAnime {
   user_rating: number | null; // 1-10 scale
   genres: string[]; 
   studios: string[];
+  type: string | null; // Added field for anime type
 }
 
 export interface JikanAPISearchResponse {

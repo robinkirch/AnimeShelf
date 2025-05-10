@@ -5,7 +5,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AnimeCard } from "@/components/anime/AnimeCard";
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, JikanMALItem } from '@/types/anime';
-import { Loader2, ListFilter } from 'lucide-react';
+import { ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
+import { Loader2, ListFilter, ChevronDown, X } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -14,6 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
@@ -30,6 +37,8 @@ export default function SeasonalPage() {
 
   const [genreFilter, setGenreFilter] = useState<string>(ALL_FILTER_VALUE);
   const [studioFilter, setStudioFilter] = useState<string>(ALL_FILTER_VALUE);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+
 
   function getCurrentSeasonName(): string {
     const month = new Date().getMonth();
@@ -56,7 +65,6 @@ export default function SeasonalPage() {
       setError(null);
       try {
         const data = await jikanApi.getSeason(year, season);
-        // De-duplication is now handled within jikanApi.getSeason
         setSeasonalAnime(data);
       } catch (e) {
         console.error(e);
@@ -88,9 +96,25 @@ export default function SeasonalPage() {
     return seasonalAnime.filter(anime => {
       const genreMatch = genreFilter === ALL_FILTER_VALUE ? true : anime.genres?.some(g => g.name === genreFilter);
       const studioMatch = studioFilter === ALL_FILTER_VALUE ? true : anime.studios?.some(s => s.name === studioFilter);
-      return genreMatch && studioMatch;
+      const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
+      return genreMatch && studioMatch && typeMatch;
     });
-  }, [seasonalAnime, genreFilter, studioFilter]);
+  }, [seasonalAnime, genreFilter, studioFilter, typeFilter]);
+
+  const clearFilters = () => {
+    setGenreFilter(ALL_FILTER_VALUE);
+    setStudioFilter(ALL_FILTER_VALUE);
+    setTypeFilter([]);
+  };
+
+  const getTypeFilterDisplayValue = () => {
+    if (typeFilter.length === 0 || typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
+      return "All Types";
+    }
+    return typeFilter
+      .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val)
+      .join(', ');
+  };
 
   const renderSkeletons = (count: number) => (
     Array.from({ length: count }).map((_, index) => (
@@ -128,9 +152,9 @@ export default function SeasonalPage() {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
           <div>
-            <Label htmlFor="genre-filter-seasonal" className="text-sm font-medium">Filter by Genre</Label>
+            <Label htmlFor="genre-filter-seasonal" className="text-sm font-medium mb-1 block">Genre</Label>
             <Select value={genreFilter} onValueChange={setGenreFilter}>
               <SelectTrigger id="genre-filter-seasonal"><SelectValue placeholder="All Genres" /></SelectTrigger>
               <SelectContent>
@@ -140,7 +164,7 @@ export default function SeasonalPage() {
             </Select>
           </div>
           <div>
-            <Label htmlFor="studio-filter-seasonal" className="text-sm font-medium">Filter by Studio</Label>
+            <Label htmlFor="studio-filter-seasonal" className="text-sm font-medium mb-1 block">Studio</Label>
             <Select value={studioFilter} onValueChange={setStudioFilter}>
               <SelectTrigger id="studio-filter-seasonal"><SelectValue placeholder="All Studios" /></SelectTrigger>
               <SelectContent>
@@ -149,8 +173,35 @@ export default function SeasonalPage() {
               </SelectContent>
             </Select>
           </div>
-           <Button variant="outline" onClick={() => { setGenreFilter(ALL_FILTER_VALUE); setStudioFilter(ALL_FILTER_VALUE); }} className="self-end">
-              Clear Filters
+          <div>
+            <Label htmlFor="type-filter-seasonal" className="text-sm font-medium mb-1 block">Type</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" id="type-filter-seasonal" className="w-full justify-between text-left font-normal">
+                  <span className="truncate flex-grow">{getTypeFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                {ANIME_TYPE_FILTER_OPTIONS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.value}
+                    checked={typeFilter.includes(option.value)}
+                    onCheckedChange={(checked) => {
+                      setTypeFilter(prev =>
+                        checked ? [...prev, option.value] : prev.filter(v => v !== option.value)
+                      );
+                    }}
+                    onSelect={(e) => e.preventDefault()}
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+           <Button variant="outline" onClick={clearFilters} className="self-end mt-auto sm:mt-0"> 
+              <X className="mr-2 h-4 w-4" /> Clear Filters
             </Button>
         </div>
       </section>
@@ -171,7 +222,7 @@ export default function SeasonalPage() {
       {!isLoading && !error && filteredAnime.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredAnime.map(anime => (
-            <AnimeCard key={anime.mal_id} anime={anime} />
+            <AnimeCard key={`${anime.mal_id}-${anime.title}`} anime={anime} />
           ))}
         </div>
       )}

@@ -9,7 +9,7 @@ interface AnimeShelfContextType {
   addAnimeToShelf: (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => void;
   updateAnimeOnShelf: (
     mal_id: number, 
-    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type'>>,
     currentJikanTotalEpisodes?: number | null
   ) => void;
   removeAnimeFromShelf: (mal_id: number) => void;
@@ -33,7 +33,13 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     try {
       const storedShelf = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (storedShelf) {
-        setShelf(JSON.parse(storedShelf));
+        // Ensure new fields have default values if loading old data
+        const parsedShelf: UserAnime[] = JSON.parse(storedShelf);
+        const migratedShelf = parsedShelf.map(anime => ({
+          ...anime,
+          type: anime.type ?? null, // Add default for 'type' if missing
+        }));
+        setShelf(migratedShelf);
       }
     } catch (error) {
       console.error("Failed to load anime shelf from localStorage:", error);
@@ -70,6 +76,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         user_rating: initialDetails.user_rating,
         genres: anime.genres?.map(g => g.name) || [],
         studios: anime.studios?.map(s => s.name) || [],
+        type: anime.type || null, // Store the anime type
       };
       return [...prevShelf, newAnime];
     });
@@ -78,7 +85,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
   const updateAnimeOnShelf = useCallback((
     mal_id: number,
-    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type'>>,
     currentJikanTotalEpisodes?: number | null
   ) => {
     setShelf(prevShelf =>
@@ -96,17 +103,17 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
           
           newAnimeState = { ...newAnimeState, ...updates };
 
-          if (updates.user_status === 'completed' && typeof mostReliableTotalEpisodes === 'number') {
+          if (updates.user_status === 'completed' && typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
             newAnimeState.current_episode = mostReliableTotalEpisodes;
           } else if (updates.current_episode !== undefined) {
             let ep = Math.max(0, updates.current_episode);
-            if (typeof mostReliableTotalEpisodes === 'number') {
+            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
               ep = Math.min(ep, mostReliableTotalEpisodes);
             }
             newAnimeState.current_episode = ep;
           } else {
             let ep = Math.max(0, newAnimeState.current_episode);
-            if (typeof mostReliableTotalEpisodes === 'number') {
+             if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
               ep = Math.min(ep, mostReliableTotalEpisodes);
             }
             newAnimeState.current_episode = ep;

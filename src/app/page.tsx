@@ -8,8 +8,8 @@ import { AnimeCard } from "@/components/anime/AnimeCard";
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, UserAnimeStatus, UserAnime } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS, RATING_OPTIONS } from '@/types/anime';
-import { Loader2, Search, ListFilter, X } from 'lucide-react';
+import { USER_ANIME_STATUS_OPTIONS, RATING_OPTIONS, ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
+import { Loader2, Search, ListFilter, X, ChevronDown } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -19,6 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
@@ -34,7 +42,9 @@ export default function MyShelfPage() {
   
   const [genreFilter, setGenreFilter] = useState<string>(ALL_FILTER_VALUE);
   const [statusFilter, setStatusFilter] = useState<UserAnimeStatus | typeof ALL_FILTER_VALUE>(ALL_FILTER_VALUE);
-  const [ratingFilter, setRatingFilter] = useState<string>(ALL_FILTER_VALUE); // Store as string for select compatibility
+  const [ratingFilter, setRatingFilter] = useState<string>(ALL_FILTER_VALUE);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+
 
   useEffect(() => {
     if (shelfInitialized) {
@@ -68,14 +78,16 @@ export default function MyShelfPage() {
       const genreMatch = genreFilter === ALL_FILTER_VALUE ? true : anime.genres.includes(genreFilter);
       const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
       const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
-      return genreMatch && statusMatch && ratingMatch;
+      const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
+      return genreMatch && statusMatch && ratingMatch && typeMatch;
     });
-  }, [shelf, genreFilter, statusFilter, ratingFilter, shelfInitialized]);
+  }, [shelf, genreFilter, statusFilter, ratingFilter, typeFilter, shelfInitialized]);
 
   const clearFilters = () => {
     setGenreFilter(ALL_FILTER_VALUE);
     setStatusFilter(ALL_FILTER_VALUE);
     setRatingFilter(ALL_FILTER_VALUE);
+    setTypeFilter([]);
   };
 
   const renderSkeletons = (count: number) => (
@@ -88,6 +100,15 @@ export default function MyShelfPage() {
       </div>
     ))
   );
+
+  const getTypeFilterDisplayValue = () => {
+    if (typeFilter.length === 0 || typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
+      return "All Types";
+    }
+    return typeFilter
+      .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val)
+      .join(', ');
+  };
 
 
   return (
@@ -145,7 +166,7 @@ export default function MyShelfPage() {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-card rounded-lg shadow-sm">
           <div>
-            <Label htmlFor="genre-filter" className="text-sm font-medium">Genre</Label>
+            <Label htmlFor="genre-filter" className="text-sm font-medium mb-1 block">Genre</Label>
             <Select value={genreFilter} onValueChange={setGenreFilter}>
               <SelectTrigger id="genre-filter"><SelectValue placeholder="All Genres" /></SelectTrigger>
               <SelectContent>
@@ -155,7 +176,7 @@ export default function MyShelfPage() {
             </Select>
           </div>
           <div>
-            <Label htmlFor="status-filter" className="text-sm font-medium">Status</Label>
+            <Label htmlFor="status-filter" className="text-sm font-medium mb-1 block">Status</Label>
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as UserAnimeStatus | typeof ALL_FILTER_VALUE)}>
               <SelectTrigger id="status-filter"><SelectValue placeholder="All Statuses" /></SelectTrigger>
               <SelectContent>
@@ -165,7 +186,7 @@ export default function MyShelfPage() {
             </Select>
           </div>
           <div>
-            <Label htmlFor="rating-filter" className="text-sm font-medium">Rating</Label>
+            <Label htmlFor="rating-filter" className="text-sm font-medium mb-1 block">Rating</Label>
             <Select value={ratingFilter} onValueChange={setRatingFilter}>
               <SelectTrigger id="rating-filter"><SelectValue placeholder="All Ratings" /></SelectTrigger>
               <SelectContent>
@@ -173,6 +194,33 @@ export default function MyShelfPage() {
                 {RATING_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value.toString()}>{opt.label}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <Label htmlFor="type-filter" className="text-sm font-medium mb-1 block">Type</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" id="type-filter" className="w-full justify-between text-left font-normal">
+                  <span className="truncate flex-grow">{getTypeFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+                {ANIME_TYPE_FILTER_OPTIONS.map((option) => (
+                  <DropdownMenuCheckboxItem
+                    key={option.value}
+                    checked={typeFilter.includes(option.value)}
+                    onCheckedChange={(checked) => {
+                      setTypeFilter(prev =>
+                        checked ? [...prev, option.value] : prev.filter(v => v !== option.value)
+                      );
+                    }}
+                    onSelect={(e) => e.preventDefault()} // Prevent closing on select
+                  >
+                    {option.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -185,21 +233,15 @@ export default function MyShelfPage() {
         {!isLoadingShelf && filteredShelf.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {filteredShelf.map(userAnime => {
-              // We need a JikanAnime object for AnimeCard.
-              // This means we either store it in UserAnime, or we need to fetch it.
-              // For simplicity here, we'll assume AnimeCard can partially function with UserAnime data or we would fetch.
-              // Let's construct a partial JikanAnime from UserAnime for now for display.
-              // A more robust solution would fetch full data if needed or store more in UserAnime.
               const partialJikanAnime: JikanAnime = {
                 mal_id: userAnime.mal_id,
                 title: userAnime.title,
                 images: { jpg: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image }, webp: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image } },
                 episodes: userAnime.total_episodes,
-                // These are placeholders or would need to be fetched/stored
                 genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
                 studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
-                // Add other required JikanAnime fields with default/empty values
-                url: '', approved: true, titles: [{type: 'Default', title: userAnime.title}], type: 'TV', source: 'Unknown', status: 'Unknown', airing: false, score: null, scored_by: null, synopsis: null, producers: [], licensors: [], season: null, year: null,
+                type: userAnime.type, // Use stored type
+                url: '', approved: true, titles: [{type: 'Default', title: userAnime.title}], source: 'Unknown', status: 'Unknown', airing: false, score: null, scored_by: null, synopsis: null, producers: [], licensors: [], season: null, year: null,
               };
               return <AnimeCard key={userAnime.mal_id} anime={partialJikanAnime} shelfItem={userAnime} />;
             })}
