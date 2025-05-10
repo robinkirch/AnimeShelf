@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -75,9 +76,37 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
   const updateAnimeOnShelf = useCallback((mal_id: number, updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios'>>) => {
     setShelf(prevShelf =>
-      prevShelf.map(animeItem => // Renamed 'anime' to 'animeItem' to avoid conflict with 'anime' from JikanAnime
-        animeItem.mal_id === mal_id ? { ...animeItem, ...updates, current_episode: Math.max(0, updates.current_episode ?? animeItem.current_episode) } : animeItem
-      )
+      prevShelf.map(animeItem => {
+        if (animeItem.mal_id === mal_id) {
+          const updatedAnime = { ...animeItem, ...updates };
+
+          // If status is being updated to 'completed' and total_episodes is known,
+          // set current_episode to total_episodes.
+          if (updates.user_status === 'completed' && typeof animeItem.total_episodes === 'number') {
+            updatedAnime.current_episode = animeItem.total_episodes;
+          } else if (updates.current_episode !== undefined) {
+            // If current_episode is being explicitly updated (and status is not 'completed' or total_episodes unknown)
+            let newCurrentEpisode = Math.max(0, updates.current_episode);
+            if (typeof animeItem.total_episodes === 'number') {
+              newCurrentEpisode = Math.min(newCurrentEpisode, animeItem.total_episodes);
+            }
+            updatedAnime.current_episode = newCurrentEpisode;
+          }
+          // If only other fields are updated, current_episode remains as is from { ...animeItem, ...updates }
+          // or if updates.current_episode was undefined, it remains animeItem.current_episode.
+          // Ensure it's still valid if not touched by 'completed' logic.
+          else if (updatedAnime.user_status !== 'completed' || typeof animeItem.total_episodes !== 'number') {
+             updatedAnime.current_episode = Math.max(0, updatedAnime.current_episode);
+             if(typeof animeItem.total_episodes === 'number') {
+                updatedAnime.current_episode = Math.min(updatedAnime.current_episode, animeItem.total_episodes);
+             }
+          }
+
+
+          return updatedAnime;
+        }
+        return animeItem;
+      })
     );
   }, []);
 
@@ -117,3 +146,4 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
+
