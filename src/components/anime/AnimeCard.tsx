@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from 'next/image';
@@ -12,7 +13,7 @@ import { RatingInput } from './RatingInput';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { AddToShelfDialog } from './AddToShelfDialog';
 import { AddAllToShelfDialog } from './AddAllToShelfDialog';
-import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2 } from 'lucide-react';
+import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -27,7 +28,8 @@ import { Skeleton } from '../ui/skeleton';
 
 interface AnimeCardProps {
   anime: JikanAnime; 
-  shelfItem?: UserAnime; 
+  shelfItem?: UserAnime;
+  onIgnorePreview?: (mal_id: number) => void; 
 }
 
 const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
@@ -39,7 +41,7 @@ const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
 };
 
 
-export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
+export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps) {
   const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf } = useAnimeShelf();
   const { toast } = useToast();
   
@@ -134,7 +136,7 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
           height={300}
           className="object-cover w-full h-48 md:h-64"
           data-ai-hint="anime cover art"
-          priority={false} // Typically false for lists of images
+          priority={false} 
         />
          {currentShelfItem && StatusIcon && (
           <div className="absolute top-2 right-2 bg-background/80 p-1.5 rounded-full shadow-md">
@@ -192,43 +194,49 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
         )}
       </CardContent>
       <CardFooter className="p-4 pt-0 flex flex-col gap-2">
-        {isOnShelf && currentShelfItem ? (
-          <Button variant="destructive" className="w-full" onClick={handleRemoveFromShelf}>
-            <Trash2 size={16} className="mr-2" /> Remove from Shelf
-          </Button>
-        ) : (
-          <>
-            <AddToShelfDialog anime={anime} onAddToShelf={handleAddToShelf}>
+        {!isOnShelf && (
+           <AddToShelfDialog anime={anime} onAddToShelf={handleAddToShelf}>
               <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
                 <PlusCircle size={16} className="mr-2" /> Add to Shelf
               </Button>
             </AddToShelfDialog>
+        )}
 
-            {isLoadingRelations && (
-                 <Button variant="outline" className="w-full" disabled>
-                    <Loader2 size={16} className="mr-2 animate-spin" /> Checking for series...
-                 </Button>
-            )}
+        {isLoadingRelations && !isOnShelf && (
+              <Button variant="outline" className="w-full" disabled>
+                <Loader2 size={16} className="mr-2 animate-spin" /> Checking for series...
+              </Button>
+        )}
 
-            {!isLoadingRelations && showAddAllButton && (
-              <AddAllToShelfDialog
-                mainAnime={anime}
-                relations={relations.filter(r => (r.relation === 'Sequel' || r.relation === 'Prequel') && r.entry.some(e => e.type === 'anime'))}
-                onAddAllToShelf={(animeSeriesDetails) => {
-                  animeSeriesDetails.forEach(item => {
-                    if (!isAnimeOnShelf(item.animeData.mal_id)) {
-                       addAnimeToShelf(item.animeData, item.userProgress);
-                    }
-                  });
-                  toast({ title: "Series Added to Shelf", description: `"${anime.title}" and related seasons added.` });
-                }}
-              >
-                <Button variant="outline" className="w-full">
-                  <Layers size={16} className="mr-2" /> Add All to Shelf
-                </Button>
-              </AddAllToShelfDialog>
-            )}
-          </>
+        {!isLoadingRelations && showAddAllButton && !isOnShelf && (
+          <AddAllToShelfDialog
+            mainAnime={anime}
+            relations={relations.filter(r => (r.relation === 'Sequel' || r.relation === 'Prequel') && r.entry.some(e => e.type === 'anime'))}
+            onAddAllToShelf={(animeSeriesDetails) => {
+              animeSeriesDetails.forEach(item => {
+                if (!isAnimeOnShelf(item.animeData.mal_id)) {
+                    addAnimeToShelf(item.animeData, item.userProgress);
+                }
+              });
+              toast({ title: "Series Added to Shelf", description: `"${anime.title}" and related seasons added.` });
+            }}
+          >
+            <Button variant="outline" className="w-full">
+              <Layers size={16} className="mr-2" /> Add Entire Series
+            </Button>
+          </AddAllToShelfDialog>
+        )}
+        
+        {isOnShelf && currentShelfItem && (
+          <Button variant="destructive" className="w-full" onClick={handleRemoveFromShelf}>
+            <Trash2 size={16} className="mr-2" /> Remove from Shelf
+          </Button>
+        )}
+
+        {onIgnorePreview && !isOnShelf && (
+          <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => onIgnorePreview(anime.mal_id)}>
+            <EyeOff size={16} className="mr-2" /> Ignore in Preview
+          </Button>
         )}
       </CardFooter>
     </Card>

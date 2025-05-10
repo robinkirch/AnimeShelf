@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -18,26 +19,33 @@ interface AnimeShelfContextType {
   isInitialized: boolean;
   upcomingSequels: JikanAnime[];
   setUpcomingSequels: (animeList: JikanAnime[]) => void;
+  ignoredPreviewAnimeMalIds: number[];
+  addIgnoredPreviewAnime: (mal_id: number) => void;
+  removeIgnoredPreviewAnime: (mal_id: number) => void; // For potential future use
+  isPreviewAnimeIgnored: (mal_id: number) => boolean;
+  ignoredPreviewAnimeMalIdsInitialized: boolean;
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY = 'animeShelf';
+const LOCAL_STORAGE_KEY_SHELF = 'animeShelf';
+const LOCAL_STORAGE_KEY_IGNORED_PREVIEW = 'ignoredPreviewAnimeMalIds';
 
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [shelf, setShelf] = useState<UserAnime[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const [upcomingSequels, setUpcomingSequelsState] = useState<JikanAnime[]>([]);
+  const [ignoredPreviewAnimeMalIds, setIgnoredPreviewAnimeMalIds] = useState<number[]>([]);
+  const [ignoredPreviewAnimeMalIdsInitialized, setIgnoredPreviewAnimeMalIdsInitialized] = useState(false);
 
   useEffect(() => {
     try {
-      const storedShelf = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const storedShelf = localStorage.getItem(LOCAL_STORAGE_KEY_SHELF);
       if (storedShelf) {
-        // Ensure new fields have default values if loading old data
         const parsedShelf: UserAnime[] = JSON.parse(storedShelf);
         const migratedShelf = parsedShelf.map(anime => ({
           ...anime,
-          type: anime.type ?? null, // Add default for 'type' if missing
+          type: anime.type ?? null,
         }));
         setShelf(migratedShelf);
       }
@@ -46,17 +54,38 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       setShelf([]);
     }
     setIsInitialized(true);
+
+    try {
+      const storedIgnored = localStorage.getItem(LOCAL_STORAGE_KEY_IGNORED_PREVIEW);
+      if (storedIgnored) {
+        setIgnoredPreviewAnimeMalIds(JSON.parse(storedIgnored));
+      }
+    } catch (error) {
+      console.error("Failed to load ignored preview anime IDs from localStorage:", error);
+      setIgnoredPreviewAnimeMalIds([]);
+    }
+    setIgnoredPreviewAnimeMalIdsInitialized(true);
   }, []);
 
   useEffect(() => {
     if (isInitialized) {
       try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(shelf));
+        localStorage.setItem(LOCAL_STORAGE_KEY_SHELF, JSON.stringify(shelf));
       } catch (error) {
         console.error("Failed to save anime shelf to localStorage:", error);
       }
     }
   }, [shelf, isInitialized]);
+
+  useEffect(() => {
+    if (ignoredPreviewAnimeMalIdsInitialized) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY_IGNORED_PREVIEW, JSON.stringify(ignoredPreviewAnimeMalIds));
+      } catch (error) {
+        console.error("Failed to save ignored preview anime IDs to localStorage:", error);
+      }
+    }
+  }, [ignoredPreviewAnimeMalIds, ignoredPreviewAnimeMalIdsInitialized]);
 
   const setUpcomingSequels = useCallback((animeList: JikanAnime[]) => {
     setUpcomingSequelsState(animeList);
@@ -76,7 +105,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         user_rating: initialDetails.user_rating,
         genres: anime.genres?.map(g => g.name) || [],
         studios: anime.studios?.map(s => s.name) || [],
-        type: anime.type || null, // Store the anime type
+        type: anime.type || null,
       };
       return [...prevShelf, newAnime];
     });
@@ -137,6 +166,21 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const getAnimeFromShelf = useCallback((mal_id: number) => {
     return shelf.find(anime => anime.mal_id === mal_id);
   }, [shelf]);
+
+  const addIgnoredPreviewAnime = useCallback((mal_id: number) => {
+    setIgnoredPreviewAnimeMalIds(prev => {
+      if (prev.includes(mal_id)) return prev;
+      return [...prev, mal_id];
+    });
+  }, []);
+
+  const removeIgnoredPreviewAnime = useCallback((mal_id: number) => {
+    setIgnoredPreviewAnimeMalIds(prev => prev.filter(id => id !== mal_id));
+  }, []);
+
+  const isPreviewAnimeIgnored = useCallback((mal_id: number) => {
+    return ignoredPreviewAnimeMalIds.includes(mal_id);
+  }, [ignoredPreviewAnimeMalIds]);
   
   return (
     <AnimeShelfContext.Provider value={{ 
@@ -148,7 +192,12 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         getAnimeFromShelf, 
         isInitialized,
         upcomingSequels,
-        setUpcomingSequels
+        setUpcomingSequels,
+        ignoredPreviewAnimeMalIds,
+        addIgnoredPreviewAnime,
+        removeIgnoredPreviewAnime,
+        isPreviewAnimeIgnored,
+        ignoredPreviewAnimeMalIdsInitialized
       }}>
       {children}
     </AnimeShelfContext.Provider>
@@ -162,3 +211,4 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
+

@@ -6,27 +6,39 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, JikanAnimeRelation, JikanAnimeRelationEntry } from '@/types/anime';
 import { AnimeCard } from '@/components/anime/AnimeCard';
-import { Loader2, CalendarDays, Tv, Film, History, HelpCircle, ListFilter } from 'lucide-react';
+import { Loader2, CalendarDays, Tv, Film, History, HelpCircle, ListFilter, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from '@/components/ui/skeleton';
-// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Not used
+import { useToast } from '@/hooks/use-toast';
+
 
 type CategorizedAnime = JikanAnime & {
-  relationType?: string; // e.g., "Sequel", "Prequel"
-  relatedTo?: string; // Title of the anime it's related to on the shelf
+  relationType?: string; 
+  relatedTo?: string; 
 };
 
 export default function PreviewPage() {
-  const { shelf, setUpcomingSequels, isInitialized: shelfInitialized } = useAnimeShelf();
+  const { 
+    shelf, 
+    setUpcomingSequels, 
+    isInitialized: shelfInitialized,
+    ignoredPreviewAnimeMalIds,
+    addIgnoredPreviewAnime,
+    ignoredPreviewAnimeMalIdsInitialized 
+  } = useAnimeShelf();
+  const { toast } = useToast();
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [futureAnime, setFutureAnime] = useState<CategorizedAnime[]>([]);
-  const [otherContinuations, setOtherContinuations] = useState<CategorizedAnime[]>([]);
+  
+  const [allFetchedFutureAnime, setAllFetchedFutureAnime] = useState<CategorizedAnime[]>([]);
+  const [allFetchedOtherContinuations, setAllFetchedOtherContinuations] = useState<CategorizedAnime[]>([]);
   
   const currentYear = useMemo(() => new Date().getFullYear(), []);
-  const currentMonth = useMemo(() => new Date().getMonth(), []); // 0-11
+  const currentMonth = useMemo(() => new Date().getMonth(), []); 
+  const seasonOrder = useMemo(() => ['winter', 'spring', 'summer', 'fall'], []);
 
   const getCurrentSeasonName = useCallback((): string => {
     if (currentMonth < 3) return 'winter'; 
@@ -35,7 +47,6 @@ export default function PreviewPage() {
     return 'fall';   
   }, [currentMonth]);
   const currentSeason = useMemo(() => getCurrentSeasonName(), [getCurrentSeasonName]);
-  const seasonOrder = useMemo(() => ['winter', 'spring', 'summer', 'fall'], []);
 
 
   const isFutureSeasonOrAirDate = useCallback((anime: JikanAnime): boolean => {
@@ -63,10 +74,10 @@ export default function PreviewPage() {
 
 
   const fetchAndCategorizeContinuations = useCallback(async () => {
-    if (!shelfInitialized || shelf.length === 0) {
-      setFutureAnime([]);
-      setOtherContinuations([]);
-      setUpcomingSequels([]);
+    if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized || shelf.length === 0) {
+      setAllFetchedFutureAnime([]);
+      setAllFetchedOtherContinuations([]);
+      setUpcomingSequels([]); // Clear context sequels if shelf is empty or not initialized
       setIsLoading(false);
       return;
     }
@@ -81,9 +92,6 @@ export default function PreviewPage() {
 
     try {
       for (const userAnime of shelf) {
-        // No need to check processedRelatedAnimeMalIds for userAnime itself.
-        // It's for relations to avoid fetching the same relation multiple times.
-        
         const relations = await jikanApi.getAnimeRelations(userAnime.mal_id);
         if (!relations || relations.length === 0) continue;
 
@@ -130,10 +138,12 @@ export default function PreviewPage() {
           }
         }
       }
-      const allUpcoming = Array.from(foundFutureAnimeMap.values()).sort((a,b) => (a.year || Infinity) - (b.year || Infinity) || (a.title.localeCompare(b.title)));
-      setFutureAnime(allUpcoming);
-      setOtherContinuations(Array.from(foundOtherContinuationsMap.values()).sort((a,b) => (b.year || 0) - (a.year || 0) || (a.title.localeCompare(b.title))));
-      setUpcomingSequels(allUpcoming);
+      const allUpcomingRaw = Array.from(foundFutureAnimeMap.values()).sort((a,b) => (a.year || Infinity) - (b.year || Infinity) || (a.title.localeCompare(b.title)));
+      setAllFetchedFutureAnime(allUpcomingRaw);
+      setAllFetchedOtherContinuations(Array.from(foundOtherContinuationsMap.values()).sort((a,b) => (b.year || 0) - (a.year || 0) || (a.title.localeCompare(b.title))));
+      
+      // Set upcoming sequels for header badge (unfiltered by ignore status initially)
+      setUpcomingSequels(allUpcomingRaw); 
       
     } catch (e) {
       console.error("Error fetching continuations:", e);
@@ -141,13 +151,29 @@ export default function PreviewPage() {
     } finally {
       setIsLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shelf, shelfInitialized, isFutureSeasonOrAirDate, setUpcomingSequels, currentYear, currentSeason, seasonOrder]);
+  }, [shelf, shelfInitialized, ignoredPreviewAnimeMalIdsInitialized, isFutureSeasonOrAirDate, setUpcomingSequels, currentYear, currentSeason, seasonOrder]);
 
   useEffect(() => {
     fetchAndCategorizeContinuations();
   }, [fetchAndCategorizeContinuations]);
 
+  const futureAnimeToDisplay = useMemo(() => {
+    if (!ignoredPreviewAnimeMalIdsInitialized) return [];
+    return allFetchedFutureAnime.filter(anime => !ignoredPreviewAnimeMalIds.includes(anime.mal_id));
+  }, [allFetchedFutureAnime, ignoredPreviewAnimeMalIds, ignoredPreviewAnimeMalIdsInitialized]);
+
+  const otherContinuationsToDisplay = useMemo(() => {
+    if (!ignoredPreviewAnimeMalIdsInitialized) return [];
+    return allFetchedOtherContinuations.filter(anime => !ignoredPreviewAnimeMalIds.includes(anime.mal_id));
+  }, [allFetchedOtherContinuations, ignoredPreviewAnimeMalIds, ignoredPreviewAnimeMalIdsInitialized]);
+
+  const handleIgnorePreview = (mal_id: number, title: string) => {
+    addIgnoredPreviewAnime(mal_id);
+    toast({
+      title: "Anime Hidden in Preview",
+      description: `"${title}" will no longer be shown on this page.`,
+    });
+  };
 
   const renderAnimeList = (animeList: CategorizedAnime[], listTitle: string, emptyMessage: string, IconComponent: React.ElementType) => (
     <section>
@@ -157,7 +183,13 @@ export default function PreviewPage() {
       </div>
       {animeList.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {animeList.map(anime => <AnimeCard key={`${anime.mal_id}-${listTitle}`} anime={anime} />)}
+          {animeList.map(anime => 
+            <AnimeCard 
+              key={`${anime.mal_id}-${listTitle}`} 
+              anime={anime} 
+              onIgnorePreview={(id) => handleIgnorePreview(id, anime.title)}
+            />
+          )}
         </div>
       ) : (
         <div className="text-center py-10 bg-card p-6 rounded-lg shadow-sm border border-dashed">
@@ -176,11 +208,12 @@ export default function PreviewPage() {
         <Skeleton className="h-7 w-3/4" />
         <Skeleton className="h-5 w-1/2" />
         <Skeleton className="h-10 w-full" />
+         <Skeleton className="h-9 w-full mt-2" /> {/* Skeleton for ignore button */}
       </div>
     ))
   );
 
-  if (isLoading) {
+  if (isLoading || !shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) {
     return (
       <div className="space-y-10">
         <div>
@@ -211,16 +244,16 @@ export default function PreviewPage() {
     );
   }
   
-  if (!shelfInitialized) {
+  if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) { // Combined check for clarity
      return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
-        <p className="text-xl text-muted-foreground">Initializing your shelf data...</p>
+        <p className="text-xl text-muted-foreground">Initializing your data...</p>
       </div>
     );
   }
 
-  if (shelf.length === 0 && shelfInitialized) {
+  if (shelf.length === 0 && shelfInitialized) { // Check shelfInitialized here as well
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8 bg-card rounded-xl shadow-lg">
         <History className="h-20 w-20 text-primary mb-8" />
@@ -240,32 +273,33 @@ export default function PreviewPage() {
       <header className="pb-2">
         <h1 className="text-4xl font-bold tracking-tight text-primary mb-2">Anime Preview</h1>
         <p className="text-lg text-muted-foreground max-w-3xl">
-          Discover future seasons and other continuations for anime you're tracking. Add them to your plan-to-watch list with a click!
+          Discover future seasons and other continuations for anime you're tracking. Add them to your plan-to-watch list or hide them from this view.
         </p>
       </header>
       
       {renderAnimeList(
-        futureAnime, 
+        futureAnimeToDisplay, 
         "Upcoming Future Seasons", 
-        "No direct future seasons or announced new entries found for anime on your shelf.",
+        "No direct future seasons or announced new entries found (or all are hidden).",
         CalendarDays
       )}
 
       <Separator className="my-10" />
 
       {renderAnimeList(
-        otherContinuations,
+        otherContinuationsToDisplay,
         "Other Related Series (Current & Past)",
-        "No other direct continuations (like current, past seasons, or side stories) found for anime on your shelf.",
+        "No other direct continuations (like current/past seasons or side stories) found (or all are hidden).",
         Tv
       )}
 
-      {(futureAnime.length === 0 && otherContinuations.length === 0 && shelf.length > 0 && !isLoading) && (
+      {(futureAnimeToDisplay.length === 0 && otherContinuationsToDisplay.length === 0 && shelf.length > 0 && !isLoading) && (
            <div className="text-center py-16 bg-card p-8 rounded-lg shadow-sm border border-dashed">
                 <ListFilter className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
                 <h3 className="mt-2 text-2xl font-semibold">No Previews Found</h3>
                 <p className="mt-2 text-md text-muted-foreground max-w-lg mx-auto">
-                    We couldn't find any relevant upcoming seasons or other related series based on your current shelf. 
+                    We couldn't find any relevant upcoming seasons or other related series based on your current shelf,
+                    or all relevant items have been hidden from this page. 
                     Ensure your shelf has anime with known relations, or try again later as new announcements happen.
                 </p>
            </div>

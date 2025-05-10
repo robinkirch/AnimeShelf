@@ -1,3 +1,4 @@
+
 "use client";
 import Link from 'next/link';
 import { Clapperboard } from 'lucide-react';
@@ -9,12 +10,24 @@ import React from 'react';
 
 export function Header() {
   const pathname = usePathname();
-  const { upcomingSequels, shelf } = useAnimeShelf(); 
+  const { 
+    upcomingSequels, 
+    shelf, 
+    ignoredPreviewAnimeMalIds, 
+    isInitialized: shelfInitialized, 
+    ignoredPreviewAnimeMalIdsInitialized 
+  } = useAnimeShelf(); 
 
   const shelfMalIds = React.useMemo(() => new Set(shelf.map(a => a.mal_id)), [shelf]);
+  
   const upcomingCount = React.useMemo(() => {
-    return upcomingSequels.filter(seq => !shelfMalIds.has(seq.mal_id)).length;
-  }, [upcomingSequels, shelfMalIds]);
+    if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) return 0;
+    
+    return upcomingSequels.filter(seq => 
+      !shelfMalIds.has(seq.mal_id) &&
+      !ignoredPreviewAnimeMalIds.includes(seq.mal_id)
+    ).length;
+  }, [upcomingSequels, shelfMalIds, ignoredPreviewAnimeMalIds, shelfInitialized, ignoredPreviewAnimeMalIdsInitialized]);
 
 
   const navLinkClasses = (path: string) =>
@@ -50,3 +63,4 @@ export function Header() {
     </header>
   );
 }
+
