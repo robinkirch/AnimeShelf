@@ -125,7 +125,7 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
     <Card className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 h-full">
       <CardHeader className="p-0 relative">
         <Image
-          src={anime.images.webp?.large_image_url || anime.images.webp?.image_url || anime.images.jpg.large_image_url || "https://picsum.photos/400/600"}
+          src={anime.images.webp?.large_image_url || anime.images.webp?.image_url || anime.images.jpg.large_image_url || anime.images.jpg.image_url || "https://picsum.photos/400/600"}
           alt={`Cover image for ${anime.title}`}
           width={400}
           height={300}
@@ -151,7 +151,7 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
         
         <div className="flex flex-wrap gap-1 mb-3">
           {anime.genres?.slice(0, 3).map(genre => (
-            <Badge key={genre.mal_id} variant="secondary" className="text-xs">{genre.name}</Badge>
+            <Badge key={genre.name} variant="secondary" className="text-xs">{genre.name}</Badge>
           ))}
         </div>
 
@@ -232,3 +232,4 @@ export function AnimeCard({ anime, shelfItem }: AnimeCardProps) {
     </Card>
   );
 }
+
