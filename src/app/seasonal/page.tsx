@@ -1,12 +1,12 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AnimeCard } from "@/components/anime/AnimeCard";
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, JikanMALItem } from '@/types/anime';
 import { ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
-import { Loader2, ListFilter, ChevronDown, X } from 'lucide-react';
+import { Loader2, ListFilter, ChevronDown, X, ChevronRight } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -51,7 +51,7 @@ export default function SeasonalPage() {
   const availableYears = useMemo(() => {
     const currentYr = new Date().getFullYear();
     const years = [];
-    for (let y = currentYr + 1; y >= 1980; y--) { 
+    for (let y = currentYr + 2; y >= 1980; y--) { // Allow selecting 2 years into future for "Next" button
       years.push(y);
     }
     return years;
@@ -107,6 +107,18 @@ export default function SeasonalPage() {
     setTypeFilter([]);
   };
 
+  const handleNextSeason = useCallback(() => {
+    const currentSeasonIndex = seasons.indexOf(season);
+    if (currentSeasonIndex === -1) return; // Should not happen
+
+    if (currentSeasonIndex === seasons.length - 1) { // Fall -> Winter
+      setSeason(seasons[0]); // Winter
+      setYear(prevYear => prevYear + 1);
+    } else {
+      setSeason(seasons[currentSeasonIndex + 1]);
+    }
+  }, [season, seasons]);
+
   const getGenreFilterDisplayValue = () => {
     if (genreFilter.length === 0) {
       return "All Genres";
@@ -154,9 +166,9 @@ export default function SeasonalPage() {
       <section className="bg-card p-6 rounded-lg shadow-sm">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <h1 className="text-3xl font-bold text-primary">Seasonal Anime</h1>
-          <div className="flex gap-2 flex-wrap justify-center md:justify-end">
+          <div className="flex gap-2 flex-wrap justify-center md:justify-end items-center">
             <Select value={year.toString()} onValueChange={(val) => setYear(parseInt(val))}>
-              <SelectTrigger className="w-[120px] text-sm">
+              <SelectTrigger className="w-[120px] text-sm h-10">
                 <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent>
@@ -164,13 +176,16 @@ export default function SeasonalPage() {
               </SelectContent>
             </Select>
             <Select value={season} onValueChange={setSeason}>
-              <SelectTrigger className="w-[120px] text-sm">
+              <SelectTrigger className="w-[120px] text-sm h-10">
                 <SelectValue placeholder="Season" />
               </SelectTrigger>
               <SelectContent>
                 {seasons.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Button onClick={handleNextSeason} variant="outline" size="sm" className="h-10 px-3">
+              Next <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
           </div>
         </div>
         
@@ -261,7 +276,7 @@ export default function SeasonalPage() {
       {!isLoading && !error && filteredAnime.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredAnime.map(anime => (
-            <AnimeCard key={`${anime.mal_id}-${anime.title}`} anime={anime} />
+            <AnimeCard key={`${anime.mal_id}-${year}-${season}`} anime={anime} />
           ))}
         </div>
       )}
@@ -288,3 +303,4 @@ export default function SeasonalPage() {
     </div>
   );
 }
+
