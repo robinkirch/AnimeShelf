@@ -1,10 +1,11 @@
+
 "use client";
 
 import React, { useMemo } from 'react';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChartTooltipContent } from '@/components/ui/chart';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { CalendarClock, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -21,7 +22,7 @@ export function MonthlyWatchTimeChart() {
 
     const monthlyData: { [key: string]: { name: string; year: number; month: number; totalHours: number } } = {};
     const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11); // Include current month + 11 past months
+    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11); 
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
@@ -42,8 +43,6 @@ export function MonthlyWatchTimeChart() {
       if (duration) {
         const key = `${watchedDate.getFullYear()}-${String(watchedDate.getMonth() + 1).padStart(2, '0')}`;
         if (monthlyData[key]) {
-            // Assuming each event.episode_number_watched means one episode
-            // If episodes_watched_count was used: event.episodes_watched_count * duration
             monthlyData[key].totalHours += duration / 60;
         }
       }
@@ -54,6 +53,14 @@ export function MonthlyWatchTimeChart() {
         .map(data => ({ ...data, totalHours: parseFloat(data.totalHours.toFixed(1)) }));
 
   }, [episodeWatchHistory, shelf, isInitialized]);
+
+  const chartConfig = useMemo(() => ({
+    totalHours: {
+      label: "Watch Time (hrs)",
+      color: "hsl(var(--primary))",
+    },
+  } as ChartConfig), []);
+
 
   if (!isInitialized) {
     return (
@@ -95,49 +102,51 @@ export function MonthlyWatchTimeChart() {
         <CardDescription>Total hours watched per month over the last 12 months.</CardDescription>
       </CardHeader>
       <CardContent className="h-[350px] pb-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false}/>
-            <XAxis 
-              dataKey="name" 
-              tickLine={false} 
-              axisLine={false} 
-              tickMargin={8} 
-              angle={-35}
-              textAnchor="end"
-              height={60} // Adjust height to accommodate angled labels
-              interval={0} // Show all labels
-              fontSize={12}
-            />
-            <YAxis 
-              label={{ value: 'Hours Watched', angle: -90, position: 'insideLeft', offset:-5, style: {textAnchor: 'middle', fontSize: '12px', fill: 'hsl(var(--muted-foreground))'} }} 
-              tickFormatter={(value) => `${value}h`}
-              tickLine={false}
-              axisLine={false}
-              fontSize={12}
-            />
-            <Tooltip
-              cursor={{ fill: 'hsl(var(--muted)/0.5)' }}
-              content={<ChartTooltipContent 
-                formatter={(value, name, item) => {
-                    return (
-                        <div className="flex flex-col">
-                           <span className="text-sm font-bold">{item.payload.name}</span>
-                           <span className="text-xs text-muted-foreground">Watch Time: {value} hrs</span>
-                        </div>
-                    );
-                }}
-                hideLabel={true}
-                hideIndicator={true}
-              />}
-            />
-            <Legend 
-                formatter={(value) => <span style={{color: 'hsl(var(--foreground))'}}>{value}</span>}
-                wrapperStyle={{paddingTop: '10px'}}
-            />
-            <Bar dataKey="totalHours" name="Watch Time" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <ChartContainer config={chartConfig} className="w-full h-full">
+            <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false}/>
+                <XAxis 
+                dataKey="name" 
+                tickLine={false} 
+                axisLine={false} 
+                tickMargin={8} 
+                angle={-35}
+                textAnchor="end"
+                height={60} 
+                interval={0} 
+                fontSize={12}
+                />
+                <YAxis 
+                label={{ value: 'Hours Watched', angle: -90, position: 'insideLeft', offset:-5, style: {textAnchor: 'middle', fontSize: '12px', fill: 'hsl(var(--muted-foreground))'} }} 
+                tickFormatter={(value) => `${value}h`}
+                tickLine={false}
+                axisLine={false}
+                fontSize={12}
+                />
+                <Tooltip
+                cursor={{ fill: 'hsl(var(--muted)/0.5)' }}
+                content={<ChartTooltipContent 
+                    formatter={(value, name, item) => {
+                        return (
+                            <div className="flex flex-col">
+                            <span className="text-sm font-bold">{item.payload.name}</span>
+                            <span className="text-xs text-muted-foreground">Watch Time: {value} hrs</span>
+                            </div>
+                        );
+                    }}
+                    hideLabel={true}
+                    hideIndicator={true}
+                />}
+                />
+                <Legend 
+                    formatter={(value) => <span style={{color: 'hsl(var(--foreground))'}}>{value}</span>}
+                    wrapperStyle={{paddingTop: '10px'}}
+                />
+                <Bar dataKey="totalHours" name="Watch Time" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+            </ResponsiveContainer>
+        </ChartContainer>
       </CardContent>
     </Card>
   );
