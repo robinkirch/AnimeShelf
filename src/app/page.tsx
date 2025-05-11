@@ -161,30 +161,52 @@ export default function MyShelfPage() {
     return Array.from(allGenres).sort();
   }, [shelf, shelfInitialized]);
 
+  const itemsPassingOtherFilters = useMemo(() => {
+    if (!shelfInitialized) return [];
+    return shelf.filter(anime => {
+      const genreMatch = genreFilter.length === 0 ? true : genreFilter.some(selectedGenre => anime.genres.includes(selectedGenre));
+      const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
+      const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
+      const localSearchMatch = localShelfSearchQuery.trim() === '' ? true : anime.title.toLowerCase().includes(localShelfSearchQuery.toLowerCase().trim());
+      
+      return genreMatch && ratingMatch && typeMatch && localSearchMatch;
+    });
+  }, [shelf, genreFilter, ratingFilter, typeFilter, localShelfSearchQuery, shelfInitialized]);
+
+  const statusCounts = useMemo(() => {
+    if (!shelfInitialized) return {};
+    
+    const counts: Record<string, number> = {
+      [ALL_FILTER_VALUE]: itemsPassingOtherFilters.length
+    };
+    
+    USER_ANIME_STATUS_OPTIONS.forEach(opt => {
+      counts[opt.value] = itemsPassingOtherFilters.filter(anime => anime.user_status === opt.value).length;
+    });
+    
+    return counts;
+  }, [itemsPassingOtherFilters, shelfInitialized]);
+
 
   const groupedAndFilteredShelf = useMemo((): GroupedShelfItem[] => {
     if (!shelfInitialized || (shelf.length > 0 && relationsMap.size === 0 && isLoadingRelations) ) { 
         return [];
     }
 
-    const filteredForGroupingAnime = shelf.filter(anime => {
-        const genreMatch = genreFilter.length === 0 ? true : genreFilter.some(selectedGenre => anime.genres.includes(selectedGenre));
+    // Start with itemsPassingOtherFilters, then apply the status filter
+    const fullyFilteredAnime = itemsPassingOtherFilters.filter(anime => {
         const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
-        const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
-        const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
-        const localSearchMatch = localShelfSearchQuery.trim() === '' ? true : anime.title.toLowerCase().includes(localShelfSearchQuery.toLowerCase().trim());
-        
-        return genreMatch && statusMatch && ratingMatch && typeMatch && localSearchMatch;
+        return statusMatch;
     });
 
 
-    if (filteredForGroupingAnime.length === 0) return [];
+    if (fullyFilteredAnime.length === 0) return [];
 
-    const shelfItemsMap = new Map(filteredForGroupingAnime.map(item => [item.mal_id, item]));
+    const shelfItemsMap = new Map(fullyFilteredAnime.map(item => [item.mal_id, item]));
     const visited = new Set<number>();
     const finalGroupedItems: GroupedShelfItem[] = [];
 
-    const sortedShelfForGrouping = [...filteredForGroupingAnime].sort((a, b) => a.title.localeCompare(b.title));
+    const sortedShelfForGrouping = [...fullyFilteredAnime].sort((a, b) => a.title.localeCompare(b.title));
 
     for (const anime of sortedShelfForGrouping) {
         if (visited.has(anime.mal_id)) continue;
@@ -307,7 +329,7 @@ export default function MyShelfPage() {
 
     return sortedFinalItems;
 
-  }, [shelf, genreFilter, statusFilter, ratingFilter, typeFilter, relationsMap, shelfInitialized, isLoadingRelations, sortOption, sortOrder, localShelfSearchQuery]);
+  }, [itemsPassingOtherFilters, statusFilter, relationsMap, shelfInitialized, isLoadingRelations, sortOption, sortOrder, shelf.length]);
 
 
   const clearFilters = () => {
@@ -507,8 +529,12 @@ export default function MyShelfPage() {
             <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as UserAnimeStatus | typeof ALL_FILTER_VALUE)}>
               <SelectTrigger id="status-filter"><SelectValue placeholder="All Statuses" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All Statuses</SelectItem>
-                {USER_ANIME_STATUS_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                <SelectItem value={ALL_FILTER_VALUE}>All Statuses ({statusCounts[ALL_FILTER_VALUE] ?? 0})</SelectItem>
+                {USER_ANIME_STATUS_OPTIONS.map(opt => 
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label} ({statusCounts[opt.value] ?? 0})
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
