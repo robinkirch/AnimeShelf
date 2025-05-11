@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 
 export const JikanMALItemSchema = z.object({
@@ -105,9 +104,11 @@ export const JikanAnimeSchema = z.object({
   explicit_genres: z.array(JikanMALItemSchema).optional().describe("List of explicit genres (e.g., 'Hentai')."),
   themes: z.array(JikanMALItemSchema).optional().describe("List of themes present in the anime (e.g., 'Mecha', 'School')."),
   demographics: z.array(JikanMALItemSchema).optional().describe("List of target demographics for the anime (e.g., 'Shounen', 'Shoujo')."),
+  streaming: z.array(JikanMALItemSchema).optional().nullable().describe("Streaming platforms for the anime."),
   // Note: 'relations' field is omitted here as it's complex and typically fetched separately if needed.
   // This schema is primarily for representing a single anime's core data as returned by search or by ID.
 });
 
 // This can be used in TypeScript code where JikanAnime type is expected.
 export type JikanAnimeZod = z.infer<typeof JikanAnimeSchema>;
+

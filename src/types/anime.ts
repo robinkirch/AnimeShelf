@@ -66,6 +66,7 @@ export interface JikanAnime {
   themes?: JikanMALItem[];
   demographics?: JikanMALItem[];
   relations?: JikanAnimeRelation[]; // Added for convenience, though API might provide separately
+  streaming?: JikanMALItem[]; // Added field for streaming platforms
 }
 
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
@@ -170,3 +171,4 @@ export interface JikanAnimeRelation {
 export interface JikanAPIRelationsResponse {
   data: JikanAnimeRelation[];
 }
+

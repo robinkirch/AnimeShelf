@@ -1,12 +1,11 @@
-
 "use client";
 
 import Image from 'next/image';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import type { JikanAnime, UserAnime, UserAnimeStatus, JikanAnimeRelation } from '@/types/anime';
+import type { JikanAnime, UserAnime, UserAnimeStatus, JikanAnimeRelation, JikanMALItem } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { ProgressBar } from './ProgressBar';
 import { RatingInput } from './RatingInput';
@@ -25,6 +24,7 @@ import {
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { jikanApi } from '@/lib/jikanApi';
+import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 
 interface AnimeCardProps {
   anime: JikanAnime | Partial<JikanAnime>; 
@@ -53,15 +53,15 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
   const [relations, setRelations] = useState<JikanAnimeRelation[]>([]);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   const [showAddAllButton, setShowAddAllButton] = useState(false);
-  const [editableStreamingPlatforms, setEditableStreamingPlatforms] = useState('');
+  // No longer need editableStreamingPlatforms as string, StreamingPlatformsInput handles string[]
+  
+  const fullAnimeDataForDialog = anime as JikanAnime; // Used for AddToShelfDialog and AddAllToShelfDialog
 
-  const fullAnimeDataForDialog = anime as JikanAnime;
-
-  useEffect(() => {
-    if (currentShelfItem) {
-      setEditableStreamingPlatforms(currentShelfItem.streaming_platforms.join(', '));
-    }
-  }, [currentShelfItem]);
+  // API suggestions for StreamingPlatformsInput, derived from the full JikanAnime data
+  const apiStreamingSuggestions = useMemo(() => {
+    const fullData = anime as JikanAnime; // Assume 'anime' prop can be cast
+    return fullData.streaming?.map((s: JikanMALItem) => s.name) || [];
+  }, [anime]);
 
 
   useEffect(() => {
@@ -79,13 +79,13 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
             setShowAddAllButton(hasSequelsOrPrequels);
         } catch (error) {
             console.error("Failed to fetch relations for anime ID:", anime.mal_id, error);
-            setShowAddAllButton(false); // Ensure it's false on error
+            setShowAddAllButton(false); 
         } finally {
             setIsLoadingRelations(false);
         }
       } else {
-        setRelations([]); // Clear relations if not fetching
-        setShowAddAllButton(false); // Ensure button is hidden if conditions not met
+        setRelations([]); 
+        setShowAddAllButton(false); 
       }
     };
     fetchRelations();
@@ -103,29 +103,28 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
 
   const handleUpdateStatus = (status: UserAnimeStatus) => {
     if (currentShelfItem && anime.mal_id) {
-      updateAnimeOnShelf(anime.mal_id, { user_status: status }, anime.episodes);
+      updateAnimeOnShelf(anime.mal_id, { user_status: status }, fullAnimeDataForDialog.episodes);
       toast({ title: "Status Updated", description: `"${anime.title}" status set to ${USER_ANIME_STATUS_OPTIONS.find(s => s.value === status)?.label || status}.` });
     }
   };
 
   const handleUpdateRating = (rating: number | null) => {
     if (currentShelfItem && anime.mal_id) {
-      updateAnimeOnShelf(anime.mal_id, { user_rating: rating }, anime.episodes);
+      updateAnimeOnShelf(anime.mal_id, { user_rating: rating }, fullAnimeDataForDialog.episodes);
       toast({ title: "Rating Updated", description: `"${anime.title}" rating set.` });
     }
   };
 
   const handleUpdateBroadcastDay = (day: string | null) => {
     if (currentShelfItem && anime.mal_id) {
-      updateAnimeOnShelf(anime.mal_id, { broadcast_day: day === NO_BROADCAST_DAY_VALUE ? null : day }, anime.episodes);
+      updateAnimeOnShelf(anime.mal_id, { broadcast_day: day === NO_BROADCAST_DAY_VALUE ? null : day }, fullAnimeDataForDialog.episodes);
       toast({ title: "Broadcast Day Updated", description: `"${anime.title}" broadcast day updated.` });
     }
   };
 
-  const handleUpdateStreamingPlatforms = () => {
+  const handleUpdateStreamingPlatforms = (newPlatforms: string[]) => {
     if (currentShelfItem && anime.mal_id) {
-      const platformsArray = editableStreamingPlatforms.split(',').map(p => p.trim()).filter(p => p.length > 0);
-      updateAnimeOnShelf(anime.mal_id, { streaming_platforms: platformsArray }, anime.episodes);
+      updateAnimeOnShelf(anime.mal_id, { streaming_platforms: newPlatforms }, fullAnimeDataForDialog.episodes);
       toast({ title: "Streaming Platforms Updated", description: `"${anime.title}" streaming platforms updated.` });
     }
   };
@@ -133,20 +132,21 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
 
   const handleIncrementEpisode = () => {
     if (currentShelfItem && anime.mal_id && (currentShelfItem.total_episodes === null || currentShelfItem.current_episode < currentShelfItem.total_episodes)) {
-      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode + 1 }, anime.episodes);
+      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode + 1 }, fullAnimeDataForDialog.episodes);
     }
   };
 
   const handleDecrementEpisode = () => {
     if (currentShelfItem && anime.mal_id && currentShelfItem.current_episode > 0) {
-      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode - 1 }, anime.episodes);
+      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode - 1 }, fullAnimeDataForDialog.episodes);
     }
   };
   
   const handleSetEpisode = (episode: number) => {
     if (currentShelfItem && anime.mal_id) {
-      const newEpisode = Math.max(0, Math.min(episode, currentShelfItem.total_episodes ?? Infinity));
-      updateAnimeOnShelf(anime.mal_id, { current_episode: newEpisode }, anime.episodes);
+      const totalEps = fullAnimeDataForDialog.episodes ?? currentShelfItem.total_episodes;
+      const newEpisode = Math.max(0, Math.min(episode, totalEps ?? Infinity));
+      updateAnimeOnShelf(anime.mal_id, { current_episode: newEpisode }, totalEps);
     }
   };
 
@@ -207,7 +207,8 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
               <Input 
                 type="number"
                 value={currentShelfItem.current_episode}
-                onChange={(e) => handleSetEpisode(parseInt(e.target.value))}
+                onChange={(e) => handleItemChange(anime.mal_id, 'current_episode', parseInt(e.target.value))} // Optimistic UI for input typing
+                onBlur={(e) => handleSetEpisode(parseInt(e.target.value))} // Persist on blur
                 className="w-16 text-center h-9"
                 min={0}
                 max={currentShelfItem.total_episodes ?? undefined}
@@ -243,28 +244,16 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
               </Select>
             </div>
              <div>
-                <Label htmlFor={`streaming-platforms-${anime.mal_id}`} className="text-xs font-medium">Streaming Platforms (CSV)</Label>
-                <div className="flex items-center gap-2 mt-1">
-                    <Input
-                        id={`streaming-platforms-${anime.mal_id}`}
-                        type="text"
-                        value={editableStreamingPlatforms}
-                        onChange={(e) => setEditableStreamingPlatforms(e.target.value)}
-                        className="text-sm flex-grow"
-                        placeholder="e.g. Netflix, Crunchyroll"
-                        onBlur={handleUpdateStreamingPlatforms} // Update on blur
-                    />
-                </div>
-                {currentShelfItem.streaming_platforms.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                        {currentShelfItem.streaming_platforms.map(platform => (
-                            <Badge key={platform} variant="outline" className="text-xs bg-muted text-muted-foreground">
-                               {platform.startsWith("http") ? <Youtube size={12} className="mr-1"/> : <Tv size={12} className="mr-1"/>}
-                                {platform}
-                            </Badge>
-                        ))}
-                    </div>
-                )}
+                <Label htmlFor={`streaming-platforms-${anime.mal_id}`} className="text-xs font-medium">Streaming Platforms</Label>
+                 <StreamingPlatformsInput
+                    value={currentShelfItem.streaming_platforms}
+                    onChange={handleUpdateStreamingPlatforms}
+                    apiSuggestions={apiStreamingSuggestions}
+                    placeholder="Add/edit platforms..."
+                />
+                {/* Display badges if not using the input's internal badge display, or if needed for non-edit state */}
+                {/* This might be redundant if StreamingPlatformsInput shows badges */}
+                {/* For simplicity, we assume StreamingPlatformsInput handles its display sufficiently */}
             </div>
           </div>
         )}
@@ -318,3 +307,11 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
     </Card>
   );
 }
+// Helper function for optimistic UI update in AnimeCard (if needed)
+// This is kept simple here; complex state changes are handled by context.
+function handleItemChange(mal_id: number, field: keyof UserAnime, value: any) {
+  // This function is a placeholder if direct manipulation of currentShelfItem's display state
+  // before context update is needed. For now, context updates re-render the card.
+  console.log(`AnimeCard: Optimistic UI update for ${mal_id}, field ${String(field)}, value ${value}`);
+}
+

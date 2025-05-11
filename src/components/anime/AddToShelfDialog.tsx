@@ -1,7 +1,6 @@
-
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,6 +24,7 @@ import type { JikanAnime, UserAnimeStatus } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { RatingInput } from './RatingInput';
 import Image from 'next/image';
+import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 
 interface AddToShelfDialogProps {
   anime: JikanAnime;
@@ -45,27 +45,36 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
   const [userStatus, setUserStatus] = useState<UserAnimeStatus>('plan_to_watch');
   const [currentEpisode, setCurrentEpisode] = useState(0);
   const [userRating, setUserRating] = useState<number | null>(null);
-  const [streamingPlatformsInput, setStreamingPlatformsInput] = useState('');
+  const [streamingPlatforms, setStreamingPlatforms] = useState<string[]>([]);
   const [broadcastDay, setBroadcastDay] = useState<string | null>(anime.broadcast?.day || null);
+
+  // Effect to initialize/reset state when dialog opens or anime prop changes
+  useEffect(() => {
+    if (isOpen) {
+      setUserStatus('plan_to_watch');
+      setCurrentEpisode(0);
+      setUserRating(null);
+      setStreamingPlatforms(anime.streaming?.map(s => s.name) || []);
+      setBroadcastDay(anime.broadcast?.day || null);
+    }
+  }, [isOpen, anime]);
 
 
   const handleSubmit = () => {
-    const platforms = streamingPlatformsInput.split(',').map(p => p.trim()).filter(p => p.length > 0);
     onAddToShelf({
       user_status: userStatus,
       current_episode: Math.min(currentEpisode, anime.episodes ?? Infinity), // Cap at total episodes
       user_rating: userRating,
-      streaming_platforms: platforms,
+      streaming_platforms: streamingPlatforms,
       broadcast_day: broadcastDay === NO_BROADCAST_DAY_VALUE ? null : broadcastDay,
     });
     setIsOpen(false);
-    // Reset form for next time
-    setUserStatus('plan_to_watch');
-    setCurrentEpisode(0);
-    setUserRating(null);
-    setStreamingPlatformsInput('');
-    setBroadcastDay(anime.broadcast?.day || null);
+    // State will be reset by useEffect when dialog reopens
   };
+
+  const apiPlatformSuggestions = React.useMemo(() => {
+    return anime.streaming?.map(s => s.name) || [];
+  }, [anime.streaming]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -138,16 +147,16 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="streaming-platforms" className="text-right">Streaming (CSV)</Label>
-            <Input
-              id="streaming-platforms"
-              type="text"
-              value={streamingPlatformsInput}
-              onChange={(e) => setStreamingPlatformsInput(e.target.value)}
-              className="col-span-3"
-              placeholder="e.g. Netflix, Crunchyroll"
-            />
+          <div className="grid grid-cols-4 items-start gap-4 pt-1">
+            <Label htmlFor="streaming-platforms" className="text-right mt-2">Streaming</Label>
+            <div className="col-span-3">
+              <StreamingPlatformsInput
+                value={streamingPlatforms}
+                onChange={setStreamingPlatforms}
+                apiSuggestions={apiPlatformSuggestions}
+                placeholder="Add streaming platforms..."
+              />
+            </div>
           </div>
         </div>
         <DialogFooter>
@@ -158,3 +167,4 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
     </Dialog>
   );
 }
+

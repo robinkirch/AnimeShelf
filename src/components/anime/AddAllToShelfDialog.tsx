@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -21,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { JikanAnime, UserAnimeStatus, JikanAnimeRelation, JikanAnimeRelationEntry } from '@/types/anime';
+import type { JikanAnime, UserAnimeStatus, JikanAnimeRelation, JikanAnimeRelationEntry, JikanMALItem } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { RatingInput } from './RatingInput';
 import Image from 'next/image';
@@ -29,6 +28,7 @@ import { jikanApi } from '@/lib/jikanApi';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2 } from 'lucide-react';
+import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 
 interface SeasonEntryState {
   mal_id: number;
@@ -41,8 +41,9 @@ interface SeasonEntryState {
   genres: string[];
   studios: string[];
   animeData?: JikanAnime; 
-  streaming_platforms_input: string; // CSV input
+  streaming_platforms: string[]; // Changed from streaming_platforms_input
   broadcast_day: string | null;
+  apiStreamingSuggestions: string[]; // To store API suggestions for the input component
 }
 
 interface AddAllToShelfDialogProps {
@@ -100,6 +101,8 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             animeDetails = await jikanApi.getAnimeById(entry.mal_id);
         }
 
+        const apiStreaming = animeDetails?.streaming?.map((s: JikanMALItem) => s.name) || [];
+
         if (!animeDetails) {
             console.warn(`Failed to fetch details for ${entry.name} (ID: ${entry.mal_id}), using placeholder.`);
             fetchedSeasonStates.push({
@@ -113,8 +116,9 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
                 genres: [],
                 studios: [],
                 animeData: undefined,
-                streaming_platforms_input: '',
+                streaming_platforms: [],
                 broadcast_day: null,
+                apiStreamingSuggestions: [],
             });
             continue;
         }
@@ -135,8 +139,9 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             genres: animeDetails.genres?.map(g => g.name) || [],
             studios: animeDetails.studios?.map(s => s.name) || [],
             animeData: animeDetails,
-            streaming_platforms_input: '',
+            streaming_platforms: apiStreaming, // Initialize with API suggestions
             broadcast_day: animeDetails.broadcast?.day || null,
+            apiStreamingSuggestions: apiStreaming,
         });
     }
     
@@ -204,7 +209,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
           user_status: entry.user_status,
           current_episode: Math.min(entry.current_episode, entry.total_episodes ?? Infinity),
           user_rating: entry.user_rating,
-          streaming_platforms: entry.streaming_platforms_input.split(',').map(p => p.trim()).filter(p => p.length > 0),
+          streaming_platforms: entry.streaming_platforms, // Use the string array directly
           broadcast_day: entry.broadcast_day === NO_BROADCAST_DAY_VALUE ? null : entry.broadcast_day,
         }
     }));
@@ -266,14 +271,14 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
           />
         </div>
       </div>
-       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
         <div>
             <Label htmlFor={`broadcast-day-${entry.mal_id}`} className="text-xs">Broadcast Day</Label>
             <Select
                 value={entry.broadcast_day || NO_BROADCAST_DAY_VALUE}
                 onValueChange={(value) => handleSeasonChange(entry.mal_id, 'broadcast_day', value === NO_BROADCAST_DAY_VALUE ? null : value)}
             >
-            <SelectTrigger id={`broadcast-day-${entry.mal_id}`} className="h-9 text-xs">
+            <SelectTrigger id={`broadcast-day-${entry.mal_id}`} className="h-9 text-xs mt-0.5">
                 <SelectValue placeholder="Select broadcast day" />
             </SelectTrigger>
             <SelectContent>
@@ -285,14 +290,12 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             </Select>
         </div>
         <div>
-            <Label htmlFor={`streaming-platforms-${entry.mal_id}`} className="text-xs">Streaming (CSV)</Label>
-            <Input
-            id={`streaming-platforms-${entry.mal_id}`}
-            type="text"
-            value={entry.streaming_platforms_input}
-            onChange={(e) => handleSeasonChange(entry.mal_id, 'streaming_platforms_input', e.target.value)}
-            className="h-9 text-xs"
-            placeholder="e.g. Netflix, Crunchyroll"
+            <Label htmlFor={`streaming-platforms-${entry.mal_id}`} className="text-xs">Streaming</Label>
+             <StreamingPlatformsInput
+                value={entry.streaming_platforms}
+                onChange={(newPlatforms) => handleSeasonChange(entry.mal_id, 'streaming_platforms', newPlatforms)}
+                apiSuggestions={entry.apiStreamingSuggestions}
+                placeholder="Add platforms..."
             />
         </div>
       </div>
@@ -323,9 +326,9 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" /> {/* Placeholder for StreamingPlatformsInput */}
         </div>
-        <Skeleton className="h-9 w-[180px]" />
+        <Skeleton className="h-9 w-[180px]" /> {/* Placeholder for RatingInput */}
       </div>
     ))
   );
