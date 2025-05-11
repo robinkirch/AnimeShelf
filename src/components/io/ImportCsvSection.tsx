@@ -1,4 +1,3 @@
-
 'use client';
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -12,7 +11,7 @@ import { CheckCircle, XCircle, UploadCloud, Loader2, Info } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 
-const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day'];
+const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes'];
 const REQUIRED_HEADERS = ['mal_id', 'title', 'user_status', 'current_episode'];
 
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
@@ -30,7 +29,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         setImportResults(null); 
       } else {
         toast({ title: "Invalid File Type", description: "Please select a valid .csv file.", variant: "destructive"});
-        event.target.value = ""; // Reset file input
+        event.target.value = ""; 
       }
     }
   };
@@ -91,10 +90,13 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
 
         const values = (line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []).map(v => v.trim());
 
-        if (values.length !== headers.length) {
+        if (values.length !== headers.length && headers.includes('duration_minutes') && values.length === headers.length -1) {
+             // If duration_minutes is the last optional column and it's missing, allow it
+        } else if (values.length !== headers.length) {
             processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${headers.length}, got ${values.length}. Line: "${line.substring(0,50)}..."` });
             continue;
         }
+
 
         const row: Record<string, string> = {};
         headers.forEach((header, index) => {
@@ -154,6 +156,14 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
              continue;
            }
         }
+        
+        const duration_minutes_str = row.duration_minutes;
+        const duration_minutes = duration_minutes_str === '' || duration_minutes_str === undefined ? null : parseInt(duration_minutes_str, 10);
+        if (duration_minutes_str !== '' && duration_minutes_str !== undefined && (isNaN(duration_minutes as number) || (duration_minutes as number) < 0)) {
+            processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'duration_minutes': ${duration_minutes_str}. Must be a non-negative number or empty.` });
+            continue;
+        }
+
 
         importedAnimeList.push({
           mal_id,
@@ -170,6 +180,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
           season: row.season || null,
           streaming_platforms: row.streaming_platforms ? row.streaming_platforms.split(';').map(p => p.trim()).filter(p => p) : [],
           broadcast_day,
+          duration_minutes,
         });
       }
 

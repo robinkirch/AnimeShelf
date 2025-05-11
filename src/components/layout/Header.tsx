@@ -1,7 +1,6 @@
-
 "use client";
 import Link from 'next/link';
-import { Clapperboard, Moon, Sun, ArrowRightLeft } from 'lucide-react';
+import { Clapperboard, Moon, Sun, ArrowRightLeft, LineChart } from 'lucide-react'; // Added LineChart
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
@@ -54,6 +53,9 @@ export function Header() {
                 </Badge>
               )}
             </Link>
+            <Link href="/stats" className={navLinkClasses("/stats")}> {/* Added Stats link */}
+              Stats
+            </Link>
             <Button
               variant="ghost"
               size="icon"
@@ -79,4 +81,3 @@ export function Header() {
     </>
   );
 }
-

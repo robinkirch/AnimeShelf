@@ -1,4 +1,3 @@
-
 'use client';
 import React from 'react';
 import { Button } from '@/components/ui/button';
@@ -13,9 +12,7 @@ export function ExportSection() {
 
   const escapeCsvCell = (cellData: any): string => {
     const stringData = String(cellData === null || cellData === undefined ? '' : cellData);
-    // If the stringData contains a comma, double quote, or newline, wrap it in double quotes
     if (stringData.includes(',') || stringData.includes('"') || stringData.includes('\n')) {
-      // Within a double-quoted field, double quotes must be escaped by another double quote
       return `"${stringData.replace(/"/g, '""')}"`;
     }
     return stringData;
@@ -27,10 +24,10 @@ export function ExportSection() {
       return;
     }
 
-    const headers = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day'];
+    const headers = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes'];
     
     const csvRows = [
-      headers.join(','), // Header row
+      headers.join(','), 
       ...shelf.map(anime => 
         [
           anime.mal_id,
@@ -47,15 +44,16 @@ export function ExportSection() {
           escapeCsvCell(anime.season ?? ''),
           escapeCsvCell(anime.streaming_platforms.join(';')),
           escapeCsvCell(anime.broadcast_day ?? ''),
+          anime.duration_minutes === null || anime.duration_minutes === undefined ? '' : anime.duration_minutes,
         ].join(',')
       )
     ];
     
     const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // Added BOM for Excel
     const link = document.createElement('a');
     
-    if (navigator.msSaveBlob) { // IE 10+
+    if (navigator.msSaveBlob) { 
         navigator.msSaveBlob(blob, "animeshelf_export.csv");
     } else {
         const url = URL.createObjectURL(blob);

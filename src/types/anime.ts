@@ -101,6 +101,14 @@ export const ANIME_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
   // { value: 'Music', label: 'Music' }, // Potentially too niche for default filter
 ];
 
+// For statistics, we might want to consider all types
+export const STATS_ANIME_TYPE_OPTIONS: { value: string; label: string }[] = [
+  ...ANIME_TYPE_FILTER_OPTIONS,
+  { value: 'Music', label: 'Music' },
+  { value: 'Unknown', label: 'Unknown' }, // For items where type might be null
+];
+
+
 export const BROADCAST_DAY_OPTIONS: { value: string; label: string }[] = [
     { value: 'Mondays', label: 'Mondays' },
     { value: 'Tuesdays', label: 'Tuesdays' },
@@ -128,6 +136,7 @@ export interface UserAnime {
   season: string | null;
   streaming_platforms: string[];
   broadcast_day: string | null;
+  duration_minutes: number | null; // Duration per episode in minutes
 }
 
 export interface JikanAPISearchResponse {
@@ -172,3 +181,9 @@ export interface JikanAPIRelationsResponse {
   data: JikanAnimeRelation[];
 }
 
+// For tracking when an episode was watched
+export interface EpisodeWatchEvent {
+  mal_id: number;
+  episode_number_watched: number; // The specific episode number that was watched
+  watched_at: string; // ISO datetime string of when it was marked watched
+}

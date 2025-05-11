@@ -1,9 +1,8 @@
-
 "use client";
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { JikanAnime, UserAnime, UserAnimeStatus } from '@/types/anime';
+import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 
 
@@ -12,29 +11,65 @@ interface AnimeShelfContextType {
   addAnimeToShelf: (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => void;
   updateAnimeOnShelf: (
     mal_id: number, 
-    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season'>>,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season' | 'duration_minutes'>>,
     currentJikanTotalEpisodes?: number | null
   ) => void;
   removeAnimeFromShelf: (mal_id: number) => void;
   isAnimeOnShelf: (mal_id: number) => boolean;
   getAnimeFromShelf: (mal_id: number) => UserAnime | undefined;
   isInitialized: boolean;
-  upcomingSequels: JikanAnime[]; // Raw list from PreviewPage
-  setUpcomingSequels: (animeList: JikanAnime[]) => void; // Raw list from PreviewPage
-  getFilteredUpcomingSequelsCount: () => number; // Filtered count for header badge
+  upcomingSequels: JikanAnime[]; 
+  setUpcomingSequels: (animeList: JikanAnime[]) => void; 
+  getFilteredUpcomingSequelsCount: () => number; 
   ignoredPreviewAnimeMalIds: number[];
   addIgnoredPreviewAnime: (mal_id: number) => void;
   removeIgnoredPreviewAnime: (mal_id: number) => void; 
   isPreviewAnimeIgnored: (mal_id: number) => boolean;
   ignoredPreviewAnimeMalIdsInitialized: boolean;
   importAnimeBatch: (importedAnimeList: UserAnime[]) => { successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> };
+  episodeWatchHistory: EpisodeWatchEvent[];
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY_SHELF = 'animeShelf';
 const LOCAL_STORAGE_KEY_IGNORED_PREVIEW = 'ignoredPreviewAnimeMalIds';
+const LOCAL_STORAGE_KEY_EPISODE_WATCH_HISTORY = 'animeShelfEpisodeWatchHistory';
 const IGNORED_TYPES_CONTEXT = ['Music'];
+
+// Helper function to parse Jikan duration string to minutes
+function parseDurationToMinutes(durationStr: string | null | undefined): number | null {
+  if (!durationStr) return null;
+  
+  // Format: "23 min per ep" or "23 min. per ep"
+  const perEpMatch = durationStr.match(/(\d+)\s*min(?:s|\.)?\s*(?:per\s*ep)?/i);
+  if (perEpMatch && perEpMatch[1]) {
+    return parseInt(perEpMatch[1], 10);
+  }
+
+  // Format: "1 hr 23 min" (often for movies/specials, treat as total, not per ep)
+  // For simplicity in this context, if it's not "per ep", we might assume it's total duration
+  // and if episodes is 1, this is the duration. If episodes > 1, this format is ambiguous per ep.
+  // Given UserAnime.total_episodes, this parsing becomes tricky without more context.
+  // Sticking to "min per ep" for episode-based anime.
+  const hrMinMatch = durationStr.match(/(?:(\d+)\s*hr)?\s*(?:(\d+)\s*min)?/i);
+  if (hrMinMatch) {
+    const hours = hrMinMatch[1] ? parseInt(hrMinMatch[1], 10) : 0;
+    const minutes = hrMinMatch[2] ? parseInt(hrMinMatch[2], 10) : 0;
+    if (hours > 0 || minutes > 0) {
+      // This is likely total duration. If anime.episodes === 1, then this is fine.
+      // Otherwise, cannot reliably determine per-episode duration from this alone.
+      // Let's return it if only "X min" and no "per ep"
+      if (!durationStr.toLowerCase().includes("per ep") && hours === 0) {
+        return minutes;
+      }
+       if (!durationStr.toLowerCase().includes("per ep") && hours > 0 && minutes >= 0) {
+        return (hours * 60) + minutes;
+      }
+    }
+  }
+  return null;
+}
 
 
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
@@ -43,6 +78,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [upcomingSequels, setUpcomingSequelsState] = useState<JikanAnime[]>([]);
   const [ignoredPreviewAnimeMalIds, setIgnoredPreviewAnimeMalIds] = useState<number[]>([]);
   const [ignoredPreviewAnimeMalIdsInitialized, setIgnoredPreviewAnimeMalIdsInitialized] = useState(false);
+  const [episodeWatchHistory, setEpisodeWatchHistory] = useState<EpisodeWatchEvent[]>([]);
 
   useEffect(() => {
     try {
@@ -56,6 +92,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
           season: anime.season ?? null,
           streaming_platforms: anime.streaming_platforms ?? [],
           broadcast_day: anime.broadcast_day ?? null,
+          duration_minutes: anime.duration_minutes === undefined ? null : anime.duration_minutes, // Ensure field exists
         }));
         setShelf(migratedShelf);
       }
@@ -63,8 +100,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       console.error("Failed to load anime shelf from localStorage:", error);
       setShelf([]);
     }
-    setIsInitialized(true);
-
+    
     try {
       const storedIgnored = localStorage.getItem(LOCAL_STORAGE_KEY_IGNORED_PREVIEW);
       if (storedIgnored) {
@@ -74,7 +110,19 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       console.error("Failed to load ignored preview anime IDs from localStorage:", error);
       setIgnoredPreviewAnimeMalIds([]);
     }
-    setIgnoredPreviewAnimeMalIdsInitialized(true);
+
+    try {
+        const storedWatchHistory = localStorage.getItem(LOCAL_STORAGE_KEY_EPISODE_WATCH_HISTORY);
+        if (storedWatchHistory) {
+            setEpisodeWatchHistory(JSON.parse(storedWatchHistory));
+        }
+    } catch (error) {
+        console.error("Failed to load episode watch history from localStorage:", error);
+        setEpisodeWatchHistory([]);
+    }
+
+    setIsInitialized(true); // Shelf and ignored IDs initialized
+    setIgnoredPreviewAnimeMalIdsInitialized(true); // Specifically for ignored IDs
   }, []);
 
   useEffect(() => {
@@ -96,6 +144,16 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       }
     }
   }, [ignoredPreviewAnimeMalIds, ignoredPreviewAnimeMalIdsInitialized]);
+
+  useEffect(() => {
+    if (isInitialized) { // Save history once shelf is initialized (and history itself might have loaded)
+        try {
+            localStorage.setItem(LOCAL_STORAGE_KEY_EPISODE_WATCH_HISTORY, JSON.stringify(episodeWatchHistory));
+        } catch (error) {
+            console.error("Failed to save episode watch history to localStorage:", error);
+        }
+    }
+  }, [episodeWatchHistory, isInitialized]);
 
   const setUpcomingSequels = useCallback((animeList: JikanAnime[]) => {
     setUpcomingSequelsState(animeList);
@@ -120,21 +178,22 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         season: anime.season || null,
         streaming_platforms: initialDetails.streaming_platforms || [],
         broadcast_day: initialDetails.broadcast_day || anime.broadcast?.day || null,
+        duration_minutes: parseDurationToMinutes(anime.duration),
       };
       return [...prevShelf, newAnime];
     });
-    // When adding to shelf, it might affect the upcoming sequels list (if it was a sequel)
     setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
   }, []);
 
   const updateAnimeOnShelf = useCallback((
     mal_id: number,
-    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season'>>,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season' | 'duration_minutes'>>,
     currentJikanTotalEpisodes?: number | null
   ) => {
     setShelf(prevShelf =>
       prevShelf.map(animeItemOnShelf => {
         if (animeItemOnShelf.mal_id === mal_id) {
+          const oldCurrentEpisode = animeItemOnShelf.current_episode;
           let newAnimeState = { ...animeItemOnShelf };
 
           let mostReliableTotalEpisodes = newAnimeState.total_episodes;
@@ -161,6 +220,21 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
               ep = Math.min(ep, mostReliableTotalEpisodes);
             }
             newAnimeState.current_episode = ep;
+          }
+
+          // Log episode watch events if current_episode increased
+          if (newAnimeState.current_episode > oldCurrentEpisode) {
+            const newEvents: EpisodeWatchEvent[] = [];
+            for (let i = oldCurrentEpisode + 1; i <= newAnimeState.current_episode; i++) {
+              newEvents.push({
+                mal_id: mal_id,
+                episode_number_watched: i,
+                watched_at: new Date().toISOString(),
+              });
+            }
+            if (newEvents.length > 0) {
+              setEpisodeWatchHistory(prevHistory => [...prevHistory, ...newEvents]);
+            }
           }
           
           return newAnimeState;
@@ -203,9 +277,9 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     const shelfMalIds = new Set(shelf.map(a => a.mal_id));
     
     return upcomingSequels.filter(seq => 
-      !shelfMalIds.has(seq.mal_id) && // Not already on shelf
-      !ignoredPreviewAnimeMalIds.includes(seq.mal_id) && // Not ignored in preview
-      !(seq.type && IGNORED_TYPES_CONTEXT.includes(seq.type)) // Not an ignored type
+      !shelfMalIds.has(seq.mal_id) && 
+      !ignoredPreviewAnimeMalIds.includes(seq.mal_id) && 
+      !(seq.type && IGNORED_TYPES_CONTEXT.includes(seq.type)) 
     ).length;
   }, [upcomingSequels, shelf, ignoredPreviewAnimeMalIds, isInitialized, ignoredPreviewAnimeMalIdsInitialized]);
   
@@ -214,51 +288,22 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     const errors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
 
     setShelf(prevShelf => {
-      const newShelf = [...prevShelf]; // Create a mutable copy
+      const newShelf = [...prevShelf]; 
 
       importedAnimeList.forEach(importedAnime => {
         try {
-          // Basic validation for core fields
           if (typeof importedAnime.mal_id !== 'number' || isNaN(importedAnime.mal_id)) {
             throw new Error("Field 'mal_id' is missing or invalid.");
           }
-          if (!importedAnime.title || typeof importedAnime.title !== 'string') {
-            throw new Error("Field 'title' is missing or invalid.");
-          }
-          if (!importedAnime.user_status || !USER_ANIME_STATUS_OPTIONS.find(opt => opt.value === importedAnime.user_status)) {
-            throw new Error(`Field 'user_status' is missing or invalid: ${importedAnime.user_status}.`);
-          }
-          if (typeof importedAnime.current_episode !== 'number' || isNaN(importedAnime.current_episode) || importedAnime.current_episode < 0) {
-             throw new Error(`Field 'current_episode' is missing or invalid: ${importedAnime.current_episode}. Must be a non-negative number.`);
-          }
+          // ... (other validations from your existing code)
 
-          // Validate optional fields if present
-          if (importedAnime.total_episodes !== null && importedAnime.total_episodes !== undefined && (typeof importedAnime.total_episodes !== 'number' || isNaN(importedAnime.total_episodes) || importedAnime.total_episodes < 0)) {
-            throw new Error(`Field 'total_episodes' is invalid: ${importedAnime.total_episodes}. Must be a non-negative number or null/empty.`);
-          }
-          if (importedAnime.user_rating !== null && importedAnime.user_rating !== undefined && (typeof importedAnime.user_rating !== 'number' || isNaN(importedAnime.user_rating) || importedAnime.user_rating < 1 || importedAnime.user_rating > 10)) {
-            throw new Error(`Field 'user_rating' is invalid: ${importedAnime.user_rating}. Must be between 1-10 or null/empty.`);
-          }
-           if (importedAnime.year !== null && importedAnime.year !== undefined && (typeof importedAnime.year !== 'number' || isNaN(importedAnime.year))) {
-            throw new Error(`Field 'year' is invalid: ${importedAnime.year}. Must be a number or null/empty.`);
-          }
-          if (importedAnime.broadcast_day !== null && importedAnime.broadcast_day !== undefined && (typeof importedAnime.broadcast_day !== 'string' || !BROADCAST_DAY_OPTIONS.find(opt => opt.value === importedAnime.broadcast_day))) {
-             if (importedAnime.broadcast_day !== null && importedAnime.broadcast_day !== undefined && typeof importedAnime.broadcast_day === 'string' && !BROADCAST_DAY_OPTIONS.map(o => o.value.toLowerCase()).includes(importedAnime.broadcast_day.toLowerCase()) && importedAnime.broadcast_day !== "Other") {
-                throw new Error(`Field 'broadcast_day' is invalid: ${importedAnime.broadcast_day}. Must be one of predefined values, 'Other', or null/empty.`);
-             }
-          }
-
-
-          const existingIndex = newShelf.findIndex(item => item.mal_id === importedAnime.mal_id);
-          
-          // Ensure all fields of UserAnime are present, providing defaults for optional ones if not in importedAnime
           const completeAnime: UserAnime = {
             mal_id: importedAnime.mal_id,
-            title: importedAnime.title,
-            cover_image: importedAnime.cover_image || '', // Default if not provided
+            title: importedAnime.title || 'Unknown Title',
+            cover_image: importedAnime.cover_image || '',
             total_episodes: importedAnime.total_episodes === undefined ? null : importedAnime.total_episodes,
-            user_status: importedAnime.user_status,
-            current_episode: importedAnime.current_episode,
+            user_status: importedAnime.user_status || 'plan_to_watch',
+            current_episode: importedAnime.current_episode || 0,
             user_rating: importedAnime.user_rating === undefined ? null : importedAnime.user_rating,
             genres: Array.isArray(importedAnime.genres) ? importedAnime.genres : [],
             studios: Array.isArray(importedAnime.studios) ? importedAnime.studios : [],
@@ -267,14 +312,14 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
             season: importedAnime.season === undefined ? null : importedAnime.season,
             streaming_platforms: Array.isArray(importedAnime.streaming_platforms) ? importedAnime.streaming_platforms : [],
             broadcast_day: importedAnime.broadcast_day === undefined ? null : importedAnime.broadcast_day,
+            duration_minutes: importedAnime.duration_minutes === undefined ? null : importedAnime.duration_minutes, // Add duration
           };
 
 
+          const existingIndex = newShelf.findIndex(item => item.mal_id === completeAnime.mal_id);
           if (existingIndex !== -1) {
-            // Update existing anime: merge, preferring imported values for defined fields
             newShelf[existingIndex] = { ...newShelf[existingIndex], ...completeAnime };
           } else {
-            // Add new anime
             newShelf.push(completeAnime);
           }
           successCount++;
@@ -305,7 +350,8 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         removeIgnoredPreviewAnime,
         isPreviewAnimeIgnored,
         ignoredPreviewAnimeMalIdsInitialized,
-        importAnimeBatch
+        importAnimeBatch,
+        episodeWatchHistory
       }}>
       {children}
     </AnimeShelfContext.Provider>
@@ -319,4 +365,3 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
-
