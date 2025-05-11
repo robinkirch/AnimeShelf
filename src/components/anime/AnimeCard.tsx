@@ -24,10 +24,10 @@ import {
 } from "@/components/ui/select";
 import { Input } from '../ui/input';
 import { jikanApi } from '@/lib/jikanApi';
-import { Skeleton } from '../ui/skeleton';
+// import { Skeleton } from '../ui/skeleton'; // Skeleton not directly used here
 
 interface AnimeCardProps {
-  anime: JikanAnime | Partial<JikanAnime>; // Allow partial if constructed from UserAnime
+  anime: JikanAnime | Partial<JikanAnime>; 
   shelfItem?: UserAnime;
   onIgnorePreview?: (mal_id: number) => void; 
 }
@@ -47,14 +47,13 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
   const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf } = useAnimeShelf();
   const { toast } = useToast();
   
-  const isOnShelf = shelfItem !== undefined || isAnimeOnShelf(anime.mal_id!); // mal_id should always be present
+  const isOnShelf = shelfItem !== undefined || isAnimeOnShelf(anime.mal_id!); 
   const currentShelfItem = shelfItem || useAnimeShelf().getAnimeFromShelf(anime.mal_id!);
 
   const [relations, setRelations] = useState<JikanAnimeRelation[]>([]);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   const [showAddAllButton, setShowAddAllButton] = useState(false);
 
-  // Cast to JikanAnime for properties that are expected to be full for adding to shelf
   const fullAnimeDataForDialog = anime as JikanAnime;
 
 
@@ -72,13 +71,14 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
             );
             setShowAddAllButton(hasSequelsOrPrequels);
         } catch (error) {
-            console.error("Failed to fetch relations:", error);
-            setShowAddAllButton(false);
+            console.error("Failed to fetch relations for anime ID:", anime.mal_id, error);
+            setShowAddAllButton(false); // Ensure it's false on error
         } finally {
             setIsLoadingRelations(false);
         }
       } else {
-        setShowAddAllButton(false);
+        setRelations([]); // Clear relations if not fetching
+        setShowAddAllButton(false); // Ensure button is hidden if conditions not met
       }
     };
     fetchRelations();
@@ -86,47 +86,53 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
 
 
   const handleAddToShelf = (details: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => {
-    addAnimeToShelf(fullAnimeDataForDialog, details); // Use full data for adding
+    if (!fullAnimeDataForDialog.mal_id) {
+        toast({ title: "Error", description: "Cannot add anime without a valid ID.", variant: "destructive" });
+        return;
+    }
+    addAnimeToShelf(fullAnimeDataForDialog, details); 
     toast({ title: "Added to Shelf", description: `"${anime.title}" has been added to your shelf.` });
   };
 
   const handleUpdateStatus = (status: UserAnimeStatus) => {
-    if (currentShelfItem) {
-      updateAnimeOnShelf(anime.mal_id!, { user_status: status }, anime.episodes);
-      toast({ title: "Status Updated", description: `"${anime.title}" status set to ${status}.` });
+    if (currentShelfItem && anime.mal_id) {
+      updateAnimeOnShelf(anime.mal_id, { user_status: status }, anime.episodes);
+      toast({ title: "Status Updated", description: `"${anime.title}" status set to ${USER_ANIME_STATUS_OPTIONS.find(s => s.value === status)?.label || status}.` });
     }
   };
 
   const handleUpdateRating = (rating: number | null) => {
-    if (currentShelfItem) {
-      updateAnimeOnShelf(anime.mal_id!, { user_rating: rating }, anime.episodes);
+    if (currentShelfItem && anime.mal_id) {
+      updateAnimeOnShelf(anime.mal_id, { user_rating: rating }, anime.episodes);
       toast({ title: "Rating Updated", description: `"${anime.title}" rating set.` });
     }
   };
 
   const handleIncrementEpisode = () => {
-    if (currentShelfItem && (currentShelfItem.total_episodes === null || currentShelfItem.current_episode < currentShelfItem.total_episodes)) {
-      updateAnimeOnShelf(anime.mal_id!, { current_episode: currentShelfItem.current_episode + 1 }, anime.episodes);
+    if (currentShelfItem && anime.mal_id && (currentShelfItem.total_episodes === null || currentShelfItem.current_episode < currentShelfItem.total_episodes)) {
+      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode + 1 }, anime.episodes);
     }
   };
 
   const handleDecrementEpisode = () => {
-    if (currentShelfItem && currentShelfItem.current_episode > 0) {
-      updateAnimeOnShelf(anime.mal_id!, { current_episode: currentShelfItem.current_episode - 1 }, anime.episodes);
+    if (currentShelfItem && anime.mal_id && currentShelfItem.current_episode > 0) {
+      updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode - 1 }, anime.episodes);
     }
   };
   
   const handleSetEpisode = (episode: number) => {
-    if (currentShelfItem) {
+    if (currentShelfItem && anime.mal_id) {
       const newEpisode = Math.max(0, Math.min(episode, currentShelfItem.total_episodes ?? Infinity));
-      updateAnimeOnShelf(anime.mal_id!, { current_episode: newEpisode }, anime.episodes);
+      updateAnimeOnShelf(anime.mal_id, { current_episode: newEpisode }, anime.episodes);
     }
   };
 
 
   const handleRemoveFromShelf = () => {
-    removeAnimeFromShelf(anime.mal_id!);
-    toast({ title: "Removed from Shelf", description: `"${anime.title}" has been removed from your shelf.`, variant: "destructive" });
+    if (anime.mal_id) {
+        removeAnimeFromShelf(anime.mal_id);
+        toast({ title: "Removed from Shelf", description: `"${anime.title}" has been removed from your shelf.`, variant: "destructive" });
+    }
   };
   
   const StatusIcon = currentShelfItem ? statusIcons[currentShelfItem.user_status] : null;
@@ -152,7 +158,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
       </CardHeader>
       <CardContent className="p-4 flex-grow">
         <CardTitle className="text-lg font-semibold mb-1 leading-tight truncate" title={anime.title}>
-          {anime.title}
+          {anime.title || "Unknown Title"}
         </CardTitle>
         <div className="text-xs text-muted-foreground mb-2">
           <span>{anime.type || 'N/A'}</span>
@@ -162,7 +168,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
         
         <div className="flex flex-wrap gap-1 mb-3">
           {anime.genres?.slice(0, 3).map(genre => (
-            <Badge key={genre.mal_id + '-' + genre.name} variant="secondary" className="text-xs">{genre.name}</Badge>
+            <Badge key={`${anime.mal_id}-${genre.mal_id}-${genre.name}`} variant="secondary" className="text-xs">{genre.name}</Badge>
           ))}
         </div>
 
@@ -180,13 +186,14 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
                 className="w-16 text-center h-9"
                 min={0}
                 max={currentShelfItem.total_episodes ?? undefined}
+                aria-label={`Current episode for ${anime.title}`}
               />
               <Button variant="outline" size="icon" onClick={handleIncrementEpisode} disabled={currentShelfItem.total_episodes !== null && currentShelfItem.current_episode >= currentShelfItem.total_episodes}>
                 <PlusCircle size={16} />
               </Button>
             </div>
             <Select value={currentShelfItem.user_status} onValueChange={(value) => handleUpdateStatus(value as UserAnimeStatus)}>
-              <SelectTrigger className="w-full text-sm">
+              <SelectTrigger className="w-full text-sm" aria-label={`Status for ${anime.title}`}>
                 <SelectValue placeholder="Set status" />
               </SelectTrigger>
               <SelectContent>
@@ -199,7 +206,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
           </div>
         )}
       </CardContent>
-      <CardFooter className="p-4 pt-0 flex flex-col gap-2">
+      <CardFooter className="p-4 pt-0 flex flex-col gap-2 mt-auto">
         {!isOnShelf && (
            <AddToShelfDialog anime={fullAnimeDataForDialog} onAddToShelf={handleAddToShelf}>
               <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">

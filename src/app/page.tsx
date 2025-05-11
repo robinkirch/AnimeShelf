@@ -10,7 +10,7 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, UserAnimeStatus, UserAnime, JikanAnimeRelation } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, RATING_OPTIONS, ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
-import { Loader2, Search, ListFilter, X, ChevronDown, Info, ArrowUpAZ, ArrowDownAZ } from 'lucide-react';
+import { Loader2, Search, ListFilter, X, ChevronDown, Info, ArrowUpAZ, ArrowDownAZ, Sparkles } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -28,14 +28,16 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { searchAnimeWithAi, type AiSearchInput } from '@/ai/flows/anime-search-flow';
+
 
 const ALL_FILTER_VALUE = "_all_";
 
 interface GroupedShelfItem {
-  id: string; // mal_id of the "representative" anime or a generated group ID
+  id: string; 
   isGroup: boolean;
-  items: UserAnime[]; // Array of UserAnime objects, even if isGroup is false (length 1)
-  representativeAnime: UserAnime; // The anime to use for main title/image if it's a group
+  items: UserAnime[]; 
+  representativeAnime: UserAnime; 
 }
 
 type SortOption = 'title' | 'rating' | 'year' | 'completion';
@@ -43,9 +45,16 @@ type SortOrder = 'asc' | 'desc';
 
 export default function MyShelfPage() {
   const { shelf, isInitialized: shelfInitialized } = useAnimeShelf();
+  
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<JikanAnime[]>([]);
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+
+  const [aiSearchQuery, setAiSearchQuery] = useState('');
+  const [aiSearchResults, setAiSearchResults] = useState<JikanAnime[]>([]);
+  const [isLoadingAiSearch, setIsLoadingAiSearch] = useState(false);
+  const [aiSearchError, setAiSearchError] = useState<string | null>(null);
+  
   const [isLoadingShelf, setIsLoadingShelf] = useState(true);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   
@@ -66,7 +75,7 @@ export default function MyShelfPage() {
       if (shelf.length > 0) {
         fetchRelationsForAllShelfItems();
       } else {
-        setIsLoadingRelations(false); // No relations to fetch if shelf is empty
+        setIsLoadingRelations(false); 
       }
     }
   }, [shelfInitialized, shelf]);
@@ -80,7 +89,6 @@ export default function MyShelfPage() {
     setIsLoadingRelations(true);
     setApiError(null);
     const newRelationsMap = new Map<number, JikanAnimeRelation[]>();
-    let errorOccurred = false;
     try {
       for (const anime of shelf) {
         if (!relationsMap.has(anime.mal_id)) { 
@@ -94,11 +102,9 @@ export default function MyShelfPage() {
           newRelationsMap.set(anime.mal_id, relationsMap.get(anime.mal_id)!);
         }
       }
-      setRelationsMap(newRelationsMap);
     } catch (e) {
         console.error("Error fetching relations for shelf items:", e);
         setApiError("Could not load all series details due to API issues. Some groupings may be incomplete.");
-        errorOccurred = true;
     } finally {
         setIsLoadingRelations(false);
         setRelationsMap(prev => new Map([...Array.from(prev.entries()), ...Array.from(newRelationsMap.entries())]));
@@ -114,7 +120,6 @@ export default function MyShelfPage() {
     setApiError(null);
     try {
         const results = await jikanApi.searchAnime(searchQuery);
-        // De-duplicate results based on mal_id to prevent React key errors
         const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
         setSearchResults(uniqueResults);
     } catch (e) {
@@ -123,6 +128,27 @@ export default function MyShelfPage() {
         setSearchResults([]);
     }
     setIsLoadingSearch(false);
+  };
+
+  const handleAiSearch = async () => {
+    if (!aiSearchQuery.trim()) {
+      setAiSearchResults([]);
+      return;
+    }
+    setIsLoadingAiSearch(true);
+    setAiSearchError(null);
+    try {
+      const input: AiSearchInput = { query: aiSearchQuery };
+      const results = await searchAnimeWithAi(input);
+      // De-duplicate AI results as well, as underlying tool might return duplicates if called multiple times
+      const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
+      setAiSearchResults(uniqueResults);
+    } catch (e) {
+      console.error("Error searching anime with AI:", e);
+      setAiSearchError("Failed to perform AI search. Please try again later.");
+      setAiSearchResults([]);
+    }
+    setIsLoadingAiSearch(false);
   };
   
   const uniqueGenres = useMemo(() => {
@@ -201,7 +227,6 @@ export default function MyShelfPage() {
         }
     }
 
-    // Apply sorting based on sortOption and sortOrder
     const sortedFinalItems = [...finalGroupedItems].sort((a, b) => {
       const repA = a.representativeAnime;
       const repB = b.representativeAnime;
@@ -217,7 +242,7 @@ export default function MyShelfPage() {
         case 'rating':
           const getGroupAvgRating = (items: UserAnime[]): number => {
             const ratedItems = items.filter(item => item.user_rating !== null);
-            if (ratedItems.length === 0) return sortOrder === 'asc' ? Infinity : -Infinity; // Unrated items last/first
+            if (ratedItems.length === 0) return sortOrder === 'asc' ? Infinity : -Infinity; 
             return ratedItems.reduce((sum, item) => sum + item.user_rating!, 0) / ratedItems.length;
           };
           valA = a.isGroup ? getGroupAvgRating(a.items) : (a.items[0].user_rating ?? (sortOrder === 'asc' ? Infinity : -Infinity));
@@ -238,17 +263,17 @@ export default function MyShelfPage() {
                 if (item.total_episodes !== null && item.total_episodes > 0) {
                   total += item.total_episodes;
                   hasValidTotal = true;
-                } else if (item.total_episodes === 0) { // Consider 0 episode items (movies) as "complete" for ratio if current is also 0 or 1
-                  hasValidTotal = true; // Allow it to be part of calculation if it's like a movie
+                } else if (item.total_episodes === 0) { 
+                  hasValidTotal = true; 
                 }
               });
-              if (!hasValidTotal || (total === 0 && current > 0) ) return -1; // Invalid or sorts last
-              if (total === 0 && current === 0) return 1; // e.g. unstarted movie
-              return total === 0 ? -1 : current / total; // if total is 0 after all, and current > 0, it's -1
+              if (!hasValidTotal || (total === 0 && current > 0) ) return -1; 
+              if (total === 0 && current === 0) return 1; 
+              return total === 0 ? -1 : current / total; 
             } else {
               const item = items[0];
               if (item.total_episodes === null) return -1;
-              if (item.total_episodes === 0) return item.current_episode >= 0 ? 1 : -1; // Movie logic
+              if (item.total_episodes === 0) return item.current_episode >= 0 ? 1 : -1; 
               return item.current_episode / item.total_episodes;
             }
           };
@@ -288,7 +313,7 @@ export default function MyShelfPage() {
     setTypeFilter([]);
   };
 
-  const renderShelfSkeletons = (count: number) => (
+  const renderSkeletons = (count: number) => (
     Array.from({ length: count }).map((_, index) => (
       <div key={index} className="border rounded-lg p-4 space-y-3">
         <Skeleton className="h-48 w-full" />
@@ -298,18 +323,6 @@ export default function MyShelfPage() {
       </div>
     ))
   );
-  
-  const renderSearchSkeletons = (count: number) => (
-    Array.from({ length: count }).map((_, index) => (
-      <div key={index} className="border rounded-lg p-4 space-y-3">
-        <Skeleton className="h-48 w-full" /> 
-        <Skeleton className="h-6 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-        <Skeleton className="h-10 w-full" />
-      </div>
-    ))
-  );
-
 
   const getGenreFilterDisplayValue = () => {
     if (genreFilter.length === 0) return "All Genres";
@@ -333,41 +346,100 @@ export default function MyShelfPage() {
     <div className="space-y-8">
       <section className="bg-card p-6 rounded-lg shadow-sm">
         <h1 className="text-3xl font-bold mb-2 text-primary">Find Your Next Obsession</h1>
-        <p className="text-muted-foreground mb-6">Search for anime and add them to your shelf to track your progress.</p>
-        <div className="flex gap-2 mb-4">
-          <Input
-            type="search"
-            placeholder="Search for anime by title..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            className="flex-grow"
-          />
-          <Button onClick={handleSearch} disabled={isLoadingSearch}>
-            {isLoadingSearch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-            Search
-          </Button>
-        </div>
+        <p className="text-muted-foreground mb-6">Search for anime by title or use AI to find anime based on description.</p>
+        
+        <div className="space-y-4">
+          {/* Standard Search */}
+          <div>
+            <Label htmlFor="standard-search-input" className="text-sm font-medium mb-1 block">Standard Search</Label>
+            <div className="flex gap-2">
+              <Input
+                id="standard-search-input"
+                type="search"
+                placeholder="Search for anime by title..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                className="flex-grow"
+              />
+              <Button onClick={handleSearch} disabled={isLoadingSearch}>
+                {isLoadingSearch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                Search
+              </Button>
+            </div>
+          </div>
 
-        {isLoadingSearch && (
-           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {renderSearchSkeletons(4)}
+          {/* AI Search */}
+          <div>
+            <Label htmlFor="ai-search-input" className="text-sm font-medium mb-1 block">AI-Powered Search</Label>
+            <div className="flex gap-2">
+              <Input
+                id="ai-search-input"
+                type="search"
+                placeholder="Describe the anime you're looking for..."
+                value={aiSearchQuery}
+                onChange={(e) => setAiSearchQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleAiSearch()}
+                className="flex-grow"
+              />
+              <Button onClick={handleAiSearch} disabled={isLoadingAiSearch} variant="outline">
+                {isLoadingAiSearch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 text-yellow-500" />}
+                Search with AI
+              </Button>
+            </div>
+          </div>
+        </div>
+        
+        {apiError && (
+          <Alert variant="destructive" className="mt-4">
+            <Info className="h-4 w-4" />
+            <AlertTitle>API Error</AlertTitle>
+            <AlertDescription>{apiError}</AlertDescription>
+          </Alert>
+        )}
+        {aiSearchError && (
+          <Alert variant="destructive" className="mt-4">
+            <Info className="h-4 w-4" />
+            <AlertTitle>AI Search Error</AlertTitle>
+            <AlertDescription>{aiSearchError}</AlertDescription>
+          </Alert>
+        )}
+
+
+        {(isLoadingSearch || isLoadingAiSearch) && (
+           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-6">
+            {renderSkeletons(4)}
           </div>
         )}
 
         {!isLoadingSearch && searchResults.length > 0 && (
-          <div>
+          <div className="mt-6">
             <h2 className="text-2xl font-semibold mb-4">Search Results</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {searchResults.map(anime => (
-                <AnimeCard key={anime.mal_id} anime={anime} />
+                <AnimeCard key={`search-${anime.mal_id}`} anime={anime} />
               ))}
             </div>
           </div>
         )}
-        {!isLoadingSearch && searchQuery && searchResults.length === 0 && !apiError && (
-          <p className="text-center text-muted-foreground py-4">No results found for "{searchQuery}". Try a different title.</p>
+        {!isLoadingSearch && searchQuery && searchResults.length === 0 && !apiError && !isLoadingAiSearch && aiSearchResults.length === 0 && (
+          <p className="text-center text-muted-foreground py-4 mt-4">No results found for "{searchQuery}". Try a different title or use AI search.</p>
         )}
+
+        {!isLoadingAiSearch && aiSearchResults.length > 0 && (
+          <div className="mt-6">
+            <h2 className="text-2xl font-semibold mb-4">AI Search Results</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {aiSearchResults.map(anime => (
+                <AnimeCard key={`ai-search-${anime.mal_id}`} anime={anime} />
+              ))}
+            </div>
+          </div>
+        )}
+        {!isLoadingAiSearch && aiSearchQuery && aiSearchResults.length === 0 && !aiSearchError && !isLoadingSearch && searchResults.length === 0 && (
+          <p className="text-center text-muted-foreground py-4 mt-4">AI search found no results for "{aiSearchQuery}". Try rephrasing your description.</p>
+        )}
+
       </section>
 
       <Separator />
@@ -475,7 +547,6 @@ export default function MyShelfPage() {
                 </Select>
             </div>
             <div className="w-full sm:w-auto">
-                 {/* Spacing Label for alignment, hidden on mobile or adjusted based on layout needs */}
                 <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label>
                 <Button 
                     variant="outline" 
@@ -489,10 +560,10 @@ export default function MyShelfPage() {
         </div>
 
 
-        {apiError && (
+        {apiError && shelf.length > 0 && ( // Only show relation API error if shelf is not empty
           <Alert variant="destructive" className="mb-6">
             <Info className="h-4 w-4" />
-            <AlertTitle>API Error</AlertTitle>
+            <AlertTitle>API Error Loading Relations</AlertTitle>
             <AlertDescription>
               {apiError} Some anime may not be grouped correctly.
               <Button variant="link" size="sm" onClick={fetchRelationsForAllShelfItems} className="p-0 h-auto ml-2 text-destructive-foreground hover:underline">
@@ -504,7 +575,7 @@ export default function MyShelfPage() {
 
         {(isLoadingShelf || (shelf.length > 0 && isLoadingRelations)) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-           {renderShelfSkeletons(8)}
+           {renderSkeletons(8)}
           </div>
         )}
         
@@ -526,7 +597,7 @@ export default function MyShelfPage() {
                     year: userAnime.year,
                     season: userAnime.season,
                  };
-                return <AnimeCard key={userAnime.mal_id} anime={partialJikanAnime as JikanAnime} shelfItem={userAnime} />;
+                return <AnimeCard key={`shelf-${userAnime.mal_id}`} anime={partialJikanAnime as JikanAnime} shelfItem={userAnime} />;
               }
             })}
           </div>
@@ -555,3 +626,4 @@ export default function MyShelfPage() {
     </div>
   );
 }
+
