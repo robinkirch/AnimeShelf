@@ -6,12 +6,13 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, JikanAnimeRelation, JikanAnimeRelationEntry } from '@/types/anime';
 import { AnimeCard } from '@/components/anime/AnimeCard';
-import { Loader2, CalendarDays, Tv, Film, History, HelpCircle, ListFilter, EyeOff } from 'lucide-react';
+import { Loader2, CalendarDays, Tv, Film, History, HelpCircle, ListFilter, EyeOff, ArchiveRestore } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
+import { IgnoredPreviewList } from '@/components/preview/IgnoredPreviewList';
 
 
 type CategorizedAnime = JikanAnime & {
@@ -304,6 +305,20 @@ export default function PreviewPage() {
         "No other direct continuations (like current/past seasons or side stories) found (or all are hidden/ignored type).",
         Tv
       )}
+
+      <Separator className="my-12" />
+
+      <section>
+        <div className="flex items-center gap-3 mb-6">
+          <ArchiveRestore className="h-8 w-8 text-primary" />
+          <h2 className="text-2xl font-semibold text-primary">Ignored in Preview</h2>
+        </div>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Anime you've chosen to hide from the main preview sections. They will still appear in "My Shelf" and "Seasonal" if applicable.
+        </p>
+        <IgnoredPreviewList />
+      </section>
+
 
       {(futureAnimeToDisplay.length === 0 && otherContinuationsToDisplay.length === 0 && shelf.length > 0 && !isLoading) && (
            <div className="text-center py-16 bg-card p-8 rounded-lg shadow-sm border border-dashed">

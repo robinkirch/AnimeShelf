@@ -13,7 +13,7 @@ import { RatingInput } from './RatingInput';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { AddToShelfDialog } from './AddToShelfDialog';
 import { AddAllToShelfDialog } from './AddAllToShelfDialog';
-import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff, Tv, Youtube } from 'lucide-react';
+import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff, Tv, Youtube, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -30,7 +30,9 @@ import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import t
 interface AnimeCardProps {
   anime: JikanAnime | Partial<JikanAnime>; 
   shelfItem?: UserAnime;
-  onIgnorePreview?: (mal_id: number) => void; 
+  onIgnorePreview?: (mal_id: number) => void;
+  showRestorePreviewButton?: boolean; // New prop
+  onRestorePreview?: () => void; // New prop for action
 }
 
 const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
@@ -44,7 +46,7 @@ const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
 const IGNORED_TYPES_FOR_ADD_ALL = ['Music'];
 const NO_BROADCAST_DAY_VALUE = "_none_";
 
-export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps) {
+export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePreviewButton, onRestorePreview }: AnimeCardProps) {
   const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf } = useAnimeShelf();
   const { toast } = useToast();
   
@@ -54,20 +56,18 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
   const [relations, setRelations] = useState<JikanAnimeRelation[]>([]);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   const [showAddAllButton, setShowAddAllButton] = useState(false);
-  // No longer need editableStreamingPlatforms as string, StreamingPlatformsInput handles string[]
   
-  const fullAnimeDataForDialog = anime as JikanAnime; // Used for AddToShelfDialog and AddAllToShelfDialog
+  const fullAnimeDataForDialog = anime as JikanAnime; 
 
-  // API suggestions for StreamingPlatformsInput, derived from the full JikanAnime data
   const apiStreamingSuggestions = useMemo(() => {
-    const fullData = anime as JikanAnime; // Assume 'anime' prop can be cast
+    const fullData = anime as JikanAnime; 
     return fullData.streaming?.map((s: JikanMALItem) => s.name) || [];
   }, [anime]);
 
 
   useEffect(() => {
     const fetchRelations = async () => {
-      if (anime.mal_id && !isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '') && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type))) {
+      if (anime.mal_id && !isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '') && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && !showRestorePreviewButton) {
         setIsLoadingRelations(true);
         try {
             const rels = await jikanApi.getAnimeRelations(anime.mal_id);
@@ -90,7 +90,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
       }
     };
     fetchRelations();
-  }, [anime.mal_id, anime.type, isOnShelf]);
+  }, [anime.mal_id, anime.type, isOnShelf, showRestorePreviewButton]);
 
 
   const handleAddToShelf = (details: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => {
@@ -264,67 +264,68 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
                     apiSuggestions={apiStreamingSuggestions}
                     placeholder="Add/edit platforms..."
                 />
-                {/* Display badges if not using the input's internal badge display, or if needed for non-edit state */}
-                {/* This might be redundant if StreamingPlatformsInput shows badges */}
-                {/* For simplicity, we assume StreamingPlatformsInput handles its display sufficiently */}
             </div>
           </div>
         )}
       </CardContent>
       <CardFooter className="p-4 pt-0 flex flex-col gap-2 mt-auto">
-        {!isOnShelf && (
-           <AddToShelfDialog anime={fullAnimeDataForDialog} onAddToShelf={handleAddToShelf}>
-              <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
-                <PlusCircle size={16} className="mr-2" /> Add to Shelf
-              </Button>
-            </AddToShelfDialog>
-        )}
+        {showRestorePreviewButton && onRestorePreview ? (
+          <Button variant="outline" size="sm" className="w-full" onClick={onRestorePreview}>
+            <RotateCcw size={16} className="mr-2" /> Restore to Preview
+          </Button>
+        ) : (
+          <>
+            {!isOnShelf && (
+              <AddToShelfDialog anime={fullAnimeDataForDialog} onAddToShelf={handleAddToShelf}>
+                <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground">
+                  <PlusCircle size={16} className="mr-2" /> Add to Shelf
+                </Button>
+              </AddToShelfDialog>
+            )}
 
-        {isLoadingRelations && !isOnShelf && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && (
+            {isLoadingRelations && !isOnShelf && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && (
               <Button variant="outline" className="w-full" disabled>
                 <Loader2 size={16} className="mr-2 animate-spin" /> Checking for series...
               </Button>
-        )}
+            )}
 
-        {!isLoadingRelations && showAddAllButton && !isOnShelf && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && (
-          <AddAllToShelfDialog
-            mainAnime={fullAnimeDataForDialog}
-            relations={relations.filter(r => (r.relation === 'Sequel' || r.relation === 'Prequel') && r.entry.some(e => e.type === 'anime'))}
-            onAddAllToShelf={(animeSeriesDetails) => {
-              animeSeriesDetails.forEach(item => {
-                if (!isAnimeOnShelf(item.animeData.mal_id)) {
-                    addAnimeToShelf(item.animeData, item.userProgress);
-                }
-              });
-              toast({ title: "Series Added to Shelf", description: `"${anime.title}" and related seasons added.` });
-            }}
-          >
-            <Button variant="outline" className="w-full">
-              <Layers size={16} className="mr-2" /> Add Entire Series
-            </Button>
-          </AddAllToShelfDialog>
-        )}
-        
-        {isOnShelf && currentShelfItem && (
-          <Button variant="destructive" className="w-full" onClick={handleRemoveFromShelf}>
-            <Trash2 size={16} className="mr-2" /> Remove from Shelf
-          </Button>
-        )}
+            {!isLoadingRelations && showAddAllButton && !isOnShelf && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && (
+              <AddAllToShelfDialog
+                mainAnime={fullAnimeDataForDialog}
+                relations={relations.filter(r => (r.relation === 'Sequel' || r.relation === 'Prequel') && r.entry.some(e => e.type === 'anime'))}
+                onAddAllToShelf={(animeSeriesDetails) => {
+                  animeSeriesDetails.forEach(item => {
+                    if (!isAnimeOnShelf(item.animeData.mal_id)) {
+                        addAnimeToShelf(item.animeData, item.userProgress);
+                    }
+                  });
+                  toast({ title: "Series Added to Shelf", description: `"${anime.title}" and related seasons added.` });
+                }}
+              >
+                <Button variant="outline" className="w-full">
+                  <Layers size={16} className="mr-2" /> Add Entire Series
+                </Button>
+              </AddAllToShelfDialog>
+            )}
+            
+            {isOnShelf && currentShelfItem && (
+              <Button variant="destructive" className="w-full" onClick={handleRemoveFromShelf}>
+                <Trash2 size={16} className="mr-2" /> Remove from Shelf
+              </Button>
+            )}
 
-        {onIgnorePreview && !isOnShelf && anime.mal_id && (
-          <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => onIgnorePreview(anime.mal_id!)}>
-            <EyeOff size={16} className="mr-2" /> Ignore in Preview
-          </Button>
+            {onIgnorePreview && !isOnShelf && anime.mal_id && ( // This button is not shown if showRestorePreviewButton is true
+              <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => onIgnorePreview(anime.mal_id!)}>
+                <EyeOff size={16} className="mr-2" /> Ignore in Preview
+              </Button>
+            )}
+          </>
         )}
       </CardFooter>
     </Card>
   );
 }
-// Helper function for optimistic UI update in AnimeCard (if needed)
-// This is kept simple here; complex state changes are handled by context.
+
 function handleItemChange(mal_id: number, field: keyof UserAnime, value: any) {
-  // This function is a placeholder if direct manipulation of currentShelfItem's display state
-  // before context update is needed. For now, context updates re-render the card.
   console.log(`AnimeCard: Optimistic UI update for ${mal_id}, field ${String(field)}, value ${value}`);
 }
-
