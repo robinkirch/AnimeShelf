@@ -6,13 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import type { UserAnime, UserAnimeStatus } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
+import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, XCircle, UploadCloud, Loader2, Info } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 
-const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season'];
+const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day'];
 const REQUIRED_HEADERS = ['mal_id', 'title', 'user_status', 'current_episode'];
 
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
@@ -60,17 +60,15 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         return;
       }
       
-      const lines = text.split(/\r\n|\n|\r/).filter(line => line.trim() !== ''); // Support different line endings and filter empty lines
-      if (lines.length < 1) { // Changed to < 1 to allow header-only as an error case below
+      const lines = text.split(/\r\n|\n|\r/).filter(line => line.trim() !== ''); 
+      if (lines.length < 1) { 
          setIsImporting(false);
          toast({ title: "Import Error", description: "CSV file is empty.", variant: "destructive" });
          return;
       }
 
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase()); // Normalize headers
-      const lowercasedExpectedHeaders = EXPECTED_HEADERS.map(h => h.toLowerCase());
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase()); 
       
-      // Check for required headers
       const missingRequiredHeaders = REQUIRED_HEADERS.filter(rh => !headers.includes(rh.toLowerCase()));
       if (missingRequiredHeaders.length > 0) {
          setIsImporting(false);
@@ -78,12 +76,11 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
          return;
       }
       
-      if (lines.length < 2) { // Now check if there are data rows after header
+      if (lines.length < 2) { 
          setIsImporting(false);
          toast({ title: "Import Error", description: "CSV file has a header row but no data rows.", variant: "destructive" });
          return;
       }
-
 
       const importedAnimeList: UserAnime[] = [];
       const processingErrors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
@@ -92,8 +89,6 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         const line = lines[i];
         if (!line.trim()) continue;
 
-        // This regex handles comma-separated values, including those enclosed in double quotes
-        // and properly escapes double quotes within quoted fields.
         const values = (line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []).map(v => v.trim());
 
         if (values.length !== headers.length) {
@@ -151,6 +146,15 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
             continue;
         }
 
+        const broadcast_day_str = row.broadcast_day;
+        const broadcast_day = broadcast_day_str === '' ? null : broadcast_day_str;
+        if (broadcast_day !== null && !BROADCAST_DAY_OPTIONS.find(opt => opt.value === broadcast_day)) {
+           if (broadcast_day !== null && typeof broadcast_day === 'string' && !BROADCAST_DAY_OPTIONS.map(o => o.value.toLowerCase()).includes(broadcast_day.toLowerCase()) && broadcast_day !== "Other") {
+             processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'broadcast_day': ${broadcast_day}. Must be one of predefined values, 'Other', or empty.` });
+             continue;
+           }
+        }
+
         importedAnimeList.push({
           mal_id,
           title,
@@ -164,13 +168,15 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
           type: row.type || null,
           year,
           season: row.season || null,
+          streaming_platforms: row.streaming_platforms ? row.streaming_platforms.split(';').map(p => p.trim()).filter(p => p) : [],
+          broadcast_day,
         });
       }
 
       const resultsFromContext = importAnimeBatch(importedAnimeList);
       const finalResults = {
         successCount: resultsFromContext.successCount,
-        errors: [...processingErrors, ...resultsFromContext.errors] // Combine parsing errors with context validation errors
+        errors: [...processingErrors, ...resultsFromContext.errors] 
       };
 
       setImportResults(finalResults);
@@ -214,7 +220,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
           {EXPECTED_HEADERS.join(',')}
         </code>
         <p className="text-xs text-muted-foreground mt-1">
-          For <code className="text-xs bg-muted/50 px-1 rounded">genres</code> and <code className="text-xs bg-muted/50 px-1 rounded">studios</code>, use a semi-colon (;) to separate multiple values (e.g., "Action;Adventure").
+          For <code className="text-xs bg-muted/50 px-1 rounded">genres</code>, <code className="text-xs bg-muted/50 px-1 rounded">studios</code>, and <code className="text-xs bg-muted/50 px-1 rounded">streaming_platforms</code>, use a semi-colon (;) to separate multiple values (e.g., "Action;Adventure").
         </p>
       </div>
       <div className="space-y-1">
@@ -260,4 +266,3 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
     </div>
   );
 }
-

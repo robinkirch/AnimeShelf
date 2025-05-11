@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import {
   Dialog,
@@ -9,11 +9,11 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter, // Added DialogFooter import
+  DialogFooter, 
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { UserAnime, UserAnimeStatus, JikanAnimeRelation } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
+import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,8 +27,9 @@ import {
 } from "@/components/ui/select";
 import { RatingInput } from './RatingInput';
 import { ProgressBar } from './ProgressBar';
-import { PlusCircle, MinusCircle } from 'lucide-react';
+import { PlusCircle, MinusCircle, Tv, Youtube } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '../ui/badge';
 
 interface AnimeGroupModalProps {
   isOpen: boolean;
@@ -38,47 +39,70 @@ interface AnimeGroupModalProps {
   representativeAnime: UserAnime;
 }
 
+const NO_BROADCAST_DAY_VALUE = "_none_";
+
+interface EditableAnimeState extends UserAnime {
+  streaming_platforms_input: string;
+}
+
 export function AnimeGroupModal({ 
     isOpen, 
     onOpenChange, 
     groupItems, 
-    relationsMap, // We might use this later to show relation types within the modal
+    relationsMap, 
     representativeAnime 
 }: AnimeGroupModalProps) {
   const { updateAnimeOnShelf } = useAnimeShelf();
   const { toast } = useToast();
 
-  // Sort items within the modal, e.g., by MAL ID or a derived air date if available
-  const sortedGroupItems = [...groupItems].sort((a, b) => {
-    // Try to sort by Jikan's year, then by title if year is same or missing
-    // This assumes UserAnime might eventually have year/season, or we fetch Jikan data for modal
-    const yearA = a.mal_id; // Placeholder until proper year/season is available on UserAnime
-    const yearB = b.mal_id;
+  const [editableItems, setEditableItems] = useState<EditableAnimeState[]>([]);
 
-    if (yearA !== yearB) {
-      return yearA - yearB;
+  useEffect(() => {
+    if (isOpen) {
+      const sorted = [...groupItems].sort((a, b) => {
+        const yearA = a.year ?? Infinity;
+        const yearB = b.year ?? Infinity;
+        if (yearA !== yearB) return yearA - yearB;
+        return a.title.localeCompare(b.title);
+      });
+      setEditableItems(sorted.map(item => ({ ...item, streaming_platforms_input: item.streaming_platforms.join(', ') })));
     }
-    return a.title.localeCompare(b.title);
-  });
+  }, [isOpen, groupItems]);
 
-
-  const handleUpdate = (
-    mal_id: number, 
-    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type'>>,
-    totalEpisodes?: number | null
+  const handleItemChange = (mal_id: number, field: keyof EditableAnimeState, value: any) => {
+    setEditableItems(prev =>
+      prev.map(item =>
+        item.mal_id === mal_id ? { ...item, [field]: value } : item
+      )
+    );
+  };
+  
+  const handleItemUpdate = (
+    anime: EditableAnimeState,
+    updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season'>>,
   ) => {
-    updateAnimeOnShelf(mal_id, updates, totalEpisodes);
+    updateAnimeOnShelf(anime.mal_id, updates, anime.total_episodes);
     toast({
       title: "Update Successful",
-      description: `Updated progress for "${groupItems.find(item => item.mal_id === mal_id)?.title}".`
+      description: `Updated progress for "${anime.title}".`
     });
   };
   
-  const handleEpisodeChange = (anime: UserAnime, newEpisode: number) => {
+  const handleEpisodeChange = (anime: EditableAnimeState, newEpisodeStr: string) => {
+    const newEpisode = parseInt(newEpisodeStr, 10);
+    if (isNaN(newEpisode)) return; // Or handle error
+
     const clampedEpisode = Math.max(0, anime.total_episodes != null ? Math.min(newEpisode, anime.total_episodes) : newEpisode);
-    handleUpdate(anime.mal_id, { current_episode: clampedEpisode }, anime.total_episodes);
+    handleItemChange(anime.mal_id, 'current_episode', clampedEpisode); // Update local state first
+    handleItemUpdate(anime, { current_episode: clampedEpisode }); // Then update context (which will eventually persist)
   };
 
+  const handleStreamingPlatformsBlur = (anime: EditableAnimeState) => {
+    const platformsArray = anime.streaming_platforms_input.split(',').map(p => p.trim()).filter(p => p.length > 0);
+    handleItemUpdate(anime, { streaming_platforms: platformsArray });
+    // Update local state to reflect the parsed array (though input still shows string)
+    handleItemChange(anime.mal_id, 'streaming_platforms', platformsArray);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -89,9 +113,9 @@ export function AnimeGroupModal({
             Manage individual anime within this series. Changes are saved automatically.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-grow pr-3 -mr-3"> {/* Negative margin to hide double scrollbar if content shorter than area */}
+        <ScrollArea className="flex-grow pr-3 -mr-3"> 
           <div className="space-y-6 py-4">
-            {sortedGroupItems.map((anime) => (
+            {editableItems.map((anime) => (
               <div key={anime.mal_id} className="p-4 border rounded-lg shadow-sm bg-card">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Image
@@ -107,13 +131,18 @@ export function AnimeGroupModal({
                     <p className="text-sm text-muted-foreground">
                       {anime.type || 'Unknown Type'}
                       {anime.total_episodes !== null ? ` • ${anime.total_episodes} episodes` : ' • Episodes unknown'}
+                      {anime.year && ` • ${anime.year}`}
+                      {anime.season && ` • ${anime.season.charAt(0).toUpperCase() + anime.season.slice(1)}`}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                       <div>
                         <Label htmlFor={`status-${anime.mal_id}`} className="text-xs">Status</Label>
                         <Select
                           value={anime.user_status}
-                          onValueChange={(value) => handleUpdate(anime.mal_id, { user_status: value as UserAnimeStatus }, anime.total_episodes)}
+                          onValueChange={(value) => {
+                              handleItemChange(anime.mal_id, 'user_status', value as UserAnimeStatus);
+                              handleItemUpdate(anime, { user_status: value as UserAnimeStatus });
+                          }}
                         >
                           <SelectTrigger id={`status-${anime.mal_id}`} className="h-9 text-xs">
                             <SelectValue placeholder="Select status" />
@@ -130,7 +159,7 @@ export function AnimeGroupModal({
                             variant="outline" 
                             size="icon" 
                             className="h-9 w-9"
-                            onClick={() => handleEpisodeChange(anime, anime.current_episode - 1)} 
+                            onClick={() => handleEpisodeChange(anime, (anime.current_episode - 1).toString())} 
                             disabled={anime.current_episode === 0}
                         >
                           <MinusCircle size={16} />
@@ -141,7 +170,8 @@ export function AnimeGroupModal({
                                 id={`episode-${anime.mal_id}`}
                                 type="number"
                                 value={anime.current_episode}
-                                onChange={(e) => handleEpisodeChange(anime, parseInt(e.target.value))}
+                                onChange={(e) => handleItemChange(anime.mal_id, 'current_episode', parseInt(e.target.value))}
+                                onBlur={(e) => handleEpisodeChange(anime, e.target.value)}
                                 className="h-9 text-xs text-center"
                                 min={0}
                                 max={anime.total_episodes ?? undefined}
@@ -151,7 +181,7 @@ export function AnimeGroupModal({
                             variant="outline" 
                             size="icon" 
                             className="h-9 w-9"
-                            onClick={() => handleEpisodeChange(anime, anime.current_episode + 1)}
+                            onClick={() => handleEpisodeChange(anime, (anime.current_episode + 1).toString())}
                             disabled={anime.total_episodes !== null && anime.current_episode >= anime.total_episodes}
                         >
                           <PlusCircle size={16} />
@@ -161,10 +191,58 @@ export function AnimeGroupModal({
                         <Label htmlFor={`rating-${anime.mal_id}`} className="text-xs">Rating</Label>
                         <RatingInput
                           value={anime.user_rating}
-                          onChange={(value) => handleUpdate(anime.mal_id, { user_rating: value }, anime.total_episodes)}
+                          onChange={(value) => {
+                            handleItemChange(anime.mal_id, 'user_rating', value);
+                            handleItemUpdate(anime, { user_rating: value });
+                          }}
                         />
                       </div>
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                        <div>
+                            <Label htmlFor={`broadcast-day-modal-${anime.mal_id}`} className="text-xs">Broadcast Day</Label>
+                            <Select
+                                value={anime.broadcast_day || NO_BROADCAST_DAY_VALUE}
+                                onValueChange={(value) => {
+                                    const newDay = value === NO_BROADCAST_DAY_VALUE ? null : value;
+                                    handleItemChange(anime.mal_id, 'broadcast_day', newDay);
+                                    handleItemUpdate(anime, { broadcast_day: newDay });
+                                }}
+                            >
+                            <SelectTrigger id={`broadcast-day-modal-${anime.mal_id}`} className="h-9 text-xs mt-0.5">
+                                <SelectValue placeholder="Set broadcast day" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value={NO_BROADCAST_DAY_VALUE} className="text-xs">Unknown / Not Set</SelectItem>
+                                {BROADCAST_DAY_OPTIONS.map(option => (
+                                <SelectItem key={option.value} value={option.value} className="text-xs">{option.label}</SelectItem>
+                                ))}
+                            </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor={`streaming-platforms-modal-${anime.mal_id}`} className="text-xs">Streaming Platforms (CSV)</Label>
+                            <Input
+                                id={`streaming-platforms-modal-${anime.mal_id}`}
+                                type="text"
+                                value={anime.streaming_platforms_input}
+                                onChange={(e) => handleItemChange(anime.mal_id, 'streaming_platforms_input', e.target.value)}
+                                onBlur={() => handleStreamingPlatformsBlur(anime)}
+                                className="h-9 text-xs mt-0.5"
+                                placeholder="e.g. Netflix, Crunchyroll"
+                            />
+                        </div>
+                    </div>
+                     {anime.streaming_platforms.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                            {anime.streaming_platforms.map(platform => (
+                                <Badge key={platform} variant="outline" className="text-xs bg-muted text-muted-foreground">
+                                   {platform.startsWith("http") ? <Youtube size={12} className="mr-1"/> : <Tv size={12} className="mr-1"/>}
+                                   {platform}
+                                </Badge>
+                            ))}
+                        </div>
+                    )}
                     <ProgressBar current={anime.current_episode} total={anime.total_episodes} />
                   </div>
                 </div>
@@ -179,4 +257,3 @@ export function AnimeGroupModal({
     </Dialog>
   );
 }
-

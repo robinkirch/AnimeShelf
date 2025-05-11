@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -21,33 +22,49 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { JikanAnime, UserAnimeStatus } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
+import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { RatingInput } from './RatingInput';
 import Image from 'next/image';
 
 interface AddToShelfDialogProps {
   anime: JikanAnime;
-  onAddToShelf: (details: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => void;
+  onAddToShelf: (details: { 
+    user_status: UserAnimeStatus; 
+    current_episode: number; 
+    user_rating: number | null;
+    streaming_platforms: string[];
+    broadcast_day: string | null;
+  }) => void;
   children: React.ReactNode; // For the trigger button
 }
+
+const NO_BROADCAST_DAY_VALUE = "_none_";
 
 export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [userStatus, setUserStatus] = useState<UserAnimeStatus>('plan_to_watch');
   const [currentEpisode, setCurrentEpisode] = useState(0);
   const [userRating, setUserRating] = useState<number | null>(null);
+  const [streamingPlatformsInput, setStreamingPlatformsInput] = useState('');
+  const [broadcastDay, setBroadcastDay] = useState<string | null>(anime.broadcast?.day || null);
+
 
   const handleSubmit = () => {
+    const platforms = streamingPlatformsInput.split(',').map(p => p.trim()).filter(p => p.length > 0);
     onAddToShelf({
       user_status: userStatus,
       current_episode: Math.min(currentEpisode, anime.episodes ?? Infinity), // Cap at total episodes
       user_rating: userRating,
+      streaming_platforms: platforms,
+      broadcast_day: broadcastDay === NO_BROADCAST_DAY_VALUE ? null : broadcastDay,
     });
     setIsOpen(false);
     // Reset form for next time
     setUserStatus('plan_to_watch');
     setCurrentEpisode(0);
     setUserRating(null);
+    setStreamingPlatformsInput('');
+    setBroadcastDay(anime.broadcast?.day || null);
   };
 
   return (
@@ -73,6 +90,7 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
             <div>
               <h3 className="font-semibold">{anime.title}</h3>
               <p className="text-sm text-muted-foreground">{anime.episodes ? `${anime.episodes} episodes` : 'Episodes unknown'}</p>
+              {anime.broadcast?.string && <p className="text-xs text-muted-foreground">Broadcast: {anime.broadcast.string}</p>}
             </div>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
@@ -105,6 +123,31 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
             <div className="col-span-3">
               <RatingInput value={userRating} onChange={setUserRating} />
             </div>
+          </div>
+           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="broadcast-day" className="text-right">Broadcast Day</Label>
+            <Select value={broadcastDay || NO_BROADCAST_DAY_VALUE} onValueChange={(value) => setBroadcastDay(value === NO_BROADCAST_DAY_VALUE ? null : value)}>
+              <SelectTrigger id="broadcast-day" className="col-span-3">
+                <SelectValue placeholder="Select broadcast day" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_BROADCAST_DAY_VALUE}>Unknown / Not Set</SelectItem>
+                {BROADCAST_DAY_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="streaming-platforms" className="text-right">Streaming (CSV)</Label>
+            <Input
+              id="streaming-platforms"
+              type="text"
+              value={streamingPlatformsInput}
+              onChange={(e) => setStreamingPlatformsInput(e.target.value)}
+              className="col-span-3"
+              placeholder="e.g. Netflix, Crunchyroll"
+            />
           </div>
         </div>
         <DialogFooter>

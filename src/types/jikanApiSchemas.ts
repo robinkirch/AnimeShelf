@@ -46,10 +46,10 @@ export const JikanAiredSchema = z.object({
 }).describe("Airing period information.");
 
 export const JikanBroadcastSchema = z.object({
-  day: z.string().nullable().describe("Day of the week broadcasted."),
-  time: z.string().nullable().describe("Time of broadcast."),
-  timezone: z.string().nullable().describe("Timezone of broadcast."),
-  string: z.string().nullable().describe("Full broadcast string."),
+  day: z.string().nullable().describe("Day of the week broadcasted (e.g., 'Mondays')."),
+  time: z.string().nullable().describe("Time of broadcast (e.g., '00:00')."),
+  timezone: z.string().nullable().describe("Timezone of broadcast (e.g., 'Asia/Tokyo')."),
+  string: z.string().nullable().describe("Full broadcast string (e.g., 'Mondays at 00:00 (JST)')."),
 }).describe("Broadcast information.");
 
 export const JikanTrailerImagesSchema = z.object({

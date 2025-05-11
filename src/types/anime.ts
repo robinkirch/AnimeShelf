@@ -21,6 +21,13 @@ export interface JikanMALItem {
   url: string;
 }
 
+export interface JikanBroadcast {
+  day: string | null;
+  time: string | null;
+  timezone: string | null;
+  string: string | null;
+}
+
 export interface JikanAnime {
   mal_id: number;
   url: string;
@@ -50,7 +57,7 @@ export interface JikanAnime {
   background?: string | null;
   season?: string | null; 
   year?: number | null;
-  broadcast?: { day: string | null; time: string | null; timezone: string | null; string: string | null; };
+  broadcast?: JikanBroadcast;
   producers: JikanMALItem[];
   licensors: JikanMALItem[];
   studios: JikanMALItem[];
@@ -93,6 +100,17 @@ export const ANIME_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
   // { value: 'Music', label: 'Music' }, // Potentially too niche for default filter
 ];
 
+export const BROADCAST_DAY_OPTIONS: { value: string; label: string }[] = [
+    { value: 'Mondays', label: 'Mondays' },
+    { value: 'Tuesdays', label: 'Tuesdays' },
+    { value: 'Wednesdays', label: 'Wednesdays' },
+    { value: 'Thursdays', label: 'Thursdays' },
+    { value: 'Fridays', label: 'Fridays' },
+    { value: 'Saturdays', label: 'Saturdays' },
+    { value: 'Sundays', label: 'Sundays' },
+    { value: 'Other', label: 'Other/Unknown' },
+];
+
 
 export interface UserAnime {
   mal_id: number;
@@ -107,6 +125,8 @@ export interface UserAnime {
   type: string | null;
   year: number | null;
   season: string | null;
+  streaming_platforms: string[];
+  broadcast_day: string | null;
 }
 
 export interface JikanAPISearchResponse {

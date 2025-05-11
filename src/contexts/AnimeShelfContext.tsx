@@ -4,12 +4,12 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { JikanAnime, UserAnime, UserAnimeStatus } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
+import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 
 
 interface AnimeShelfContextType {
   shelf: UserAnime[];
-  addAnimeToShelf: (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => void;
+  addAnimeToShelf: (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => void;
   updateAnimeOnShelf: (
     mal_id: number, 
     updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season'>>,
@@ -52,8 +52,10 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         const migratedShelf = parsedShelf.map(anime => ({
           ...anime,
           type: anime.type ?? null,
-          year: anime.year ?? null, // Ensure year exists, default to null
-          season: anime.season ?? null, // Ensure season exists, default to null
+          year: anime.year ?? null, 
+          season: anime.season ?? null,
+          streaming_platforms: anime.streaming_platforms ?? [],
+          broadcast_day: anime.broadcast_day ?? null,
         }));
         setShelf(migratedShelf);
       }
@@ -99,7 +101,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     setUpcomingSequelsState(animeList);
   }, []);
 
-  const addAnimeToShelf = useCallback((anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => {
+  const addAnimeToShelf = useCallback((anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => {
     setShelf(prevShelf => {
       if (prevShelf.some(item => item.mal_id === anime.mal_id)) return prevShelf; 
 
@@ -116,6 +118,8 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         type: anime.type || null,
         year: anime.year || null,
         season: anime.season || null,
+        streaming_platforms: initialDetails.streaming_platforms || [],
+        broadcast_day: initialDetails.broadcast_day || anime.broadcast?.day || null,
       };
       return [...prevShelf, newAnime];
     });
@@ -238,6 +242,12 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
            if (importedAnime.year !== null && importedAnime.year !== undefined && (typeof importedAnime.year !== 'number' || isNaN(importedAnime.year))) {
             throw new Error(`Field 'year' is invalid: ${importedAnime.year}. Must be a number or null/empty.`);
           }
+          if (importedAnime.broadcast_day !== null && importedAnime.broadcast_day !== undefined && (typeof importedAnime.broadcast_day !== 'string' || !BROADCAST_DAY_OPTIONS.find(opt => opt.value === importedAnime.broadcast_day))) {
+             if (importedAnime.broadcast_day !== null && importedAnime.broadcast_day !== undefined && typeof importedAnime.broadcast_day === 'string' && !BROADCAST_DAY_OPTIONS.map(o => o.value.toLowerCase()).includes(importedAnime.broadcast_day.toLowerCase()) && importedAnime.broadcast_day !== "Other") {
+                throw new Error(`Field 'broadcast_day' is invalid: ${importedAnime.broadcast_day}. Must be one of predefined values, 'Other', or null/empty.`);
+             }
+          }
+
 
           const existingIndex = newShelf.findIndex(item => item.mal_id === importedAnime.mal_id);
           
@@ -255,6 +265,8 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
             type: importedAnime.type === undefined ? null : importedAnime.type,
             year: importedAnime.year === undefined ? null : importedAnime.year,
             season: importedAnime.season === undefined ? null : importedAnime.season,
+            streaming_platforms: Array.isArray(importedAnime.streaming_platforms) ? importedAnime.streaming_platforms : [],
+            broadcast_day: importedAnime.broadcast_day === undefined ? null : importedAnime.broadcast_day,
           };
 
 

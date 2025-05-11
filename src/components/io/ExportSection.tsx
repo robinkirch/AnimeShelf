@@ -27,7 +27,7 @@ export function ExportSection() {
       return;
     }
 
-    const headers = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season'];
+    const headers = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day'];
     
     const csvRows = [
       headers.join(','), // Header row
@@ -40,11 +40,13 @@ export function ExportSection() {
           anime.user_status,
           anime.current_episode,
           anime.user_rating === null || anime.user_rating === undefined ? '' : anime.user_rating,
-          escapeCsvCell(anime.genres.join(';')), // Use semicolon as internal separator for arrays
-          escapeCsvCell(anime.studios.join(';')), // Use semicolon as internal separator for arrays
+          escapeCsvCell(anime.genres.join(';')), 
+          escapeCsvCell(anime.studios.join(';')), 
           escapeCsvCell(anime.type ?? ''),
           anime.year === null || anime.year === undefined ? '' : anime.year,
           escapeCsvCell(anime.season ?? ''),
+          escapeCsvCell(anime.streaming_platforms.join(';')),
+          escapeCsvCell(anime.broadcast_day ?? ''),
         ].join(',')
       )
     ];

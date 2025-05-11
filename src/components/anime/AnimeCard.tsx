@@ -7,13 +7,13 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { JikanAnime, UserAnime, UserAnimeStatus, JikanAnimeRelation } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
+import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { ProgressBar } from './ProgressBar';
 import { RatingInput } from './RatingInput';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { AddToShelfDialog } from './AddToShelfDialog';
 import { AddAllToShelfDialog } from './AddAllToShelfDialog';
-import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff } from 'lucide-react';
+import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff, Tv, Youtube } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -23,8 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { jikanApi } from '@/lib/jikanApi';
-// import { Skeleton } from '../ui/skeleton'; // Skeleton not directly used here
 
 interface AnimeCardProps {
   anime: JikanAnime | Partial<JikanAnime>; 
@@ -41,7 +41,7 @@ const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
 };
 
 const IGNORED_TYPES_FOR_ADD_ALL = ['Music'];
-
+const NO_BROADCAST_DAY_VALUE = "_none_";
 
 export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps) {
   const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf } = useAnimeShelf();
@@ -53,8 +53,15 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
   const [relations, setRelations] = useState<JikanAnimeRelation[]>([]);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   const [showAddAllButton, setShowAddAllButton] = useState(false);
+  const [editableStreamingPlatforms, setEditableStreamingPlatforms] = useState('');
 
   const fullAnimeDataForDialog = anime as JikanAnime;
+
+  useEffect(() => {
+    if (currentShelfItem) {
+      setEditableStreamingPlatforms(currentShelfItem.streaming_platforms.join(', '));
+    }
+  }, [currentShelfItem]);
 
 
   useEffect(() => {
@@ -85,7 +92,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
   }, [anime.mal_id, anime.type, isOnShelf]);
 
 
-  const handleAddToShelf = (details: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null }) => {
+  const handleAddToShelf = (details: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => {
     if (!fullAnimeDataForDialog.mal_id) {
         toast({ title: "Error", description: "Cannot add anime without a valid ID.", variant: "destructive" });
         return;
@@ -107,6 +114,22 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
       toast({ title: "Rating Updated", description: `"${anime.title}" rating set.` });
     }
   };
+
+  const handleUpdateBroadcastDay = (day: string | null) => {
+    if (currentShelfItem && anime.mal_id) {
+      updateAnimeOnShelf(anime.mal_id, { broadcast_day: day === NO_BROADCAST_DAY_VALUE ? null : day }, anime.episodes);
+      toast({ title: "Broadcast Day Updated", description: `"${anime.title}" broadcast day updated.` });
+    }
+  };
+
+  const handleUpdateStreamingPlatforms = () => {
+    if (currentShelfItem && anime.mal_id) {
+      const platformsArray = editableStreamingPlatforms.split(',').map(p => p.trim()).filter(p => p.length > 0);
+      updateAnimeOnShelf(anime.mal_id, { streaming_platforms: platformsArray }, anime.episodes);
+      toast({ title: "Streaming Platforms Updated", description: `"${anime.title}" streaming platforms updated.` });
+    }
+  };
+
 
   const handleIncrementEpisode = () => {
     if (currentShelfItem && anime.mal_id && (currentShelfItem.total_episodes === null || currentShelfItem.current_episode < currentShelfItem.total_episodes)) {
@@ -164,6 +187,8 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
           <span>{anime.type || 'N/A'}</span>
           {anime.episodes !== null && typeof anime.episodes !== 'undefined' && <span> &bull; {anime.episodes} episodes</span>}
           {anime.season && anime.year && <span> &bull; {`${anime.season} ${anime.year}`.replace(/\b\w/g, l => l.toUpperCase())}</span>}
+          {currentShelfItem?.broadcast_day && <span> &bull; {currentShelfItem.broadcast_day}</span>}
+          {(anime as JikanAnime).broadcast?.day && !currentShelfItem?.broadcast_day && <span> &bull; {(anime as JikanAnime).broadcast!.day}</span>}
         </div>
         
         <div className="flex flex-wrap gap-1 mb-3">
@@ -203,6 +228,44 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
               </SelectContent>
             </Select>
             <RatingInput value={currentShelfItem.user_rating} onChange={handleUpdateRating} />
+            <div>
+              <Label htmlFor={`broadcast-day-${anime.mal_id}`} className="text-xs font-medium">Broadcast Day</Label>
+              <Select value={currentShelfItem.broadcast_day || NO_BROADCAST_DAY_VALUE} onValueChange={handleUpdateBroadcastDay}>
+                <SelectTrigger id={`broadcast-day-${anime.mal_id}`} className="w-full text-sm mt-1">
+                  <SelectValue placeholder="Set broadcast day" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_BROADCAST_DAY_VALUE}>Unknown / Not Set</SelectItem>
+                  {BROADCAST_DAY_OPTIONS.map(option => (
+                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+             <div>
+                <Label htmlFor={`streaming-platforms-${anime.mal_id}`} className="text-xs font-medium">Streaming Platforms (CSV)</Label>
+                <div className="flex items-center gap-2 mt-1">
+                    <Input
+                        id={`streaming-platforms-${anime.mal_id}`}
+                        type="text"
+                        value={editableStreamingPlatforms}
+                        onChange={(e) => setEditableStreamingPlatforms(e.target.value)}
+                        className="text-sm flex-grow"
+                        placeholder="e.g. Netflix, Crunchyroll"
+                        onBlur={handleUpdateStreamingPlatforms} // Update on blur
+                    />
+                </div>
+                {currentShelfItem.streaming_platforms.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                        {currentShelfItem.streaming_platforms.map(platform => (
+                            <Badge key={platform} variant="outline" className="text-xs bg-muted text-muted-foreground">
+                               {platform.startsWith("http") ? <Youtube size={12} className="mr-1"/> : <Tv size={12} className="mr-1"/>}
+                                {platform}
+                            </Badge>
+                        ))}
+                    </div>
+                )}
+            </div>
           </div>
         )}
       </CardContent>
