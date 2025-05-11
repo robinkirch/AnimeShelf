@@ -6,7 +6,7 @@ import { AnimeCard } from "@/components/anime/AnimeCard";
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, JikanMALItem } from '@/types/anime';
 import { ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
-import { Loader2, ListFilter, ChevronDown, X, ChevronRight } from 'lucide-react';
+import { Loader2, ListFilter, ChevronDown, X, ChevronRight, CalendarClock } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -24,6 +24,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
+import { Badge } from '@/components/ui/badge'; // Added Badge import
 
 const ALL_FILTER_VALUE = "_all_"; // Still used by studio filter
 
@@ -57,6 +58,21 @@ export default function SeasonalPage() {
     return years;
   }, []);
   const seasons = ['winter', 'spring', 'summer', 'fall'];
+
+  const isFutureSelectedSeason = useMemo(() => {
+    const currentYr = new Date().getFullYear();
+    const currentSsn = getCurrentSeasonName();
+    const currentSeasonIndex = seasons.indexOf(currentSsn);
+    const selectedSeasonIndex = seasons.indexOf(season);
+
+    if (year > currentYr) {
+      return true;
+    }
+    if (year === currentYr && selectedSeasonIndex > currentSeasonIndex) {
+      return true;
+    }
+    return false;
+  }, [year, season, seasons]);
 
 
   useEffect(() => {
@@ -165,7 +181,15 @@ export default function SeasonalPage() {
     <div className="space-y-8">
       <section className="bg-card p-6 rounded-lg shadow-sm">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-          <h1 className="text-3xl font-bold text-primary">Seasonal Anime</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-primary">Seasonal Anime</h1>
+            {isFutureSelectedSeason && (
+              <Badge variant="outline" className="border-accent text-accent">
+                <CalendarClock className="mr-1.5 h-4 w-4" />
+                Future
+              </Badge>
+            )}
+          </div>
           <div className="flex gap-2 flex-wrap justify-center md:justify-end items-center">
             <Select value={year.toString()} onValueChange={(val) => setYear(parseInt(val))}>
               <SelectTrigger className="w-[120px] text-sm h-10">
