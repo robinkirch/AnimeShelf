@@ -10,7 +10,7 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime, UserAnimeStatus, UserAnime, JikanAnimeRelation } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, RATING_OPTIONS, ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
-import { Loader2, Search, ListFilter, X, ChevronDown, Info, ArrowUpAZ, ArrowDownAZ, Sparkles } from 'lucide-react';
+import { Loader2, Search, ListFilter, X, ChevronDown, Info, ArrowUpAZ, ArrowDownAZ, Sparkles, SearchCheck } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -58,6 +58,7 @@ export default function MyShelfPage() {
   const [isLoadingShelf, setIsLoadingShelf] = useState(true);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   
+  const [localShelfSearchQuery, setLocalShelfSearchQuery] = useState('');
   const [genreFilter, setGenreFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<UserAnimeStatus | typeof ALL_FILTER_VALUE>(ALL_FILTER_VALUE);
   const [ratingFilter, setRatingFilter] = useState<string>(ALL_FILTER_VALUE);
@@ -166,21 +167,24 @@ export default function MyShelfPage() {
         return [];
     }
 
-    const individuallyFilteredAnime = shelf.filter(anime => {
+    const filteredForGroupingAnime = shelf.filter(anime => {
         const genreMatch = genreFilter.length === 0 ? true : genreFilter.some(selectedGenre => anime.genres.includes(selectedGenre));
         const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
         const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
         const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
-        return genreMatch && statusMatch && ratingMatch && typeMatch;
+        const localSearchMatch = localShelfSearchQuery.trim() === '' ? true : anime.title.toLowerCase().includes(localShelfSearchQuery.toLowerCase().trim());
+        
+        return genreMatch && statusMatch && ratingMatch && typeMatch && localSearchMatch;
     });
 
-    if (individuallyFilteredAnime.length === 0) return [];
 
-    const shelfItemsMap = new Map(individuallyFilteredAnime.map(item => [item.mal_id, item]));
+    if (filteredForGroupingAnime.length === 0) return [];
+
+    const shelfItemsMap = new Map(filteredForGroupingAnime.map(item => [item.mal_id, item]));
     const visited = new Set<number>();
     const finalGroupedItems: GroupedShelfItem[] = [];
 
-    const sortedShelfForGrouping = [...individuallyFilteredAnime].sort((a, b) => a.title.localeCompare(b.title));
+    const sortedShelfForGrouping = [...filteredForGroupingAnime].sort((a, b) => a.title.localeCompare(b.title));
 
     for (const anime of sortedShelfForGrouping) {
         if (visited.has(anime.mal_id)) continue;
@@ -303,7 +307,7 @@ export default function MyShelfPage() {
 
     return sortedFinalItems;
 
-  }, [shelf, genreFilter, statusFilter, ratingFilter, typeFilter, relationsMap, shelfInitialized, isLoadingRelations, sortOption, sortOrder]);
+  }, [shelf, genreFilter, statusFilter, ratingFilter, typeFilter, relationsMap, shelfInitialized, isLoadingRelations, sortOption, sortOrder, localShelfSearchQuery]);
 
 
   const clearFilters = () => {
@@ -311,6 +315,7 @@ export default function MyShelfPage() {
     setStatusFilter(ALL_FILTER_VALUE);
     setRatingFilter(ALL_FILTER_VALUE);
     setTypeFilter([]);
+    setLocalShelfSearchQuery('');
   };
 
   const renderSkeletons = (count: number) => (
@@ -449,11 +454,26 @@ export default function MyShelfPage() {
           <h2 className="text-3xl font-bold text-primary">My Anime Shelf</h2>
           <div className="flex gap-2 flex-wrap">
               <Button variant="outline" onClick={clearFilters} className="text-sm">
-                <X className="mr-2 h-4 w-4" /> Clear Filters
+                <X className="mr-2 h-4 w-4" /> Clear All Filters
               </Button>
           </div>
         </div>
         
+        <div className="mb-6 p-4 bg-card rounded-lg shadow-sm">
+            <Label htmlFor="local-shelf-search" className="text-sm font-medium mb-1 block">Search My Shelf</Label>
+            <div className="relative">
+                <SearchCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                    id="local-shelf-search"
+                    type="search"
+                    placeholder="Search by title in your shelf..."
+                    value={localShelfSearchQuery}
+                    onChange={(e) => setLocalShelfSearchQuery(e.target.value)}
+                    className="pl-10 w-full" 
+                />
+            </div>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-card rounded-lg shadow-sm">
           <div>
             <Label htmlFor="genre-filter-shelf" className="text-sm font-medium mb-1 block">Genre</Label>
@@ -608,7 +628,7 @@ export default function MyShelfPage() {
             <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-2 text-xl font-semibold">No Anime Match Filters</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Try adjusting your filters or adding more anime to your shelf.
+              Try adjusting your filters or local shelf search, or adding more anime to your shelf.
             </p>
           </div>
         )}
