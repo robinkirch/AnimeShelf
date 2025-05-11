@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { searchAnimeWithAi, type AiSearchInput } from '@/ai/flows/anime-search-flow';
+import { StatusDistributionBar } from '@/components/shelf/StatusDistributionBar';
 
 
 const ALL_FILTER_VALUE = "_all_";
@@ -480,6 +481,10 @@ export default function MyShelfPage() {
               </Button>
           </div>
         </div>
+
+        {shelfInitialized && shelf.length > 0 && (
+          <StatusDistributionBar shelf={shelf} />
+        )}
         
         <div className="mb-6 p-4 bg-card rounded-lg shadow-sm">
             <Label htmlFor="local-shelf-search" className="text-sm font-medium mb-1 block">Search My Shelf</Label>
