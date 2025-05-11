@@ -1,3 +1,4 @@
+
 "use client";
 
 import Image from 'next/image';
@@ -201,20 +202,32 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview }: AnimeCardProps)
           <div className="space-y-3">
             <ProgressBar current={currentShelfItem.current_episode} total={currentShelfItem.total_episodes} />
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={handleDecrementEpisode} disabled={currentShelfItem.current_episode === 0}>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={handleDecrementEpisode} 
+                disabled={currentShelfItem.current_episode === 0}
+                aria-label={`Decrement episode count for ${anime.title}`}
+              >
                 <MinusCircle size={16} />
               </Button>
               <Input 
                 type="number"
                 value={currentShelfItem.current_episode}
-                onChange={(e) => handleItemChange(anime.mal_id, 'current_episode', parseInt(e.target.value))} // Optimistic UI for input typing
-                onBlur={(e) => handleSetEpisode(parseInt(e.target.value))} // Persist on blur
+                onChange={(e) => handleItemChange(anime.mal_id!, 'current_episode', parseInt(e.target.value))} 
+                onBlur={(e) => handleSetEpisode(parseInt(e.target.value))} 
                 className="w-16 text-center h-9"
                 min={0}
                 max={currentShelfItem.total_episodes ?? undefined}
                 aria-label={`Current episode for ${anime.title}`}
               />
-              <Button variant="outline" size="icon" onClick={handleIncrementEpisode} disabled={currentShelfItem.total_episodes !== null && currentShelfItem.current_episode >= currentShelfItem.total_episodes}>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={handleIncrementEpisode} 
+                disabled={currentShelfItem.total_episodes !== null && currentShelfItem.current_episode >= currentShelfItem.total_episodes}
+                aria-label={`Increment episode count for ${anime.title}`}
+              >
                 <PlusCircle size={16} />
               </Button>
             </div>

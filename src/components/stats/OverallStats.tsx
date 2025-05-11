@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useMemo } from 'react';
@@ -16,18 +17,33 @@ interface StatCardProps {
   valueClassName?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, description, className, valueClassName }) => (
-  <Card className={cn("shadow-lg", className)}>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-      {Icon && <Icon className="h-5 w-5 text-muted-foreground" />}
-    </CardHeader>
-    <CardContent>
-      <div className={cn("text-2xl font-bold", valueClassName)}>{value}</div>
-      {description && <p className="text-xs text-muted-foreground pt-1">{description}</p>}
-    </CardContent>
-  </Card>
-);
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, description, className, valueClassName }) => {
+  // Check if the card is intended to have a light text on dark/colored background theme
+  // This is determined if the main className for the Card includes 'text-primary-foreground'
+  const isLightTextTheme = className?.includes('text-primary-foreground');
+
+  return (
+    <Card className={cn("shadow-lg", className)}>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className={cn(
+          "text-sm font-medium",
+          isLightTextTheme ? 'text-primary-foreground/80' : 'text-muted-foreground'
+        )}>
+          {title}
+        </CardTitle>
+        {Icon && <Icon className={cn("h-5 w-5", isLightTextTheme ? 'text-primary-foreground/70' : 'text-muted-foreground')} />}
+      </CardHeader>
+      <CardContent>
+        <div className={cn(
+          "text-2xl font-bold", 
+          isLightTextTheme ? 'text-primary-foreground' : '', // Ensure value also respects light text theme if not overridden by valueClassName
+          valueClassName
+        )}>{value}</div>
+        {description && <p className={cn("text-xs pt-1", isLightTextTheme ? 'text-primary-foreground/70' : 'text-muted-foreground')}>{description}</p>}
+      </CardContent>
+    </Card>
+  );
+};
 
 export function OverallStats() {
   const { shelf } = useAnimeShelf();
@@ -71,7 +87,7 @@ export function OverallStats() {
                 value={stats.completedAnimeCount} 
                 icon={Clapperboard}
                 className="bg-gradient-to-br from-[hsl(var(--chart-1))] to-[hsl(var(--chart-1),0.7)] text-primary-foreground"
-                valueClassName="text-primary-foreground"
+                valueClassName="text-primary-foreground" // Explicitly keep value text primary-foreground
             />
             <StatCard 
                 title="Episodes Watched" 
@@ -87,10 +103,11 @@ export function OverallStats() {
                 className="bg-gradient-to-br from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3),0.7)] text-primary-foreground"
                 valueClassName="text-primary-foreground"
             />
+            {/* Specific card for Top Rated Anime, styled slightly differently for its list content */}
             <Card className="shadow-lg col-span-full md:col-span-2 lg:col-span-1 bg-gradient-to-br from-[hsl(var(--chart-4))] to-[hsl(var(--chart-4),0.7)] text-primary-foreground">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground/80">Top Rated Anime</CardTitle>
-                <Award className="h-5 w-5 text-muted-foreground/80" />
+                <CardTitle className="text-sm font-medium text-primary-foreground/80">Top Rated Anime</CardTitle>
+                <Award className="h-5 w-5 text-primary-foreground/70" />
                 </CardHeader>
                 <CardContent>
                 {stats.topRatedAnime.length > 0 ? (
@@ -114,7 +131,7 @@ export function OverallStats() {
                     ))}
                     </ul>
                 ) : (
-                    <p className="text-sm text-muted-foreground/80 pt-1">No anime rated yet.</p>
+                    <p className="text-sm text-primary-foreground/70 pt-1">No anime rated yet.</p>
                 )}
                 </CardContent>
             </Card>
