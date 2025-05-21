@@ -14,7 +14,6 @@ import { useToast } from '@/hooks/use-toast';
 import { jikanApi } from '@/lib/jikanApi'; // Import jikanApi
 
 const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes'];
-// Now, either mal_id or title is effectively required. User status and current episode remain core.
 const MINIMUM_REQUIRED_FOR_PROCESSING = ['user_status', 'current_episode'];
 
 
@@ -46,12 +45,16 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   const [importResults, setImportResults] = useState<{ successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const [totalLines, setTotalLines] = useState(0);
+  const [processedLines, setProcessedLines] = useState(0);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       if (event.target.files[0].type === "text/csv" || event.target.files[0].name.endsWith(".csv")) {
         setFile(event.target.files[0]);
         setImportResults(null); 
+        setTotalLines(0);
+        setProcessedLines(0);
       } else {
         toast({ title: "Invalid File Type", description: "Please select a valid .csv file.", variant: "destructive"});
         event.target.value = ""; 
@@ -59,15 +62,33 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
     }
   };
 
-  const parseCsvCell = (cell: string): string => {
-    if (typeof cell !== 'string') return '';
-    // Check if the cell is quoted
-    if (cell.length >= 2 && cell.startsWith('"') && cell.endsWith('"')) {
-      // Remove surrounding quotes and then unescape double quotes "" to "
-      return cell.substring(1, cell.length - 1).replace(/""/g, '"');
+  const robustCsvLineParse = (line: string, delimiter: string = ','): string[] => {
+    const values: string[] = [];
+    let currentField = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+
+        if (char === '"') {
+            if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+                // Escaped quote
+                currentField += '"';
+                i++; // Skip next quote
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === delimiter && !inQuotes) {
+            values.push(currentField);
+            currentField = '';
+        } else {
+            currentField += char;
+        }
     }
-    return cell;
+    values.push(currentField); // Add the last field
+    return values;
   };
+
 
   const handleImport = async () => {
     if (!file) {
@@ -76,6 +97,9 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
     }
     setIsImporting(true);
     setImportResults(null);
+    setProcessedLines(0);
+    setTotalLines(0);
+
 
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -114,45 +138,26 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
          return;
       }
 
+      setTotalLines(lines.length -1); // -1 for header row
       const importedAnimeList: UserAnime[] = [];
       const processingErrors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
+        setProcessedLines(i); // Update processed lines count (i is 1-based for data rows)
+        const lineContent = lines[i];
+        if (!lineContent.trim()) continue;
 
-        // Robust CSV line parsing
-        const values: string[] = [];
-        let currentFieldBuffer = '';
-        let inQuotesMode = false;
-        for (let k = 0; k < line.length; k++) {
-            const char = line[k];
-            if (char === '"') {
-                // If already in quotes and next char is also a quote, it's an escaped quote
-                if (inQuotesMode && k + 1 < line.length && line[k+1] === '"') {
-                    currentFieldBuffer += '"'; // Add the literal quote
-                    k++; // Skip the second quote of the pair
-                } else {
-                    inQuotesMode = !inQuotesMode; // Toggle quote mode
-                    currentFieldBuffer += '"'; // Add the structural quote char itself
-                }
-            } else if (char === ',' && !inQuotesMode) {
-                values.push(currentFieldBuffer);
-                currentFieldBuffer = '';
-            } else {
-                currentFieldBuffer += char;
-            }
-        }
-        values.push(currentFieldBuffer); // Add the last field
+        const values = robustCsvLineParse(lineContent);
 
         if (values.length !== headers.length) {
-            processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${headers.length} based on CSV header, got ${values.length} values. Ensure row has correct number of commas. Line: "${line.substring(0,100)}..."` });
+            processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${headers.length} based on CSV header, got ${values.length} values. Ensure row has correct number of commas. Line: "${lineContent.substring(0,100)}..."` });
             continue;
         }
 
         const row: Record<string, string> = {};
         headers.forEach((header, index) => {
-          row[header] = parseCsvCell((values[index] || "").trim());
+          // parseCsvCell (old function) is not needed with robustCsvLineParse if it handles quotes correctly
+          row[header] = (values[index] || "").trim(); 
         });
         
         let mal_id: number | undefined = undefined;
@@ -316,6 +321,8 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         fileInputRef.current.value = ""; 
       }
       setFile(null);
+      // setTotalLines(0); // Resetting here might be too soon if user wants to see the "X of Y" on completion
+      // setProcessedLines(0);
     };
     reader.onerror = () => {
       setIsImporting(false);
@@ -350,6 +357,12 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
         Import from CSV
       </Button>
+
+      {isImporting && totalLines > 0 && (
+        <div className="text-sm text-muted-foreground text-center mt-2">
+          Processing line {processedLines} of {totalLines}...
+        </div>
+      )}
 
       {importResults && (
         <div className="mt-4">
