@@ -61,7 +61,9 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
 
   const parseCsvCell = (cell: string): string => {
     if (typeof cell !== 'string') return '';
-    if (cell.startsWith('"') && cell.endsWith('"')) {
+    // Check if the cell is quoted
+    if (cell.length >= 2 && cell.startsWith('"') && cell.endsWith('"')) {
+      // Remove surrounding quotes and then unescape double quotes "" to "
       return cell.substring(1, cell.length - 1).replace(/""/g, '"');
     }
     return cell;
@@ -119,19 +121,38 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         const line = lines[i];
         if (!line.trim()) continue;
 
-        const values = (line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []).map(v => v.trim());
+        // Robust CSV line parsing
+        const values: string[] = [];
+        let currentFieldBuffer = '';
+        let inQuotesMode = false;
+        for (let k = 0; k < line.length; k++) {
+            const char = line[k];
+            if (char === '"') {
+                // If already in quotes and next char is also a quote, it's an escaped quote
+                if (inQuotesMode && k + 1 < line.length && line[k+1] === '"') {
+                    currentFieldBuffer += '"'; // Add the literal quote
+                    k++; // Skip the second quote of the pair
+                } else {
+                    inQuotesMode = !inQuotesMode; // Toggle quote mode
+                    currentFieldBuffer += '"'; // Add the structural quote char itself
+                }
+            } else if (char === ',' && !inQuotesMode) {
+                values.push(currentFieldBuffer);
+                currentFieldBuffer = '';
+            } else {
+                currentFieldBuffer += char;
+            }
+        }
+        values.push(currentFieldBuffer); // Add the last field
 
-        if (values.length !== headers.length && headers.includes('duration_minutes') && values.length === headers.length -1 && headers.indexOf('duration_minutes') === headers.length -1) {
-             // If duration_minutes is the last optional column and it's missing, allow it
-        } else if (values.length !== headers.length) {
-            processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${headers.length}, got ${values.length}. Line: "${line.substring(0,50)}..."` });
+        if (values.length !== headers.length) {
+            processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${headers.length} based on CSV header, got ${values.length} values. Ensure row has correct number of commas. Line: "${line.substring(0,100)}..."` });
             continue;
         }
 
-
         const row: Record<string, string> = {};
         headers.forEach((header, index) => {
-          row[header] = parseCsvCell(values[index] || '');
+          row[header] = parseCsvCell((values[index] || "").trim());
         });
         
         let mal_id: number | undefined = undefined;
