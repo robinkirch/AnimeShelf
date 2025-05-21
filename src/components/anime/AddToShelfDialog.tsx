@@ -59,6 +59,24 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
     }
   }, [isOpen, anime]);
 
+  useEffect(() => {
+    if(userStatus == "completed" && (anime.episodes != null &&(currentEpisode != anime.episodes || currentEpisode != Infinity))) {
+      setCurrentEpisode(anime.episodes ?? Infinity);
+    }
+  },[userStatus]);
+
+  useEffect(() => {
+    if(currentEpisode == 0) {
+      setUserStatus("plan_to_watch");
+    }
+    else if(anime.episodes != null && currentEpisode == anime.episodes) {
+      setUserStatus("completed");
+    }
+    else{
+      setUserStatus("watching");
+    }
+  },[currentEpisode]);
+
 
   const handleSubmit = () => {
     onAddToShelf({
