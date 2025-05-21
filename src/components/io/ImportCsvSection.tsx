@@ -1,18 +1,43 @@
+
 'use client';
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
-import type { UserAnime, UserAnimeStatus } from '@/types/anime';
+import type { UserAnime, UserAnimeStatus, JikanAnime } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, XCircle, UploadCloud, Loader2, Info } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
+import { jikanApi } from '@/lib/jikanApi'; // Import jikanApi
 
 const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes'];
-const REQUIRED_HEADERS = ['mal_id', 'title', 'user_status', 'current_episode'];
+// Now, either mal_id or title is effectively required. User status and current episode remain core.
+const MINIMUM_REQUIRED_FOR_PROCESSING = ['user_status', 'current_episode'];
+
+
+// Helper function to parse Jikan duration string to minutes (can be moved to utils if needed elsewhere)
+function parseDurationToMinutes(durationStr: string | null | undefined): number | null {
+  if (!durationStr) return null;
+  
+  const perEpMatch = durationStr.match(/(\d+)\s*min(?:s|\.)?\s*(?:per\s*ep)?/i);
+  if (perEpMatch && perEpMatch[1]) {
+    return parseInt(perEpMatch[1], 10);
+  }
+
+  const hrMinMatch = durationStr.match(/(?:(\d+)\s*hr)?\s*(?:(\d+)\s*min)?/i);
+  if (hrMinMatch) {
+    const hours = hrMinMatch[1] ? parseInt(hrMinMatch[1], 10) : 0;
+    const minutes = hrMinMatch[2] ? parseInt(hrMinMatch[2], 10) : 0;
+    if (!durationStr.toLowerCase().includes("per ep") && (hours > 0 || minutes > 0)) {
+        return (hours * 60) + minutes;
+    }
+  }
+  return null;
+}
+
 
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   const { importAnimeBatch } = useAnimeShelf();
@@ -68,10 +93,16 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
 
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase()); 
       
-      const missingRequiredHeaders = REQUIRED_HEADERS.filter(rh => !headers.includes(rh.toLowerCase()));
-      if (missingRequiredHeaders.length > 0) {
+      const missingCoreRequirements = MINIMUM_REQUIRED_FOR_PROCESSING.filter(rh => !headers.includes(rh.toLowerCase()));
+      const hasIdentifier = headers.includes('mal_id') || headers.includes('title');
+
+      if (missingCoreRequirements.length > 0 || !hasIdentifier) {
          setIsImporting(false);
-         toast({ title: "Import Error", description: `CSV headers are invalid. Missing required headers: ${missingRequiredHeaders.join(', ')}. Found: ${headers.join(', ')}`, variant: "destructive" });
+         let errorMsg = "CSV headers are invalid. ";
+         if (missingCoreRequirements.length > 0) errorMsg += `Missing: ${missingCoreRequirements.join(', ')}. `;
+         if (!hasIdentifier) errorMsg += "Missing identifier: 'mal_id' or 'title' must be present. ";
+         errorMsg += `Found: ${headers.join(', ')}`;
+         toast({ title: "Import Error", description: errorMsg, variant: "destructive" });
          return;
       }
       
@@ -90,7 +121,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
 
         const values = (line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || []).map(v => v.trim());
 
-        if (values.length !== headers.length && headers.includes('duration_minutes') && values.length === headers.length -1) {
+        if (values.length !== headers.length && headers.includes('duration_minutes') && values.length === headers.length -1 && headers.indexOf('duration_minutes') === headers.length -1) {
              // If duration_minutes is the last optional column and it's missing, allow it
         } else if (values.length !== headers.length) {
             processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${headers.length}, got ${values.length}. Line: "${line.substring(0,50)}..."` });
@@ -103,82 +134,136 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
           row[header] = parseCsvCell(values[index] || '');
         });
         
-        const mal_id_str = row.mal_id;
-        const mal_id = parseInt(mal_id_str, 10);
-        const title = row.title;
+        let mal_id: number | undefined = undefined;
+        let jikanDataFromApi: JikanAnime | null = null;
 
-        if (isNaN(mal_id)) {
-          processingErrors.push({ animeTitle: title || `Row ${i+1}`, error: "Missing or invalid 'mal_id'." });
-          continue;
-        }
-        if (!title) {
-          processingErrors.push({ malId: mal_id, error: "Missing 'title'." });
-          continue;
-        }
-        const user_status = row.user_status as UserAnimeStatus;
-        if (!USER_ANIME_STATUS_OPTIONS.find(opt => opt.value === user_status)) {
-          processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'user_status': ${user_status}.` });
-          continue;
-        }
-        const current_episode_str = row.current_episode;
-        const current_episode = parseInt(current_episode_str, 10);
-        if (isNaN(current_episode) || current_episode < 0) {
-          processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'current_episode': ${current_episode_str}. Must be a non-negative number.` });
-          continue;
+        const mal_id_csv_str = row.mal_id?.trim();
+        if (mal_id_csv_str) {
+            const parsed_mal_id = parseInt(mal_id_csv_str, 10);
+            if (!isNaN(parsed_mal_id) && parsed_mal_id > 0) {
+                mal_id = parsed_mal_id;
+            } else if (mal_id_csv_str !== '') { // Non-empty but invalid
+                 processingErrors.push({ animeTitle: row.title?.trim() || `Row ${i+1}`, error: `Invalid 'mal_id' in CSV: ${mal_id_csv_str}.` });
+                 continue;
+            }
         }
 
-        const total_episodes_str = row.total_episodes;
-        const total_episodes = total_episodes_str === '' ? null : parseInt(total_episodes_str, 10);
-        if (total_episodes_str !== '' && (isNaN(total_episodes as number) || (total_episodes as number) < 0) ) {
-            processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'total_episodes': ${total_episodes_str}. Must be a non-negative number or empty.` });
+        const title_csv = row.title?.trim();
+
+        if (!mal_id && title_csv) {
+            try {
+                const searchResults = await jikanApi.searchAnime(title_csv, 1);
+                if (searchResults.length > 0 && searchResults[0]) {
+                    jikanDataFromApi = searchResults[0];
+                    mal_id = jikanDataFromApi.mal_id;
+                } else {
+                    processingErrors.push({ animeTitle: title_csv, error: `Could not find MAL ID for title. Please provide MAL ID or a more precise title.` });
+                    continue;
+                }
+            } catch (apiError) {
+                processingErrors.push({ animeTitle: title_csv, error: `API error while searching for title. Please try again or provide MAL ID.` });
+                continue;
+            }
+        } else if (!mal_id && !title_csv) {
+            processingErrors.push({ animeTitle: `Row ${i+1}`, error: "Missing 'mal_id' and 'title'. One must be provided." });
             continue;
+        } else if (mal_id && !jikanDataFromApi) { // mal_id from CSV, fetch if necessary
+            const needsApiFetch = !row.cover_image || !row.total_episodes || !row.genres || !row.studios || !row.type || !row.year || !row.season || !row.duration_minutes;
+            if (needsApiFetch) {
+                 try {
+                    jikanDataFromApi = await jikanApi.getAnimeById(mal_id);
+                 } catch (apiError) {
+                    console.warn(`Could not fetch details for MAL ID ${mal_id} during import. Proceeding with CSV data.`);
+                 }
+            }
         }
-
-        const user_rating_str = row.user_rating;
-        const user_rating = user_rating_str === '' ? null : parseInt(user_rating_str, 10);
-         if (user_rating_str !== '' && (isNaN(user_rating as number) || (user_rating as number) < 1 || (user_rating as number) > 10) ) {
-            processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'user_rating': ${user_rating_str}. Must be between 1-10 or empty.` });
+        
+        if (!mal_id) { // Should be caught earlier, but safety net
+            processingErrors.push({ animeTitle: title_csv || `Row ${i+1}`, error: "Failed to determine MAL ID for processing." });
             continue;
         }
         
-        const year_str = row.year;
-        const year = year_str === '' ? null : parseInt(year_str, 10);
-        if (year_str !== '' && isNaN(year as number)) {
-            processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'year': ${year_str}. Must be a number or empty.` });
-            continue;
+        // --- User-specific fields from CSV (Required) ---
+        const user_status_csv = row.user_status as UserAnimeStatus;
+        if (!USER_ANIME_STATUS_OPTIONS.find(opt => opt.value === user_status_csv)) {
+          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'user_status': ${user_status_csv}.` });
+          continue;
         }
-
-        const broadcast_day_str = row.broadcast_day;
-        const broadcast_day = broadcast_day_str === '' ? null : broadcast_day_str;
-        if (broadcast_day !== null && !BROADCAST_DAY_OPTIONS.find(opt => opt.value === broadcast_day)) {
-           if (broadcast_day !== null && typeof broadcast_day === 'string' && !BROADCAST_DAY_OPTIONS.map(o => o.value.toLowerCase()).includes(broadcast_day.toLowerCase()) && broadcast_day !== "Other") {
-             processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'broadcast_day': ${broadcast_day}. Must be one of predefined values, 'Other', or empty.` });
-             continue;
-           }
+        const current_episode_csv_str = row.current_episode;
+        const current_episode_csv = parseInt(current_episode_csv_str, 10);
+        if (isNaN(current_episode_csv) || current_episode_csv < 0) {
+          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'current_episode': ${current_episode_csv_str}. Must be a non-negative number.` });
+          continue;
         }
         
-        const duration_minutes_str = row.duration_minutes;
-        const duration_minutes = duration_minutes_str === '' || duration_minutes_str === undefined ? null : parseInt(duration_minutes_str, 10);
-        if (duration_minutes_str !== '' && duration_minutes_str !== undefined && (isNaN(duration_minutes as number) || (duration_minutes as number) < 0)) {
-            processingErrors.push({ malId: mal_id, animeTitle: title, error: `Invalid 'duration_minutes': ${duration_minutes_str}. Must be a non-negative number or empty.` });
-            continue;
+        // --- Combine CSV and API Data ---
+        const finalTitle = title_csv || jikanDataFromApi?.title || 'Unknown Title';
+        const cover_image = row.cover_image?.trim() || jikanDataFromApi?.images.webp?.large_image_url || jikanDataFromApi?.images.webp?.image_url || jikanDataFromApi?.images.jpg.large_image_url || `https://cdn.myanimelist.net/images/anime/${Math.floor(mal_id / 1000)}/${mal_id}.jpg`;
+
+        let total_episodes: number | null = null;
+        if (row.total_episodes?.trim()) {
+            const parsed = parseInt(row.total_episodes.trim(), 10);
+            if (!isNaN(parsed) && parsed >= 0) total_episodes = parsed;
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'total_episodes' in CSV: ${row.total_episodes}.` }); continue; }
+        } else if (jikanDataFromApi?.episodes !== undefined) {
+            total_episodes = jikanDataFromApi.episodes;
         }
 
+        let user_rating: number | null = null;
+        if (row.user_rating?.trim()) {
+            const parsed = parseInt(row.user_rating.trim(), 10);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= 10) user_rating = parsed;
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'user_rating' in CSV: ${row.user_rating}. Must be 1-10 or empty.` }); continue; }
+        }
+        
+        const genres = row.genres?.trim() ? row.genres.trim().split(';').map(g => g.trim()).filter(g => g) : (jikanDataFromApi?.genres?.map(g => g.name) || []);
+        const studios = row.studios?.trim() ? row.studios.trim().split(';').map(s => s.trim()).filter(s => s) : (jikanDataFromApi?.studios?.map(s => s.name) || []);
+        const type = row.type?.trim() || jikanDataFromApi?.type || null;
+
+        let year: number | null = null;
+        if (row.year?.trim()) {
+            const parsed = parseInt(row.year.trim(), 10);
+            if (!isNaN(parsed)) year = parsed;
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'year' in CSV: ${row.year}.` }); continue; }
+        } else if (jikanDataFromApi?.year !== undefined) {
+            year = jikanDataFromApi.year;
+        }
+        
+        const season = row.season?.trim() || jikanDataFromApi?.season || null;
+        const streaming_platforms = row.streaming_platforms?.trim() ? row.streaming_platforms.trim().split(';').map(p => p.trim()).filter(p => p) : (jikanDataFromApi?.streaming?.map(s => s.name) || []);
+        
+        let broadcast_day: string | null = null;
+        if (row.broadcast_day?.trim()) {
+            const csvDay = row.broadcast_day.trim();
+            if (BROADCAST_DAY_OPTIONS.find(opt => opt.value === csvDay) || csvDay.toLowerCase() === 'other') broadcast_day = csvDay;
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'broadcast_day' in CSV: ${csvDay}.` }); continue; }
+        } else if (jikanDataFromApi?.broadcast?.day) {
+            broadcast_day = jikanDataFromApi.broadcast.day;
+        }
+
+        let duration_minutes: number | null = null;
+        if (row.duration_minutes?.trim()) {
+            const parsed = parseInt(row.duration_minutes.trim(), 10);
+            if (!isNaN(parsed) && parsed >= 0) duration_minutes = parsed;
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'duration_minutes' in CSV: ${row.duration_minutes}.`}); continue; }
+        } else if (jikanDataFromApi?.duration) {
+            duration_minutes = parseDurationToMinutes(jikanDataFromApi.duration);
+        }
 
         importedAnimeList.push({
           mal_id,
-          title,
-          cover_image: row.cover_image || `https://cdn.myanimelist.net/images/anime/${Math.floor(mal_id / 1000)}/${mal_id}.jpg`,
+          title: finalTitle,
+          cover_image,
           total_episodes,
-          user_status,
-          current_episode,
+          user_status: user_status_csv,
+          current_episode: current_episode_csv,
           user_rating,
-          genres: row.genres ? row.genres.split(';').map(g => g.trim()).filter(g => g) : [],
-          studios: row.studios ? row.studios.split(';').map(s => s.trim()).filter(s => s) : [],
-          type: row.type || null,
+          genres,
+          studios,
+          type,
           year,
-          season: row.season || null,
-          streaming_platforms: row.streaming_platforms ? row.streaming_platforms.split(';').map(p => p.trim()).filter(p => p) : [],
+          season,
+          streaming_platforms,
           broadcast_day,
           duration_minutes,
         });
@@ -199,6 +284,8 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         toast({ title: "Import Partially Successful", description: `${finalResults.successCount} entries imported/updated. ${finalResults.errors.length} errors occurred.`, duration: 7000 });
       } else if (finalResults.errors.length > 0) {
          toast({ title: "Import Failed", description: `No anime imported. ${finalResults.errors.length} errors occurred. See details below.`, variant: "destructive", duration: 7000 });
+      } else if (importedAnimeList.length === 0 && processingErrors.length === 0) {
+        toast({ title: "Import Note", description: "No valid anime data found in the file to import." });
       } else {
         toast({ title: "Import Note", description: "No new anime data found in the file to import, or all entries were already up-to-date." });
       }
@@ -217,21 +304,21 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   };
 
   return (
-    <div className="space-y-4 py-4">
+    <div className="space-y-4 py-4" style={{width: "100%"}}> {/* Changed width to 100% */}
       <div>
         <h4 className="font-medium mb-1 text-sm">Expected CSV Format:</h4>
         <p className="text-xs text-muted-foreground">
           The CSV file must have a header row. Column names are case-insensitive.
-          Required columns: <code className="text-xs bg-muted/50 px-1 rounded">{REQUIRED_HEADERS.join(', ')}</code>.
+          Required columns: <code className="text-xs bg-muted/50 px-1 rounded">mal_id (or title)</code>, <code className="text-xs bg-muted/50 px-1 rounded">user_status</code>, <code className="text-xs bg-muted/50 px-1 rounded">current_episode</code>.
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Full list of supported columns (others will be ignored):
+          Supported columns (others will be ignored):
         </p>
         <code className="block bg-muted p-2 rounded-md text-xs mt-1 break-words">
           {EXPECTED_HEADERS.join(',')}
         </code>
         <p className="text-xs text-muted-foreground mt-1">
-          For <code className="text-xs bg-muted/50 px-1 rounded">genres</code>, <code className="text-xs bg-muted/50 px-1 rounded">studios</code>, and <code className="text-xs bg-muted/50 px-1 rounded">streaming_platforms</code>, use a semi-colon (;) to separate multiple values (e.g., "Action;Adventure").
+          For <code className="text-xs bg-muted/50 px-1 rounded">genres</code>, <code className="text-xs bg-muted/50 px-1 rounded">studios</code>, and <code className="text-xs bg-muted/50 px-1 rounded">streaming_platforms</code>, use a semi-colon (;) to separate multiple values (e.g., "Action;Adventure"). Empty fields for optional data will be filled by API if possible.
         </p>
       </div>
       <div className="space-y-1">
@@ -255,9 +342,9 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
               {importResults.successCount > 0 ? `${importResults.successCount} Anime Imported/Updated Successfully.` : 'Import Processed.'}
               {importResults.errors.length > 0 && ` ${importResults.errors.length} errors occurred.`}
             </AlertTitle>
-            {(importResults.errors.length > 0 || importResults.successCount === 0 && importResults.errors.length === 0) && (
+            {(importResults.errors.length > 0 || (importResults.successCount === 0 && importResults.errors.length === 0)) && (
                  <AlertDescription className="text-xs">
-                    {importResults.errors.length > 0 ? "See error details below." : (importResults.successCount === 0 ? "No data was imported." : "")}
+                    {importResults.errors.length > 0 ? "See error details below." : (importResults.successCount === 0 ? "No data was imported or file was empty." : "")}
                 </AlertDescription>
             )}
           </Alert>
@@ -277,3 +364,5 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
     </div>
   );
 }
+
+    
