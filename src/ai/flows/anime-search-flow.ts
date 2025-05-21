@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview AI-powered anime search flow.
@@ -16,7 +15,7 @@ import { z } from 'genkit';
 
 
 const AiSearchInputSchema = z.object({
-  query: z.string().describe('A natural language description of the anime the user is looking for. For example, "a black swordsman fighting in an online vrmmorpg".'),
+  query: z.string().describe('The natural language description of the anime the user is looking for.'),
 });
 export type AiSearchInput = z.infer<typeof AiSearchInputSchema>;
 
@@ -30,7 +29,7 @@ const searchAnimeOnJikanTool = ai.defineTool(
     name: 'searchAnimeOnJikanTool',
     description: 'Searches for anime on MyAnimeList (via Jikan API) based on a search term. Use this tool to find anime based on keywords, titles, or specific characteristics mentioned by the user. Returns an array of anime objects.',
     inputSchema: z.object({
-      searchTerm: z.string().describe('A concise search term, anime title, or keywords to search for. E.g., "black swordsman vrmmorpg", "Sword Art Online", "sci-fi mecha anime".'),
+      searchTerm: z.string().describe('A concise search term, anime title, or keywords to search for.'),
     }),
     // The tool directly returns an array of JikanAnime objects.
     // Genkit will validate this against JikanAnimeSchema.
@@ -73,6 +72,10 @@ Instructions:
 Example user query: "A black swordsman fighting in an online vrmmorpg"
 You might use the tool with search terms like "black swordsman vrmmorpg", "kirito sao", or "Sword Art Online".
 Then, from the tool's results, you would select "Sword Art Online" and any other highly relevant entries, format them according to JikanAnimeSchema, and return them as an array.
+
+Other Example user query: "An anime about a group of heroes trying to save the world from a demon lord."
+You might use the tool with search terms like "fantasy demon lord heroes", "isekai save world", or "adventure fantasy".
+Then, from the tool's results, you would select highly relevant entries that match the description (e.g., "Maoyu", "The Devil is a Part-Timer!", "Overlord"), format them according to JikanAnimeSchema, and return them as an array.
 `,
   prompt: `User query: {{{query}}}
 
