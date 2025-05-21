@@ -215,12 +215,6 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
           processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'user_status': ${user_status_csv}.` });
           continue;
         }
-        const current_episode_csv_str = row.current_episode;
-        const current_episode_csv = parseInt(current_episode_csv_str, 10);
-        if (isNaN(current_episode_csv) || current_episode_csv < 0) {
-          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'current_episode': ${current_episode_csv_str}. Must be a non-negative number.` });
-          continue;
-        }
         
         // --- Combine CSV and API Data ---
         const finalTitle = title_csv || jikanDataFromApi?.title || 'Unknown Title';
@@ -233,6 +227,24 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
             else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'total_episodes' in CSV: ${row.total_episodes}.` }); continue; }
         } else if (jikanDataFromApi?.episodes !== undefined) {
             total_episodes = jikanDataFromApi.episodes;
+        }
+
+        // --- False Sequenze for total episodes ---
+        const current_episode_csv_str = row.current_episode;
+        let current_episode_csv = parseInt(current_episode_csv_str, 10);
+        if (isNaN(current_episode_csv)) {
+          if(user_status_csv == "completed") {
+            current_episode_csv = total_episodes ?? Infinity;
+          }
+          else if(user_status_csv == "plan_to_watch") {
+            current_episode_csv = 0;
+          }
+          else 
+            current_episode_csv = 0;
+        }
+        else if (current_episode_csv < 0) {
+          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'current_episode': ${current_episode_csv_str}. Must be a non-negative number.` });
+          continue;
         }
 
         let user_rating: number | null = null;
@@ -332,7 +344,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   };
 
   return (
-    <div className="space-y-4 py-4" style={{width: "100%"}}> {/* Changed width to 100% */}
+    <div className="space-y-4 py-4" style={{width: "48%"}}>{/* 100% dosent work*/}
       <div>
         <h4 className="font-medium mb-1 text-sm">Expected CSV Format:</h4>
         <p className="text-xs text-muted-foreground">
