@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AnimeCard } from "@/components/anime/AnimeCard";
@@ -33,6 +33,9 @@ import { StatusDistributionBar } from '@/components/shelf/StatusDistributionBar'
 
 
 const ALL_FILTER_VALUE = "_all_";
+const INITIAL_LOAD_COUNT = 12;
+const SUBSEQUENT_LOAD_COUNT = 8;
+
 
 interface GroupedShelfItem {
   id: string; 
@@ -70,6 +73,10 @@ export default function MyShelfPage() {
 
   const [relationsMap, setRelationsMap] = useState<Map<number, JikanAnimeRelation[]>>(new Map());
   const [apiError, setApiError] = useState<string | null>(null);
+
+  const [displayedShelfItems, setDisplayedShelfItems] = useState<GroupedShelfItem[]>([]);
+  const [hasMoreShelfItems, setHasMoreShelfItems] = useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (shelfInitialized) {
@@ -142,7 +149,6 @@ export default function MyShelfPage() {
     try {
       const input: AiSearchInput = { query: aiSearchQuery };
       const results = await searchAnimeWithAi(input);
-      // De-duplicate AI results as well, as underlying tool might return duplicates if called multiple times
       const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
       setAiSearchResults(uniqueResults);
     } catch (e) {
@@ -194,12 +200,10 @@ export default function MyShelfPage() {
         return [];
     }
 
-    // Start with itemsPassingOtherFilters, then apply the status filter
     const fullyFilteredAnime = itemsPassingOtherFilters.filter(anime => {
         const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
         return statusMatch;
     });
-
 
     if (fullyFilteredAnime.length === 0) return [];
 
@@ -332,6 +336,50 @@ export default function MyShelfPage() {
 
   }, [itemsPassingOtherFilters, statusFilter, relationsMap, shelfInitialized, isLoadingRelations, sortOption, sortOrder, shelf.length]);
 
+  useEffect(() => {
+    if (groupedAndFilteredShelf.length > 0) {
+      setDisplayedShelfItems(groupedAndFilteredShelf.slice(0, INITIAL_LOAD_COUNT));
+      setHasMoreShelfItems(groupedAndFilteredShelf.length > INITIAL_LOAD_COUNT);
+    } else {
+      setDisplayedShelfItems([]);
+      setHasMoreShelfItems(false);
+    }
+  }, [groupedAndFilteredShelf]);
+
+  const handleLoadMoreShelfItems = useCallback(() => {
+    if (displayedShelfItems.length >= groupedAndFilteredShelf.length) {
+      setHasMoreShelfItems(false);
+      return;
+    }
+    const currentLength = displayedShelfItems.length;
+    const nextItems = groupedAndFilteredShelf.slice(currentLength, currentLength + SUBSEQUENT_LOAD_COUNT);
+    setDisplayedShelfItems(prevItems => [...prevItems, ...nextItems]);
+    setHasMoreShelfItems((currentLength + SUBSEQUENT_LOAD_COUNT) < groupedAndFilteredShelf.length);
+  }, [displayedShelfItems, groupedAndFilteredShelf]);
+
+  useEffect(() => {
+    const currentRef = loadMoreRef.current;
+    if (!currentRef || !hasMoreShelfItems || isLoadingShelf || isLoadingRelations) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          handleLoadMoreShelfItems();
+        }
+      },
+      { threshold: 0.1 } 
+    );
+
+    observer.observe(currentRef);
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+      observer.disconnect();
+    };
+  }, [loadMoreRef, hasMoreShelfItems, handleLoadMoreShelfItems, isLoadingShelf, isLoadingRelations]);
+
 
   const clearFilters = () => {
     setGenreFilter([]);
@@ -377,7 +425,6 @@ export default function MyShelfPage() {
         <p className="text-muted-foreground mb-6">Search for anime by title or use AI to find anime based on description.</p>
         
         <div className="space-y-4">
-          {/* Standard Search */}
           <div>
             <Label htmlFor="standard-search-input" className="text-sm font-medium mb-1 block">Standard Search</Label>
             <div className="flex gap-2">
@@ -397,7 +444,6 @@ export default function MyShelfPage() {
             </div>
           </div>
 
-          {/* AI Search */}
           <div>
             <Label htmlFor="ai-search-input" className="text-sm font-medium mb-1 block">AI-Powered Search</Label>
             <div className="flex gap-2">
@@ -598,7 +644,7 @@ export default function MyShelfPage() {
                 </Select>
             </div>
             <div className="w-full sm:w-auto">
-                <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label>
+                <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label> {/* Label for spacing */}
                 <Button 
                     variant="outline" 
                     onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} 
@@ -611,7 +657,7 @@ export default function MyShelfPage() {
         </div>
 
 
-        {apiError && shelf.length > 0 && ( // Only show relation API error if shelf is not empty
+        {apiError && shelf.length > 0 && ( 
           <Alert variant="destructive" className="mb-6">
             <Info className="h-4 w-4" />
             <AlertTitle>API Error Loading Relations</AlertTitle>
@@ -624,34 +670,42 @@ export default function MyShelfPage() {
           </Alert>
         )}
 
-        {(isLoadingShelf || (shelf.length > 0 && isLoadingRelations)) && (
+        {(isLoadingShelf || (shelf.length > 0 && isLoadingRelations && displayedShelfItems.length === 0)) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-           {renderSkeletons(8)}
+           {renderSkeletons(INITIAL_LOAD_COUNT)}
           </div>
         )}
         
-        {!isLoadingShelf && !isLoadingRelations && groupedAndFilteredShelf.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {groupedAndFilteredShelf.map(groupedItem => {
-              if (groupedItem.isGroup) {
-                return <AnimeGroupCard key={groupedItem.id} group={groupedItem.items} relationsMap={relationsMap} />;
-              } else {
-                const userAnime = groupedItem.items[0];
-                 const partialJikanAnime: Partial<JikanAnime> = { 
-                    mal_id: userAnime.mal_id,
-                    title: userAnime.title,
-                    images: { jpg: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image }, webp: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image } },
-                    episodes: userAnime.total_episodes,
-                    genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
-                    studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
-                    type: userAnime.type,
-                    year: userAnime.year,
-                    season: userAnime.season,
-                 };
-                return <AnimeCard key={`shelf-${userAnime.mal_id}`} anime={partialJikanAnime as JikanAnime} shelfItem={userAnime} />;
-              }
-            })}
-          </div>
+        {!isLoadingShelf && !isLoadingRelations && displayedShelfItems.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {displayedShelfItems.map(groupedItem => {
+                if (groupedItem.isGroup) {
+                  return <AnimeGroupCard key={groupedItem.id} group={groupedItem.items} relationsMap={relationsMap} />;
+                } else {
+                  const userAnime = groupedItem.items[0];
+                  const partialJikanAnime: Partial<JikanAnime> = { 
+                      mal_id: userAnime.mal_id,
+                      title: userAnime.title,
+                      images: { jpg: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image }, webp: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image } },
+                      episodes: userAnime.total_episodes,
+                      genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
+                      studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
+                      type: userAnime.type,
+                      year: userAnime.year,
+                      season: userAnime.season,
+                  };
+                  return <AnimeCard key={`shelf-${userAnime.mal_id}`} anime={partialJikanAnime as JikanAnime} shelfItem={userAnime} />;
+                }
+              })}
+            </div>
+            {hasMoreShelfItems && (
+              <div ref={loadMoreRef} className="flex justify-center items-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <span className="ml-2 text-muted-foreground">Loading more...</span>
+              </div>
+            )}
+          </>
         )}
 
         {!isLoadingShelf && !isLoadingRelations && groupedAndFilteredShelf.length === 0 && shelf.length > 0 && (
