@@ -38,10 +38,10 @@ const SUBSEQUENT_LOAD_COUNT = 8;
 
 
 interface GroupedShelfItem {
-  id: string; 
+  id: string;
   isGroup: boolean;
-  items: UserAnime[]; 
-  representativeAnime: UserAnime; 
+  items: UserAnime[];
+  representativeAnime: UserAnime;
 }
 
 type SortOption = 'title' | 'rating' | 'year' | 'completion';
@@ -49,7 +49,7 @@ type SortOrder = 'asc' | 'desc';
 
 export default function MyShelfPage() {
   const { shelf, isInitialized: shelfInitialized } = useAnimeShelf();
-  
+
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<JikanAnime[]>([]);
   const [isLoadingSearch, setIsLoadingSearch] = useState(false);
@@ -58,10 +58,10 @@ export default function MyShelfPage() {
   const [aiSearchResults, setAiSearchResults] = useState<JikanAnime[]>([]);
   const [isLoadingAiSearch, setIsLoadingAiSearch] = useState(false);
   const [aiSearchError, setAiSearchError] = useState<string | null>(null);
-  
+
   const [isLoadingShelf, setIsLoadingShelf] = useState(true);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
-  
+
   const [localShelfSearchQuery, setLocalShelfSearchQuery] = useState('');
   const [genreFilter, setGenreFilter] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<UserAnimeStatus | typeof ALL_FILTER_VALUE>(ALL_FILTER_VALUE);
@@ -78,17 +78,6 @@ export default function MyShelfPage() {
   const [hasMoreShelfItems, setHasMoreShelfItems] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (shelfInitialized) {
-      setIsLoadingShelf(false);
-      if (shelf.length > 0) {
-        fetchRelationsForAllShelfItems();
-      } else {
-        setIsLoadingRelations(false); 
-      }
-    }
-  }, [shelfInitialized, shelf]);
-
   const fetchRelationsForAllShelfItems = useCallback(async () => {
     if (shelf.length === 0) {
         setRelationsMap(new Map());
@@ -100,9 +89,9 @@ export default function MyShelfPage() {
     const newRelationsMap = new Map<number, JikanAnimeRelation[]>();
     try {
       for (const anime of shelf) {
-        if (!relationsMap.has(anime.mal_id)) { 
+        if (!relationsMap.has(anime.mal_id)) {
           const relations = await jikanApi.getAnimeRelations(anime.mal_id);
-          if (relations) { 
+          if (relations) {
             newRelationsMap.set(anime.mal_id, relations);
           } else {
             newRelationsMap.set(anime.mal_id, []);
@@ -118,7 +107,19 @@ export default function MyShelfPage() {
         setIsLoadingRelations(false);
         setRelationsMap(prev => new Map([...Array.from(prev.entries()), ...Array.from(newRelationsMap.entries())]));
     }
-  }, [shelf, relationsMap]); 
+  }, [shelf, relationsMap]);
+
+  useEffect(() => {
+    if (shelfInitialized) {
+      setIsLoadingShelf(false);
+      if (shelf.length > 0) {
+        fetchRelationsForAllShelfItems();
+      } else {
+        setIsLoadingRelations(false);
+      }
+    }
+  }, [shelfInitialized, shelf, fetchRelationsForAllShelfItems]);
+
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -158,7 +159,7 @@ export default function MyShelfPage() {
     }
     setIsLoadingAiSearch(false);
   };
-  
+
   const uniqueGenres = useMemo(() => {
     if (!shelfInitialized) return [];
     const allGenres = shelf.reduce((acc, anime) => {
@@ -175,28 +176,28 @@ export default function MyShelfPage() {
       const ratingMatch = ratingFilter === ALL_FILTER_VALUE ? true : anime.user_rating === parseInt(ratingFilter);
       const typeMatch = typeFilter.length === 0 ? true : (anime.type ? typeFilter.includes(anime.type) : false);
       const localSearchMatch = localShelfSearchQuery.trim() === '' ? true : anime.title.toLowerCase().includes(localShelfSearchQuery.toLowerCase().trim());
-      
+
       return genreMatch && ratingMatch && typeMatch && localSearchMatch;
     });
   }, [shelf, genreFilter, ratingFilter, typeFilter, localShelfSearchQuery, shelfInitialized]);
 
   const statusCounts = useMemo(() => {
     if (!shelfInitialized) return {};
-    
+
     const counts: Record<string, number> = {
       [ALL_FILTER_VALUE]: itemsPassingOtherFilters.length
     };
-    
+
     USER_ANIME_STATUS_OPTIONS.forEach(opt => {
       counts[opt.value] = itemsPassingOtherFilters.filter(anime => anime.user_status === opt.value).length;
     });
-    
+
     return counts;
   }, [itemsPassingOtherFilters, shelfInitialized]);
 
 
   const groupedAndFilteredShelf = useMemo((): GroupedShelfItem[] => {
-    if (!shelfInitialized || (shelf.length > 0 && relationsMap.size === 0 && isLoadingRelations) ) { 
+    if (!shelfInitialized || (shelf.length > 0 && relationsMap.size === 0 && isLoadingRelations) ) {
         return [];
     }
 
@@ -231,7 +232,7 @@ export default function MyShelfPage() {
                     if (['Sequel', 'Prequel', 'Parent story', 'Full story', 'Side story'].includes(relation.relation)) {
                         for (const entry of relation.entry) {
                             if (shelfItemsMap.has(entry.mal_id) && !currentSeriesMalIds.has(entry.mal_id)) {
-                                visited.add(entry.mal_id); 
+                                visited.add(entry.mal_id);
                                 currentSeriesMalIds.add(entry.mal_id);
                                 queue.push(entry.mal_id);
                             }
@@ -240,15 +241,15 @@ export default function MyShelfPage() {
                 }
             }
         }
-        
+
         const groupItems = Array.from(currentSeriesMalIds)
             .map(id => shelfItemsMap.get(id)!)
-            .filter(Boolean) 
-            .sort((a,b) => (a.mal_id) - (b.mal_id)); 
+            .filter(Boolean)
+            .sort((a,b) => (a.mal_id) - (b.mal_id));
 
         if (groupItems.length > 0) {
             const representative = groupItems.find(item => item.mal_id === anime.mal_id) || groupItems[0];
-            
+
             finalGroupedItems.push({
                 id: representative.mal_id.toString() + (groupItems.length > 1 ? "_group" : "_single"),
                 isGroup: groupItems.length > 1,
@@ -273,14 +274,14 @@ export default function MyShelfPage() {
         case 'rating':
           const getGroupAvgRating = (items: UserAnime[]): number => {
             const ratedItems = items.filter(item => item.user_rating !== null);
-            if (ratedItems.length === 0) return sortOrder === 'asc' ? Infinity : -Infinity; 
+            if (ratedItems.length === 0) return sortOrder === 'asc' ? Infinity : -Infinity;
             return ratedItems.reduce((sum, item) => sum + item.user_rating!, 0) / ratedItems.length;
           };
           valA = a.isGroup ? getGroupAvgRating(a.items) : (a.items[0].user_rating ?? (sortOrder === 'asc' ? Infinity : -Infinity));
           valB = b.isGroup ? getGroupAvgRating(b.items) : (b.items[0].user_rating ?? (sortOrder === 'asc' ? Infinity : -Infinity));
           break;
         case 'year':
-          valA = repA.year ?? (sortOrder === 'asc' ? Infinity : -Infinity); 
+          valA = repA.year ?? (sortOrder === 'asc' ? Infinity : -Infinity);
           valB = repB.year ?? (sortOrder === 'asc' ? Infinity : -Infinity);
           break;
         case 'completion':
@@ -294,17 +295,17 @@ export default function MyShelfPage() {
                 if (item.total_episodes !== null && item.total_episodes > 0) {
                   total += item.total_episodes;
                   hasValidTotal = true;
-                } else if (item.total_episodes === 0) { 
-                  hasValidTotal = true; 
+                } else if (item.total_episodes === 0) {
+                  hasValidTotal = true;
                 }
               });
-              if (!hasValidTotal || (total === 0 && current > 0) ) return -1; 
-              if (total === 0 && current === 0) return 1; 
-              return total === 0 ? -1 : current / total; 
+              if (!hasValidTotal || (total === 0 && current > 0) ) return -1;
+              if (total === 0 && current === 0) return 1;
+              return total === 0 ? -1 : current / total;
             } else {
               const item = items[0];
               if (item.total_episodes === null) return -1;
-              if (item.total_episodes === 0) return item.current_episode >= 0 ? 1 : -1; 
+              if (item.total_episodes === 0) return item.current_episode >= 0 ? 1 : -1;
               return item.current_episode / item.total_episodes;
             }
           };
@@ -367,7 +368,7 @@ export default function MyShelfPage() {
           handleLoadMoreShelfItems();
         }
       },
-      { threshold: 0.1 } 
+      { threshold: 0.1 }
     );
 
     observer.observe(currentRef);
@@ -423,7 +424,7 @@ export default function MyShelfPage() {
       <section className="bg-card p-6 rounded-lg shadow-sm">
         <h1 className="text-3xl font-bold mb-2 text-primary">Find Your Next Obsession</h1>
         <p className="text-muted-foreground mb-6">Search for anime by title or use AI to find anime based on description.</p>
-        
+
         <div className="space-y-4">
           <div>
             <Label htmlFor="standard-search-input" className="text-sm font-medium mb-1 block">Standard Search</Label>
@@ -463,7 +464,7 @@ export default function MyShelfPage() {
             </div>
           </div>
         </div>
-        
+
         {apiError && (
           <Alert variant="destructive" className="mt-4">
             <Info className="h-4 w-4" />
@@ -531,7 +532,7 @@ export default function MyShelfPage() {
         {shelfInitialized && shelf.length > 0 && (
           <StatusDistributionBar shelf={shelf} />
         )}
-        
+
         <div className="mb-6 p-4 bg-card rounded-lg shadow-sm">
             <Label htmlFor="local-shelf-search" className="text-sm font-medium mb-1 block">Search My Shelf</Label>
             <div className="relative">
@@ -542,7 +543,7 @@ export default function MyShelfPage() {
                     placeholder="Search by title in your shelf..."
                     value={localShelfSearchQuery}
                     onChange={(e) => setLocalShelfSearchQuery(e.target.value)}
-                    className="pl-10 w-full" 
+                    className="pl-10 w-full"
                 />
             </div>
         </div>
@@ -567,7 +568,7 @@ export default function MyShelfPage() {
                         checked ? [...prev, genre] : prev.filter(g => g !== genre)
                       );
                     }}
-                    onSelect={(e) => e.preventDefault()} 
+                    onSelect={(e) => e.preventDefault()}
                   >
                     {genre}
                   </DropdownMenuCheckboxItem>
@@ -581,7 +582,7 @@ export default function MyShelfPage() {
               <SelectTrigger id="status-filter"><SelectValue placeholder="All Statuses" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Statuses ({statusCounts[ALL_FILTER_VALUE] ?? 0})</SelectItem>
-                {USER_ANIME_STATUS_OPTIONS.map(opt => 
+                {USER_ANIME_STATUS_OPTIONS.map(opt =>
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label} ({statusCounts[opt.value] ?? 0})
                   </SelectItem>
@@ -618,7 +619,7 @@ export default function MyShelfPage() {
                         checked ? [...prev, option.value] : prev.filter(v => v !== option.value)
                       );
                     }}
-                    onSelect={(e) => e.preventDefault()} 
+                    onSelect={(e) => e.preventDefault()}
                   >
                     {option.label}
                   </DropdownMenuCheckboxItem>
@@ -645,9 +646,9 @@ export default function MyShelfPage() {
             </div>
             <div className="w-full sm:w-auto">
                 <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label> {/* Label for spacing */}
-                <Button 
-                    variant="outline" 
-                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} 
+                <Button
+                    variant="outline"
+                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
                     className="w-full"
                 >
                     {sortOrder === 'asc' ? <ArrowUpAZ className="mr-2 h-4 w-4" /> : <ArrowDownAZ className="mr-2 h-4 w-4" />}
@@ -657,7 +658,7 @@ export default function MyShelfPage() {
         </div>
 
 
-        {apiError && shelf.length > 0 && ( 
+        {apiError && shelf.length > 0 && (
           <Alert variant="destructive" className="mb-6">
             <Info className="h-4 w-4" />
             <AlertTitle>API Error Loading Relations</AlertTitle>
@@ -675,7 +676,7 @@ export default function MyShelfPage() {
            {renderSkeletons(INITIAL_LOAD_COUNT)}
           </div>
         )}
-        
+
         {!isLoadingShelf && !isLoadingRelations && displayedShelfItems.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -684,12 +685,12 @@ export default function MyShelfPage() {
                   return <AnimeGroupCard key={groupedItem.id} group={groupedItem.items} relationsMap={relationsMap} />;
                 } else {
                   const userAnime = groupedItem.items[0];
-                  const partialJikanAnime: Partial<JikanAnime> = { 
+                  const partialJikanAnime: Partial<JikanAnime> = {
                       mal_id: userAnime.mal_id,
                       title: userAnime.title,
                       images: { jpg: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image }, webp: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image } },
                       episodes: userAnime.total_episodes,
-                      genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})), 
+                      genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})),
                       studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
                       type: userAnime.type,
                       year: userAnime.year,
@@ -717,7 +718,7 @@ export default function MyShelfPage() {
             </p>
           </div>
         )}
-        
+
         {!isLoadingShelf && !isLoadingRelations && shelf.length === 0 && (
           <div className="text-center py-10">
             <Search className="mx-auto h-12 w-12 text-muted-foreground" />
