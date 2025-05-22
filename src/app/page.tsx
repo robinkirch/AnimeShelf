@@ -60,7 +60,7 @@ export default function MyShelfPage() {
   const [aiSearchError, setAiSearchError] = useState<string | null>(null);
 
   const [isLoadingShelf, setIsLoadingShelf] = useState(true);
-  const [isLoadingRelations, setIsLoadingRelations] = useState(false);
+  const [isLoadingRelations, setIsLoadingRelations] = useState(true); // Initialize as true
 
   const [localShelfSearchQuery, setLocalShelfSearchQuery] = useState('');
   const [genreFilter, setGenreFilter] = useState<string[]>([]);
@@ -86,28 +86,37 @@ export default function MyShelfPage() {
     }
     setIsLoadingRelations(true);
     setApiError(null);
-    const newRelationsMap = new Map<number, JikanAnimeRelation[]>();
+    
+    const newRelationsFetchedThisCall = new Map<number, JikanAnimeRelation[]>();
+    let anyNewDataFetched = false;
+
     try {
       for (const anime of shelf) {
         if (!relationsMap.has(anime.mal_id)) {
           const relations = await jikanApi.getAnimeRelations(anime.mal_id);
-          if (relations) {
-            newRelationsMap.set(anime.mal_id, relations);
-          } else {
-            newRelationsMap.set(anime.mal_id, []);
-          }
-        } else {
-          newRelationsMap.set(anime.mal_id, relationsMap.get(anime.mal_id)!);
+          // Even if relations are null/empty, we've "checked" this anime, so store something.
+          // Storing an empty array signifies we've checked and found no (or no usable) relations.
+          newRelationsFetchedThisCall.set(anime.mal_id, relations || []);
+          anyNewDataFetched = true;
         }
       }
     } catch (e) {
         console.error("Error fetching relations for shelf items:", e);
         setApiError("Could not load all series details due to API issues. Some groupings may be incomplete.");
     } finally {
+        if (anyNewDataFetched && newRelationsFetchedThisCall.size > 0) {
+          setRelationsMap(prev => {
+            const updatedMap = new Map(prev);
+            newRelationsFetchedThisCall.forEach((value, key) => {
+              updatedMap.set(key, value);
+            });
+            return updatedMap;
+          });
+        }
         setIsLoadingRelations(false);
-        setRelationsMap(prev => new Map([...Array.from(prev.entries()), ...Array.from(newRelationsMap.entries())]));
     }
-  }, [shelf, relationsMap]);
+  }, [shelf, relationsMap]); // relationsMap is a dependency because we read from it. The logic change prevents infinite loops.
+
 
   useEffect(() => {
     if (shelfInitialized) {
@@ -116,9 +125,12 @@ export default function MyShelfPage() {
         fetchRelationsForAllShelfItems();
       } else {
         setIsLoadingRelations(false);
+        if (relationsMap.size > 0) { // Clear relations if shelf is empty
+           setRelationsMap(new Map());
+        }
       }
     }
-  }, [shelfInitialized, shelf, fetchRelationsForAllShelfItems]);
+  }, [shelfInitialized, shelf, fetchRelationsForAllShelfItems]); // fetchRelationsForAllShelfItems is a dependency.
 
 
   const handleSearch = async () => {
@@ -197,7 +209,13 @@ export default function MyShelfPage() {
 
 
   const groupedAndFilteredShelf = useMemo((): GroupedShelfItem[] => {
-    if (!shelfInitialized || (shelf.length > 0 && relationsMap.size === 0 && isLoadingRelations) ) {
+    // Defer grouping if relations are still loading for a non-empty shelf,
+    // and the relationsMap hasn't been populated yet.
+    if (!shelfInitialized || (shelf.length > 0 && isLoadingRelations && relationsMap.size < shelf.length) ) {
+        // relationsMap.size < shelf.length is a heuristic. Better might be:
+        // if items exist for which relationsMap.has(item.mal_id) is false.
+        // For simplicity and performance, this check might be okay for now.
+        // The critical part is not to group with an empty/incomplete relationsMap if it's still loading.
         return [];
     }
 
@@ -212,7 +230,17 @@ export default function MyShelfPage() {
     const visited = new Set<number>();
     const finalGroupedItems: GroupedShelfItem[] = [];
 
-    const sortedShelfForGrouping = [...fullyFilteredAnime].sort((a, b) => a.title.localeCompare(b.title));
+    // Sort before grouping to ensure consistent representative anime for groups.
+    // This primarily affects which anime becomes 'representative' if multiple are part of the same logical series.
+    const sortedShelfForGrouping = [...fullyFilteredAnime].sort((a, b) => {
+        // Prioritize items with earlier air dates, or lower MAL ID as tie-breaker
+        const yearA = a.year ?? Infinity;
+        const yearB = b.year ?? Infinity;
+        if (yearA !== yearB) return yearA - yearB;
+        // Could add season sorting here if available and needed
+        return (a.mal_id) - (b.mal_id);
+    });
+
 
     for (const anime of sortedShelfForGrouping) {
         if (visited.has(anime.mal_id)) continue;
@@ -229,9 +257,10 @@ export default function MyShelfPage() {
 
             if (itemRelations) {
                 for (const relation of itemRelations) {
-                    if (['Sequel', 'Prequel', 'Parent story', 'Full story', 'Side story'].includes(relation.relation)) {
+                    // Consider more relation types for robust grouping if necessary
+                    if (['Sequel', 'Prequel', 'Parent story', 'Full story', 'Side story', 'Alternative version', 'Other'].includes(relation.relation)) {
                         for (const entry of relation.entry) {
-                            if (shelfItemsMap.has(entry.mal_id) && !currentSeriesMalIds.has(entry.mal_id)) {
+                            if (entry.type === 'anime' && shelfItemsMap.has(entry.mal_id) && !currentSeriesMalIds.has(entry.mal_id)) {
                                 visited.add(entry.mal_id);
                                 currentSeriesMalIds.add(entry.mal_id);
                                 queue.push(entry.mal_id);
@@ -244,14 +273,15 @@ export default function MyShelfPage() {
 
         const groupItems = Array.from(currentSeriesMalIds)
             .map(id => shelfItemsMap.get(id)!)
-            .filter(Boolean)
-            .sort((a,b) => (a.mal_id) - (b.mal_id));
+            .filter(Boolean) // Ensure no undefined items if mal_id was somehow not in map
+            .sort((a,b) => (a.year ?? Infinity) - (b.year ?? Infinity) || (a.mal_id) - (b.mal_id)); // Sort group items by air date/MAL ID
 
         if (groupItems.length > 0) {
-            const representative = groupItems.find(item => item.mal_id === anime.mal_id) || groupItems[0];
+            // The first item in the sorted groupItems is a good candidate for representative
+            const representative = groupItems[0]; 
 
             finalGroupedItems.push({
-                id: representative.mal_id.toString() + (groupItems.length > 1 ? "_group" : "_single"),
+                id: representative.mal_id.toString() + (groupItems.length > 1 ? `_group_${groupItems.map(gi=>gi.mal_id).join('_')}` : "_single"),
                 isGroup: groupItems.length > 1,
                 items: groupItems,
                 representativeAnime: representative
@@ -259,6 +289,7 @@ export default function MyShelfPage() {
         }
     }
 
+    // Final sort of grouped items based on user's selected sort option
     const sortedFinalItems = [...finalGroupedItems].sort((a, b) => {
       const repA = a.representativeAnime;
       const repB = b.representativeAnime;
@@ -274,7 +305,7 @@ export default function MyShelfPage() {
         case 'rating':
           const getGroupAvgRating = (items: UserAnime[]): number => {
             const ratedItems = items.filter(item => item.user_rating !== null);
-            if (ratedItems.length === 0) return sortOrder === 'asc' ? Infinity : -Infinity;
+            if (ratedItems.length === 0) return sortOrder === 'asc' ? Infinity : -Infinity; // Handles unrated items for sorting
             return ratedItems.reduce((sum, item) => sum + item.user_rating!, 0) / ratedItems.length;
           };
           valA = a.isGroup ? getGroupAvgRating(a.items) : (a.items[0].user_rating ?? (sortOrder === 'asc' ? Infinity : -Infinity));
@@ -289,23 +320,36 @@ export default function MyShelfPage() {
             if (isGroup) {
               let current = 0;
               let total = 0;
-              let hasValidTotal = false;
+              let hasValidTotalForAll = true; // Assume valid until an item makes it invalid
+              let allAreMoviesOrUnknown = true; // Assume true until a non-movie/non-unknown is found
+
               items.forEach(item => {
                 current += item.current_episode;
                 if (item.total_episodes !== null && item.total_episodes > 0) {
                   total += item.total_episodes;
-                  hasValidTotal = true;
-                } else if (item.total_episodes === 0) {
-                  hasValidTotal = true;
+                  allAreMoviesOrUnknown = false;
+                } else if (item.total_episodes === 0) { // Is a movie/special
+                  // For movies, current_episode > 0 means completed (1/1)
+                  // total += 1; // Consider each movie as 1 "episode" for group completion
+                  // current += item.current_episode > 0 ? 1 : 0;
+                  // If all items are movies, the logic below handles it.
+                } else { // total_episodes is null
+                  hasValidTotalForAll = false;
+                  allAreMoviesOrUnknown = false;
                 }
               });
-              if (!hasValidTotal || (total === 0 && current > 0) ) return -1;
-              if (total === 0 && current === 0) return 1;
-              return total === 0 ? -1 : current / total;
-            } else {
+
+              if (!hasValidTotalForAll) return -1; // Cannot calculate if any part is unknown
+              if (allAreMoviesOrUnknown) { // All items are movies or have total_episodes: 0
+                const completedMovies = items.filter(item => item.current_episode > 0).length;
+                return items.length > 0 ? completedMovies / items.length : 0;
+              }
+              if (total === 0 && current === 0) return 1; // All items (non-movie) are 0/0 (plan to watch) -> treat as 100% for this metric? or 0%?
+              return total === 0 ? -1 : current / total; // If total is 0 but current isn't, it's an issue.
+            } else { // Single item
               const item = items[0];
-              if (item.total_episodes === null) return -1;
-              if (item.total_episodes === 0) return item.current_episode >= 0 ? 1 : -1;
+              if (item.total_episodes === null) return -1; // Unknown
+              if (item.total_episodes === 0) return item.current_episode > 0 ? 1 : 0; // Movie logic: 100% if watched, 0% if not
               return item.current_episode / item.total_episodes;
             }
           };
@@ -318,16 +362,23 @@ export default function MyShelfPage() {
       }
 
       let comparison = 0;
-      if (valA === null || valA === undefined) valA = sortOrder === 'asc' ? Infinity : -Infinity;
-      if (valB === null || valB === undefined) valB = sortOrder === 'asc' ? Infinity : -Infinity;
+      if (valA === null || valA === undefined || valA === Infinity || valA === -Infinity) valA = sortOrder === 'asc' ? Infinity : -Infinity;
+      if (valB === null || valB === undefined || valB === Infinity || valB === -Infinity) valB = sortOrder === 'asc' ? Infinity : -Infinity;
+
 
       if (typeof valA === 'string' && typeof valB === 'string') {
         comparison = valA.localeCompare(valB);
       } else if (typeof valA === 'number' && typeof valB === 'number') {
-        comparison = valA - valB;
-      } else {
-        const strA = String(valA);
-        const strB = String(valB);
+        if (valA === Infinity && valB === Infinity) comparison = 0;
+        else if (valA === Infinity) comparison = 1; // Infinity is "largest"
+        else if (valB === Infinity) comparison = -1;
+        else if (valA === -Infinity && valB === -Infinity) comparison = 0;
+        else if (valA === -Infinity) comparison = -1; // -Infinity is "smallest"
+        else if (valB === -Infinity) comparison = 1;
+        else comparison = valA - valB;
+      } else { // Mixed types or other, convert to string for stable sort
+        const strA = String(valA === Infinity || valA === -Infinity ? valA.toString() : valA);
+        const strB = String(valB === Infinity || valB === -Infinity ? valB.toString() : valB);
         comparison = strA.localeCompare(strB);
       }
       return sortOrder === 'asc' ? comparison : -comparison;
@@ -338,14 +389,24 @@ export default function MyShelfPage() {
   }, [itemsPassingOtherFilters, statusFilter, relationsMap, shelfInitialized, isLoadingRelations, sortOption, sortOrder, shelf.length]);
 
   useEffect(() => {
-    if (groupedAndFilteredShelf.length > 0) {
+    // Only update displayed items if not loading relations for a non-empty shelf
+    // OR if relations are loaded.
+    const canDisplay = !isLoadingRelations || shelf.length === 0 || relationsMap.size >= shelf.length;
+
+    if (groupedAndFilteredShelf.length > 0 && canDisplay) {
       setDisplayedShelfItems(groupedAndFilteredShelf.slice(0, INITIAL_LOAD_COUNT));
       setHasMoreShelfItems(groupedAndFilteredShelf.length > INITIAL_LOAD_COUNT);
-    } else {
+    } else if (!canDisplay && groupedAndFilteredShelf.length === 0) {
+      // If still loading relations and groupedShelf is empty (due to loading condition),
+      // keep displayed items empty but don't necessarily set hasMore to false.
+      setDisplayedShelfItems([]);
+      setHasMoreShelfItems(true); // Assume there might be more once loading finishes
+    }
+     else { // No items after filtering or initial empty state
       setDisplayedShelfItems([]);
       setHasMoreShelfItems(false);
     }
-  }, [groupedAndFilteredShelf]);
+  }, [groupedAndFilteredShelf, isLoadingRelations, relationsMap, shelf]); // Added relationsMap, shelf to deps
 
   const handleLoadMoreShelfItems = useCallback(() => {
     if (displayedShelfItems.length >= groupedAndFilteredShelf.length) {
@@ -360,7 +421,8 @@ export default function MyShelfPage() {
 
   useEffect(() => {
     const currentRef = loadMoreRef.current;
-    if (!currentRef || !hasMoreShelfItems || isLoadingShelf || isLoadingRelations) return;
+    // Do not observe if still loading core shelf data or initial relations
+    if (!currentRef || !hasMoreShelfItems || isLoadingShelf || (isLoadingRelations && shelf.length > 0 && relationsMap.size < shelf.length) ) return;
 
     const observer = new IntersectionObserver(
       entries => {
@@ -368,7 +430,7 @@ export default function MyShelfPage() {
           handleLoadMoreShelfItems();
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 } // Trigger when 10% of the loader is visible
     );
 
     observer.observe(currentRef);
@@ -377,9 +439,9 @@ export default function MyShelfPage() {
       if (currentRef) {
         observer.unobserve(currentRef);
       }
-      observer.disconnect();
+      observer.disconnect(); // Ensure observer is disconnected on unmount
     };
-  }, [loadMoreRef, hasMoreShelfItems, handleLoadMoreShelfItems, isLoadingShelf, isLoadingRelations]);
+  }, [loadMoreRef, hasMoreShelfItems, handleLoadMoreShelfItems, isLoadingShelf, isLoadingRelations, shelf, relationsMap]); // Added shelf, relationsMap
 
 
   const clearFilters = () => {
@@ -418,6 +480,8 @@ export default function MyShelfPage() {
     return typeFilter.map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val).join(', ');
   };
 
+  // Condition for showing main loading skeletons (initial load or major change)
+  const showInitialLoadingSkeletons = isLoadingShelf || (shelfInitialized && shelf.length > 0 && isLoadingRelations && relationsMap.size < shelf.length && displayedShelfItems.length === 0);
 
   return (
     <div className="space-y-8">
@@ -568,7 +632,7 @@ export default function MyShelfPage() {
                         checked ? [...prev, genre] : prev.filter(g => g !== genre)
                       );
                     }}
-                    onSelect={(e) => e.preventDefault()}
+                    onSelect={(e) => e.preventDefault()} // Keep menu open on select
                   >
                     {genre}
                   </DropdownMenuCheckboxItem>
@@ -619,7 +683,7 @@ export default function MyShelfPage() {
                         checked ? [...prev, option.value] : prev.filter(v => v !== option.value)
                       );
                     }}
-                    onSelect={(e) => e.preventDefault()}
+                    onSelect={(e) => e.preventDefault()} // Keep menu open
                   >
                     {option.label}
                   </DropdownMenuCheckboxItem>
@@ -645,11 +709,12 @@ export default function MyShelfPage() {
                 </Select>
             </div>
             <div className="w-full sm:w-auto">
-                <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label> {/* Label for spacing */}
+                <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label> {/* Label for spacing consistency */}
                 <Button
                     variant="outline"
                     onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
                     className="w-full"
+                    aria-label={`Sort order: ${sortOrder === 'asc' ? 'Ascending' : 'Descending'}`}
                 >
                     {sortOrder === 'asc' ? <ArrowUpAZ className="mr-2 h-4 w-4" /> : <ArrowDownAZ className="mr-2 h-4 w-4" />}
                     {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
@@ -671,13 +736,13 @@ export default function MyShelfPage() {
           </Alert>
         )}
 
-        {(isLoadingShelf || (shelf.length > 0 && isLoadingRelations && displayedShelfItems.length === 0)) && (
+        {showInitialLoadingSkeletons && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
            {renderSkeletons(INITIAL_LOAD_COUNT)}
           </div>
         )}
 
-        {!isLoadingShelf && !isLoadingRelations && displayedShelfItems.length > 0 && (
+        {!showInitialLoadingSkeletons && displayedShelfItems.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {displayedShelfItems.map(groupedItem => {
@@ -685,16 +750,21 @@ export default function MyShelfPage() {
                   return <AnimeGroupCard key={groupedItem.id} group={groupedItem.items} relationsMap={relationsMap} />;
                 } else {
                   const userAnime = groupedItem.items[0];
+                  // Create a partial JikanAnime structure for AnimeCard from UserAnime
+                  // This assumes AnimeCard can handle such partial data if shelfItem is also provided.
                   const partialJikanAnime: Partial<JikanAnime> = {
                       mal_id: userAnime.mal_id,
                       title: userAnime.title,
                       images: { jpg: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image }, webp: { image_url: userAnime.cover_image, large_image_url: userAnime.cover_image } },
                       episodes: userAnime.total_episodes,
-                      genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: '', url: ''})),
-                      studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: '', url: ''})),
+                      // Map string genres/studios back to JikanMALItem structure if AnimeCard expects it.
+                      // If AnimeCard directly uses shelfItem's genres/studios, this mapping might differ.
+                      genres: userAnime.genres.map(g => ({ name: g, mal_id: 0, type: 'genre', url: ''})), // Placeholder mal_id, type, url
+                      studios: userAnime.studios.map(s => ({ name: s, mal_id: 0, type: 'studio', url: ''})),
                       type: userAnime.type,
                       year: userAnime.year,
                       season: userAnime.season,
+                      // Other fields from JikanAnime can be added if AnimeCard strictly requires them
                   };
                   return <AnimeCard key={`shelf-${userAnime.mal_id}`} anime={partialJikanAnime as JikanAnime} shelfItem={userAnime} />;
                 }
@@ -709,7 +779,7 @@ export default function MyShelfPage() {
           </>
         )}
 
-        {!isLoadingShelf && !isLoadingRelations && groupedAndFilteredShelf.length === 0 && shelf.length > 0 && (
+        {!showInitialLoadingSkeletons && groupedAndFilteredShelf.length === 0 && shelf.length > 0 && (
            <div className="text-center py-10">
             <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-2 text-xl font-semibold">No Anime Match Filters</h3>
@@ -719,7 +789,7 @@ export default function MyShelfPage() {
           </div>
         )}
 
-        {!isLoadingShelf && !isLoadingRelations && shelf.length === 0 && (
+        {!showInitialLoadingSkeletons && shelf.length === 0 && (
           <div className="text-center py-10">
             <Search className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-2 text-xl font-semibold">Your Shelf is Empty</h3>
