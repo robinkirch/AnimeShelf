@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { searchAnimeWithAi, type AiSearchInput } from '@/ai/flows/anime-search-flow';
 import { StatusDistributionBar } from '@/components/shelf/StatusDistributionBar';
+import { Console } from 'console';
 
 
 const ALL_FILTER_VALUE = "_all_";
