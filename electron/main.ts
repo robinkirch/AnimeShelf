@@ -1,9 +1,8 @@
 
 import { app, BrowserWindow, shell } from 'electron';
 import * as path from 'path';
-import * as isDev from 'electron-is-dev';
+import { fileURLToPath, parse } from 'url';
 import { createServer } from 'http';
-import { parse } from 'url';
 // Correct import for Next.js
 import nextServer from 'next';
 
@@ -11,9 +10,9 @@ import nextServer from 'next';
 // In development, __dirname is electron/main.ts -> electron/
 // In production (packaged app), __dirname is usually resources/app.asar/electron/
 // So, `path.join(__dirname, '..')` should correctly point to the project root where .next/ and package.json are.
-const appDir = path.join(__dirname, '..');
-
-const nextApp = nextServer({ dev: isDev, dir: appDir });
+const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Determine if the app is in development or production mode
+const nextApp = nextServer({ dev: app.isPackaged , dir: appDir });
 const handle = nextApp.getRequestHandler();
 const nextJsPort = 9002; // Ensure this matches your Next.js dev port and can be used in prod
 
@@ -41,14 +40,12 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  if (isDev) {
-    mainWindow.loadURL(`http://localhost:${nextJsPort}`);
-    mainWindow.webContents.openDevTools();
-  } else {
-    // Production: Next.js server is started by Electron main process
-    // The URL will be loaded once the server is ready (see app.on('ready'))
-    mainWindow.loadURL(`http://localhost:${nextJsPort}`);
-  }
+  // The URL will be loaded once the server is ready (see app.on('ready'))
+  mainWindow.loadURL(`http://localhost:${nextJsPort}`);
+
+  // Open DevTools in development
+  // The `isDevelopment` variable is now loaded asynchronously in the ready handler
+  // so we handle DevTools opening there.
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -56,7 +53,7 @@ function createWindow() {
 }
 
 app.on('ready', async () => {
-  if (isDev) {
+  if (!app.isPackaged) {
     // In development, Next.js dev server is started by `yarn dev` (concurrently)
     // We just need to create the window.
     createWindow();
