@@ -68,7 +68,7 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
 
     const averageRating = ratedCount > 0 ? Math.round(sumRatings / ratedCount) : null;
     const overallStatus = lowestStatusIndex < statusOrder.length ? statusOrder[lowestStatusIndex] : 'plan_to_watch';
-    
+
     let displayTotalEpisodes: number | string = totalMaxEpisodes;
     if (hasUnknownMaxEpisodes && knownMaxEpisodesCount > 0) {
         displayTotalEpisodes = `${totalMaxEpisodes}+`;
@@ -81,7 +81,7 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
       currentEpisodes: totalCurrentEpisodes,
       maxEpisodes: displayTotalEpisodes,
       // Use actual numeric total for progress bar if possible, otherwise handle "?" case
-      numericMaxEpisodesForProgress: (hasUnknownMaxEpisodes || knownMaxEpisodesCount === 0) ? null : totalMaxEpisodes, 
+      numericMaxEpisodesForProgress: (hasUnknownMaxEpisodes || knownMaxEpisodesCount === 0) ? null : totalMaxEpisodes,
       rating: averageRating,
       status: overallStatus,
     };
@@ -99,7 +99,7 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
 
   return (
     <>
-      <Card 
+      <Card
         className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 h-full cursor-pointer"
         onClick={() => setIsModalOpen(true)}
       >
@@ -107,7 +107,7 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
           {imagesToDisplay.map((img, index) => (
             <Image
               key={index}
-              src={img.src || "https://picsum.photos/400/600"} // Fallback image
+              src={img.src || "https://placehold.co/400x300.png"} // Fallback image
               alt={img.alt}
               width={400}
               height={300}
@@ -122,15 +122,15 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
               priority={index === imagesToDisplay.length -1} // Prioritize the top-most image
             />
           ))}
-          <Badge 
-            variant="secondary" 
+          <Badge
+            variant="secondary"
             className="absolute top-2 left-2 z-10 bg-black/70 text-white"
             style={{ zIndex: imagesToDisplay.length + 1 }}
           >
             {group.length} {group.length > 1 ? 'titles' : 'title'}
           </Badge>
            {OverallStatusIcon && (
-            <div 
+            <div
               className="absolute top-2 right-2 bg-background/80 p-1.5 rounded-full shadow-md"
               style={{ zIndex: imagesToDisplay.length + 1 }}
             >
@@ -150,9 +150,10 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
           </div>
 
           <div className="space-y-3 mt-2">
-            <ProgressBar 
-                current={aggregatedData.currentEpisodes} 
+            <ProgressBar
+                current={aggregatedData.currentEpisodes}
                 total={aggregatedData.numericMaxEpisodesForProgress}
+                status={aggregatedData.status}
             />
             <div className="text-sm text-muted-foreground">
                 Episodes: {aggregatedData.currentEpisodes} / {aggregatedData.maxEpisodes}

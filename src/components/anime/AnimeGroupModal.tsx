@@ -9,7 +9,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter, 
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { UserAnime, UserAnimeStatus, JikanAnimeRelation, JikanMALItem, JikanAnime as FullJikanAnime } from '@/types/anime'; // Added JikanMALItem and FullJikanAnime
@@ -31,13 +31,13 @@ import { PlusCircle, MinusCircle, Tv, Youtube, Loader2 } from 'lucide-react'; //
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '../ui/badge';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
-import { jikanApi } from '@/lib/jikanApi'; 
+import { jikanApi } from '@/lib/jikanApi';
 
 const NO_BROADCAST_DAY_VALUE = "_none_";
 
 interface EditableAnimeState extends UserAnime {
-  apiStreamingSuggestions?: string[]; 
-  jikanData?: FullJikanAnime; 
+  apiStreamingSuggestions?: string[];
+  jikanData?: FullJikanAnime;
 }
 
 interface AnimeGroupModalProps {
@@ -49,11 +49,11 @@ interface AnimeGroupModalProps {
 }
 
 
-export function AnimeGroupModal({ 
-    isOpen, 
-    onOpenChange, 
-    groupItems, 
-    representativeAnime 
+export function AnimeGroupModal({
+    isOpen,
+    onOpenChange,
+    groupItems,
+    representativeAnime
 }: AnimeGroupModalProps) {
   const { updateAnimeOnShelf } = useAnimeShelf();
   const { toast } = useToast();
@@ -76,12 +76,12 @@ export function AnimeGroupModal({
             };
           })
         );
-        
+
         const sorted = itemsWithDetails.sort((a, b) => {
           const yearA = a.jikanData?.year ?? a.year ?? Infinity;
           const yearB = b.jikanData?.year ?? b.year ?? Infinity;
           if (yearA !== yearB) return yearA - yearB;
-          
+
           const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
           const seasonAIndex = a.jikanData?.season ? seasonOrder.indexOf(a.jikanData.season.toLowerCase()) : Infinity;
           const seasonBIndex = b.jikanData?.season ? seasonOrder.indexOf(b.jikanData.season.toLowerCase()) : Infinity;
@@ -104,27 +104,27 @@ export function AnimeGroupModal({
       )
     );
   };
-  
+
   const handleItemUpdate = (
     anime: EditableAnimeState,
     updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season' | 'duration_minutes'>>,
   ) => {
-    updateAnimeOnShelf(anime.mal_id, updates, anime.jikanData?.episodes ?? anime.total_episodes); 
+    updateAnimeOnShelf(anime.mal_id, updates, anime.jikanData?.episodes ?? anime.total_episodes);
     toast({
       title: "Update Successful",
       description: `Updated progress for "${anime.title}".`
     });
   };
-  
+
   const handleEpisodeChange = (anime: EditableAnimeState, newEpisodeStr: string) => {
     const newEpisode = parseInt(newEpisodeStr, 10);
-    if (isNaN(newEpisode)) return; 
+    if (isNaN(newEpisode)) return;
 
     const totalEps = anime.jikanData?.episodes ?? anime.total_episodes;
     const clampedEpisode = Math.max(0, totalEps != null ? Math.min(newEpisode, totalEps) : newEpisode);
-    
+
     setEditableItems(prev => prev.map(item => item.mal_id === anime.mal_id ? {...item, current_episode: clampedEpisode} : item));
-    handleItemUpdate(anime, { current_episode: clampedEpisode }); 
+    handleItemUpdate(anime, { current_episode: clampedEpisode });
   };
 
   const handleStreamingPlatformsChange = (anime: EditableAnimeState, newPlatforms: string[]) => {
@@ -162,13 +162,13 @@ export function AnimeGroupModal({
             Manage individual anime within this series. Changes are saved automatically.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-grow pr-3 -mr-3"> 
+        <ScrollArea className="flex-grow pr-3 -mr-3">
           <div className="space-y-6 py-4">
             {editableItems.map((anime) => (
               <div key={anime.mal_id} className="p-4 border rounded-lg shadow-sm bg-card">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Image
-                    src={anime.cover_image || "https://picsum.photos/150/225"}
+                    src={anime.cover_image || "https://placehold.co/100x150.png"}
                     alt={`Cover for ${anime.title}`}
                     width={100}
                     height={150}
@@ -189,7 +189,7 @@ export function AnimeGroupModal({
                         <Select
                           value={anime.user_status}
                           onValueChange={(value) => {
-                              handleItemChange(anime.mal_id, 'user_status', value as UserAnimeStatus); 
+                              handleItemChange(anime.mal_id, 'user_status', value as UserAnimeStatus);
                               handleItemUpdate(anime, { user_status: value as UserAnimeStatus });
                           }}
                           aria-label={`Status for ${anime.title}`}
@@ -205,11 +205,11 @@ export function AnimeGroupModal({
                         </Select>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Button 
-                            variant="outline" 
-                            size="icon" 
+                        <Button
+                            variant="outline"
+                            size="icon"
                             className="h-9 w-9"
-                            onClick={() => handleEpisodeChange(anime, (anime.current_episode - 1).toString())} 
+                            onClick={() => handleEpisodeChange(anime, (anime.current_episode - 1).toString())}
                             disabled={anime.current_episode === 0}
                             aria-label={`Decrement episode count for ${anime.title}`}
                         >
@@ -221,17 +221,17 @@ export function AnimeGroupModal({
                                 id={`episode-modal-${anime.mal_id}`}
                                 type="number"
                                 value={anime.current_episode}
-                                onChange={(e) => handleItemChange(anime.mal_id, 'current_episode', parseInt(e.target.value) || 0)} 
-                                onBlur={(e) => handleEpisodeChange(anime, e.target.value)} 
+                                onChange={(e) => handleItemChange(anime.mal_id, 'current_episode', parseInt(e.target.value) || 0)}
+                                onBlur={(e) => handleEpisodeChange(anime, e.target.value)}
                                 className="h-9 text-xs text-center"
                                 min={0}
                                 max={anime.jikanData?.episodes ?? anime.total_episodes ?? undefined}
                                 aria-label={`Current episode for ${anime.title}`}
                             />
                         </div>
-                        <Button 
-                            variant="outline" 
-                            size="icon" 
+                        <Button
+                            variant="outline"
+                            size="icon"
                             className="h-9 w-9"
                             onClick={() => handleEpisodeChange(anime, (anime.current_episode + 1).toString())}
                             disabled={(anime.jikanData?.episodes ?? anime.total_episodes) !== null && anime.current_episode >= (anime.jikanData?.episodes ?? anime.total_episodes ?? Infinity)}
@@ -245,20 +245,20 @@ export function AnimeGroupModal({
                         <RatingInput
                           value={anime.user_rating}
                           onChange={(value) => {
-                            handleItemChange(anime.mal_id, 'user_rating', value); 
+                            handleItemChange(anime.mal_id, 'user_rating', value);
                             handleItemUpdate(anime, { user_rating: value });
                           }}
                         />
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start"> 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
                         <div>
                             <Label htmlFor={`broadcast-day-modal-${anime.mal_id}`} className="text-xs">Broadcast Day</Label>
                             <Select
                                 value={anime.broadcast_day || NO_BROADCAST_DAY_VALUE}
                                 onValueChange={(value) => {
                                     const newDay = value === NO_BROADCAST_DAY_VALUE ? null : value;
-                                    handleItemChange(anime.mal_id, 'broadcast_day', newDay); 
+                                    handleItemChange(anime.mal_id, 'broadcast_day', newDay);
                                     handleItemUpdate(anime, { broadcast_day: newDay });
                                 }}
                                 aria-label={`Broadcast day for ${anime.title}`}
@@ -274,7 +274,7 @@ export function AnimeGroupModal({
                             </SelectContent>
                             </Select>
                         </div>
-                        <div className="mt-0.5"> 
+                        <div className="mt-0.5">
                              <Label htmlFor={`streaming-platforms-modal-${anime.mal_id}`} className="text-xs">Streaming Platforms</Label>
                             <StreamingPlatformsInput
                                 value={anime.streaming_platforms}
@@ -284,7 +284,7 @@ export function AnimeGroupModal({
                             />
                         </div>
                     </div>
-                     {anime.streaming_platforms.length > 0 && !isLoadingDetails && ( 
+                     {anime.streaming_platforms.length > 0 && !isLoadingDetails && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                             {anime.streaming_platforms.map(platform => (
                                 <Badge key={platform} variant="outline" className="text-xs bg-muted text-muted-foreground">
@@ -294,7 +294,11 @@ export function AnimeGroupModal({
                             ))}
                         </div>
                     )}
-                    <ProgressBar current={anime.current_episode} total={anime.jikanData?.episodes ?? anime.total_episodes} />
+                    <ProgressBar
+                        current={anime.current_episode}
+                        total={anime.jikanData?.episodes ?? anime.total_episodes}
+                        status={anime.user_status}
+                    />
                   </div>
                 </div>
               </div>
@@ -308,4 +312,3 @@ export function AnimeGroupModal({
     </Dialog>
   );
 }
-

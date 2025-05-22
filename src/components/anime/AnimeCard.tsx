@@ -28,7 +28,7 @@ import { jikanApi } from '@/lib/jikanApi';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 
 interface AnimeCardProps {
-  anime: JikanAnime | Partial<JikanAnime>; 
+  anime: JikanAnime | Partial<JikanAnime>;
   shelfItem?: UserAnime;
   onIgnorePreview?: (mal_id: number) => void;
   showRestorePreviewButton?: boolean; // New prop
@@ -49,18 +49,18 @@ const NO_BROADCAST_DAY_VALUE = "_none_";
 export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePreviewButton, onRestorePreview }: AnimeCardProps) {
   const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf } = useAnimeShelf();
   const { toast } = useToast();
-  
-  const isOnShelf = shelfItem !== undefined || isAnimeOnShelf(anime.mal_id!); 
+
+  const isOnShelf = shelfItem !== undefined || isAnimeOnShelf(anime.mal_id!);
   const currentShelfItem = shelfItem || useAnimeShelf().getAnimeFromShelf(anime.mal_id!);
 
   const [relations, setRelations] = useState<JikanAnimeRelation[]>([]);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   const [showAddAllButton, setShowAddAllButton] = useState(false);
-  
-  const fullAnimeDataForDialog = anime as JikanAnime; 
+
+  const fullAnimeDataForDialog = anime as JikanAnime;
 
   const apiStreamingSuggestions = useMemo(() => {
-    const fullData = anime as JikanAnime; 
+    const fullData = anime as JikanAnime;
     return fullData.streaming?.map((s: JikanMALItem) => s.name) || [];
   }, [anime]);
 
@@ -72,7 +72,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
         try {
             const rels = await jikanApi.getAnimeRelations(anime.mal_id);
             setRelations(rels);
-            
+
             const hasSequelsOrPrequels = rels.some(relation =>
               (relation.relation === 'Sequel' || relation.relation === 'Prequel') &&
               relation.entry.some(e => e.type === 'anime')
@@ -80,13 +80,13 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
             setShowAddAllButton(hasSequelsOrPrequels);
         } catch (error) {
             console.error("Failed to fetch relations for anime ID:", anime.mal_id, error);
-            setShowAddAllButton(false); 
+            setShowAddAllButton(false);
         } finally {
             setIsLoadingRelations(false);
         }
       } else {
-        setRelations([]); 
-        setShowAddAllButton(false); 
+        setRelations([]);
+        setShowAddAllButton(false);
       }
     };
     fetchRelations();
@@ -98,7 +98,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
         toast({ title: "Error", description: "Cannot add anime without a valid ID.", variant: "destructive" });
         return;
     }
-    addAnimeToShelf(fullAnimeDataForDialog, details); 
+    addAnimeToShelf(fullAnimeDataForDialog, details);
     toast({ title: "Added to Shelf", description: `"${anime.title}" has been added to your shelf.` });
   };
 
@@ -142,7 +142,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
       updateAnimeOnShelf(anime.mal_id, { current_episode: currentShelfItem.current_episode - 1 }, fullAnimeDataForDialog.episodes);
     }
   };
-  
+
   const handleSetEpisode = (episode: number) => {
     if (currentShelfItem && anime.mal_id) {
       const totalEps = fullAnimeDataForDialog.episodes ?? currentShelfItem.total_episodes;
@@ -158,7 +158,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
         toast({ title: "Removed from Shelf", description: `"${anime.title}" has been removed from your shelf.`, variant: "destructive" });
     }
   };
-  
+
   const StatusIcon = currentShelfItem ? statusIcons[currentShelfItem.user_status] : null;
 
 
@@ -166,13 +166,13 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
     <Card className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 h-full">
       <CardHeader className="p-0 relative">
         <Image
-          src={anime.images?.webp?.large_image_url || anime.images?.webp?.image_url || anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || "https://picsum.photos/400/600"}
+          src={anime.images?.webp?.large_image_url || anime.images?.webp?.image_url || anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || "https://placehold.co/400x300.png"}
           alt={`Cover image for ${anime.title}`}
           width={400}
           height={300}
           className="object-cover w-full h-48 md:h-64"
           data-ai-hint="anime cover art"
-          priority={false} 
+          priority={false}
         />
          {currentShelfItem && StatusIcon && (
           <div className="absolute top-2 right-2 bg-background/80 p-1.5 rounded-full shadow-md">
@@ -191,7 +191,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
           {currentShelfItem?.broadcast_day && <span> &bull; {currentShelfItem.broadcast_day}</span>}
           {(anime as JikanAnime).broadcast?.day && !currentShelfItem?.broadcast_day && <span> &bull; {(anime as JikanAnime).broadcast!.day}</span>}
         </div>
-        
+
         <div className="flex flex-wrap gap-1 mb-3">
           {anime.genres?.slice(0, 3).map(genre => (
             <Badge key={`${anime.mal_id}-${genre.mal_id}-${genre.name}`} variant="secondary" className="text-xs">{genre.name}</Badge>
@@ -200,31 +200,35 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
 
         {currentShelfItem && (
           <div className="space-y-3">
-            <ProgressBar current={currentShelfItem.current_episode} total={currentShelfItem.total_episodes} />
+            <ProgressBar
+                current={currentShelfItem.current_episode}
+                total={currentShelfItem.total_episodes}
+                status={currentShelfItem.user_status}
+            />
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="icon" 
-                onClick={handleDecrementEpisode} 
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleDecrementEpisode}
                 disabled={currentShelfItem.current_episode === 0}
                 aria-label={`Decrement episode count for ${anime.title}`}
               >
                 <MinusCircle size={16} />
               </Button>
-              <Input 
+              <Input
                 type="number"
                 value={currentShelfItem.current_episode}
-                onChange={(e) => handleItemChange(anime.mal_id!, 'current_episode', parseInt(e.target.value))} 
-                onBlur={(e) => handleSetEpisode(parseInt(e.target.value))} 
+                onChange={(e) => handleItemChange(anime.mal_id!, 'current_episode', parseInt(e.target.value))}
+                onBlur={(e) => handleSetEpisode(parseInt(e.target.value))}
                 className="w-16 text-center h-9"
                 min={0}
                 max={currentShelfItem.total_episodes ?? undefined}
                 aria-label={`Current episode for ${anime.title}`}
               />
-              <Button 
-                variant="outline" 
-                size="icon" 
-                onClick={handleIncrementEpisode} 
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleIncrementEpisode}
                 disabled={currentShelfItem.total_episodes !== null && currentShelfItem.current_episode >= currentShelfItem.total_episodes}
                 aria-label={`Increment episode count for ${anime.title}`}
               >
@@ -307,7 +311,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
                 </Button>
               </AddAllToShelfDialog>
             )}
-            
+
             {isOnShelf && currentShelfItem && (
               <Button variant="destructive" className="w-full" onClick={handleRemoveFromShelf}>
                 <Trash2 size={16} className="mr-2" /> Remove from Shelf

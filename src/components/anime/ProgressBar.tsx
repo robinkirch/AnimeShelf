@@ -1,39 +1,48 @@
+
+import type { UserAnimeStatus } from '@/types/anime'; // Added import
+
 interface ProgressBarProps {
   current: number;
   total: number | null;
-  height?: string; 
+  status?: UserAnimeStatus; // New prop
+  height?: string;
 }
 
-export function ProgressBar({ current, total, height = "h-2.5" }: ProgressBarProps) {
-  if (total === null || total === 0) {
-    const displayWidth = (current > 0) ? '100%' : '0%';
-    const titleText = total === 0 
+export function ProgressBar({ current, total, status, height = "h-2.5" }: ProgressBarProps) {
+  let percentage: number;
+  let displayWidth: string;
+  let colorClass = 'bg-accent'; // Default color
+  let titleText: string;
+
+  if (status === 'dropped') {
+    displayWidth = '100%';
+    percentage = 100; // For ARIA
+    colorClass = 'bg-destructive'; // Red for dropped
+    const totalDisplay = total === null ? 'unknown' : total === 0 ? '0 (e.g., movie)' : total;
+    titleText = `Status: Dropped (Progress: ${current} of ${totalDisplay} episodes)`;
+  } else if (total === null || total === 0) {
+    displayWidth = (current > 0) ? '100%' : '0%';
+    percentage = (current > 0) ? 100 : 0; // For ARIA
+    // Keep accent color for unknown/movie unless dropped
+    titleText = total === 0
       ? `Progress: ${current} of 0 episodes (e.g., a movie or special)`
       : `Progress: ${current} episodes (total unknown)`;
-
-    return <div className={`${height} w-full bg-muted rounded-full shadow-inner`} title={titleText}>
-        <div
-            className="bg-accent h-full rounded-full transition-all duration-300 ease-in-out"
-            style={{ width: displayWidth }}
-            aria-valuenow={current > 0 ? 100 : 0} // Simplified ARIA for this case
-            aria-valuemin={0}
-            aria-valuemax={100} // Represent as percentage when total is unknown/0
-            role="progressbar"
-            aria-label={titleText}
-        />
-    </div>;
+  } else {
+    percentage = Math.min(Math.max((current / total) * 100, 0), 100);
+    displayWidth = `${percentage}%`;
+    titleText = `Progress: ${current} of ${total} episodes`;
   }
-  const percentage = Math.min(Math.max((current / total) * 100, 0), 100);
+
   return (
-    <div className={`${height} w-full bg-muted rounded-full overflow-hidden shadow-inner`} title={`Progress: ${current} of ${total} episodes`}>
+    <div className={`${height} w-full bg-muted rounded-full overflow-hidden shadow-inner`} title={titleText}>
       <div
-        className="bg-accent h-full rounded-full transition-all duration-300 ease-in-out flex items-center justify-center"
-        style={{ width: `${percentage}%` }}
+        className={`${colorClass} h-full rounded-full transition-all duration-300 ease-in-out flex items-center justify-center`}
+        style={{ width: displayWidth }}
         aria-valuenow={percentage}
         aria-valuemin={0}
         aria-valuemax={100}
         role="progressbar"
-        aria-label={`Progress: ${current} of ${total} episodes`}
+        aria-label={titleText}
       >
         {/* Optional: text inside progress bar if it's tall enough */}
         {/* <span className="text-xs text-accent-foreground font-medium">{`${Math.round(percentage)}%`}</span> */}
