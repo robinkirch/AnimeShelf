@@ -137,7 +137,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         try {
             localStorage.setItem(LOCAL_STORAGE_KEY_EPISODE_WATCH_HISTORY, JSON.stringify(episodeWatchHistory));
         } catch (error) {
-            console.error("Failed to save episode watch history to localStorage:", error);
+            console.error("Failed to save episode watch history from localStorage:", error);
         }
     }
   }, [episodeWatchHistory, isInitialized]);
@@ -181,34 +181,93 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       prevShelf.map(animeItemOnShelf => {
         if (animeItemOnShelf.mal_id === mal_id) {
           const oldCurrentEpisode = animeItemOnShelf.current_episode;
-          let newAnimeState = { ...animeItemOnShelf };
+          
+          // Start with a copy of the existing item
+          let workingItem = { ...animeItemOnShelf };
 
-          let mostReliableTotalEpisodes = newAnimeState.total_episodes;
-          if (typeof currentJikanTotalEpisodes === 'number') {
+          // Determine the most reliable total_episodes, updating workingItem if Jikan provides a different value
+          let mostReliableTotalEpisodes = workingItem.total_episodes;
+          if (typeof currentJikanTotalEpisodes === 'number' && currentJikanTotalEpisodes !== workingItem.total_episodes) {
             mostReliableTotalEpisodes = currentJikanTotalEpisodes;
-            if (newAnimeState.total_episodes !== currentJikanTotalEpisodes) {
-              newAnimeState.total_episodes = currentJikanTotalEpisodes;
+            workingItem.total_episodes = currentJikanTotalEpisodes;
+          }
+          
+          // Apply explicit updates from the 'updates' object to the working copy
+          workingItem = { ...workingItem, ...updates };
+
+          let finalStatus = workingItem.user_status;
+          let finalEpisodeCount = workingItem.current_episode;
+
+          // Case 1: Status is explicitly being updated
+          if (updates.user_status) {
+            finalStatus = updates.user_status;
+            if (finalStatus === 'completed') {
+              if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+                finalEpisodeCount = mostReliableTotalEpisodes;
+              }
+              // If total_episodes is null or 0 for a 'completed' movie/special, episode count could be 1 or remain as is if already >0.
+              // For simplicity, if it's a movie (total_episodes: 0 or 1) and completed, current_episode could be 1.
+              // This part can be refined if movies need specific handling for current_episode on completion.
+              else if (mostReliableTotalEpisodes === 0) { // Typically movies
+                 finalEpisodeCount = Math.max(1, finalEpisodeCount); // Assume watching a movie means 1 "episode"
+              }
+            }
+          } 
+          // Case 2: Current episode is explicitly being updated (and status was not)
+          else if (updates.current_episode !== undefined) {
+            finalEpisodeCount = Math.max(0, updates.current_episode);
+            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+              finalEpisodeCount = Math.min(finalEpisodeCount, mostReliableTotalEpisodes);
+            }
+
+            // Auto-calculate status based on the new episode count
+            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+              if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
+              else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
+              else finalStatus = 'watching';
+            } else if (mostReliableTotalEpisodes === 0) { // Movie or similar
+              finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
+            } else { // total_episodes is null (unknown)
+              if (finalEpisodeCount > 0) finalStatus = 'watching';
+              else finalStatus = 'plan_to_watch';
+            }
+          }
+          // Case 3: No explicit status or episode update from user, but total_episodes might have changed (e.g. from API)
+          // and current_episode needs capping.
+          else {
+            let cappedEpisode = Math.max(0, workingItem.current_episode);
+            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+              cappedEpisode = Math.min(cappedEpisode, mostReliableTotalEpisodes);
+            }
+            
+            if (cappedEpisode !== workingItem.current_episode) { // If capping changed the episode count
+              finalEpisodeCount = cappedEpisode;
+              // Auto-calculate status based on the new capped episode count
+              if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+                if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
+                else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
+                else finalStatus = 'watching';
+              } else if (mostReliableTotalEpisodes === 0) {
+                finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
+              } else {
+                if (finalEpisodeCount > 0) finalStatus = 'watching';
+                else finalStatus = 'plan_to_watch';
+              }
+            } else {
+              finalEpisodeCount = cappedEpisode; // Ensure it's at least capped
             }
           }
           
-          newAnimeState = { ...newAnimeState, ...updates };
+          // Construct the final state for the item
+          const newAnimeState: UserAnime = {
+            ...animeItemOnShelf, // Start with original non-progress fields
+            ...updates,         // Apply any other direct updates (e.g. rating, streaming_platforms)
+            user_status: finalStatus,
+            current_episode: finalEpisodeCount,
+            total_episodes: mostReliableTotalEpisodes, // Ensure total_episodes is also up-to-date
+          };
 
-          if (updates.user_status === 'completed' && typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
-            newAnimeState.current_episode = mostReliableTotalEpisodes;
-          } else if (updates.current_episode !== undefined) {
-            let ep = Math.max(0, updates.current_episode);
-            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
-              ep = Math.min(ep, mostReliableTotalEpisodes);
-            }
-            newAnimeState.current_episode = ep;
-          } else { // current_episode not in updates, ensure it's capped if total_episodes changed via Jikan
-            let ep = Math.max(0, newAnimeState.current_episode);
-             if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
-              ep = Math.min(ep, mostReliableTotalEpisodes);
-            }
-            newAnimeState.current_episode = ep;
-          }
-
+          // Log episode watch events if current_episode increased
           if (newAnimeState.current_episode > oldCurrentEpisode) {
             const newEvents: EpisodeWatchEvent[] = [];
             for (let i = oldCurrentEpisode + 1; i <= newAnimeState.current_episode; i++) {
@@ -278,13 +337,11 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
       importedAnimeList.forEach(importedAnime => {
         try {
-          // Basic validation handled by ImportCsvSection, here we just ensure mal_id is number
           if (typeof importedAnime.mal_id !== 'number' || isNaN(importedAnime.mal_id)) {
             errors.push({ malId: importedAnime.mal_id, animeTitle: importedAnime.title, error: "Internal: MAL ID missing or not a number for context processing." });
             return; 
           }
           
-          // Ensure all fields of UserAnime are present, even if null/default
           const completeAnime: UserAnime = {
             mal_id: importedAnime.mal_id,
             title: importedAnime.title || 'Unknown Title',
@@ -306,7 +363,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
           const existingIndex = newShelf.findIndex(item => item.mal_id === completeAnime.mal_id);
           if (existingIndex !== -1) {
-            newShelf[existingIndex] = { ...newShelf[existingIndex], ...completeAnime }; // Merge, CSV values for user fields take precedence
+            newShelf[existingIndex] = { ...newShelf[existingIndex], ...completeAnime }; 
           } else {
             newShelf.push(completeAnime);
           }
