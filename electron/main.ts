@@ -1,5 +1,5 @@
 
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, Menu } from 'electron';
 import * as path from 'path';
 import { fileURLToPath, parse } from 'url';
 import { createServer } from 'http';
@@ -12,7 +12,7 @@ import nextServer from 'next';
 // So, `path.join(__dirname, '..')` should correctly point to the project root where .next/ and package.json are.
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Determine if the app is in development or production mode
-const nextApp = nextServer({ dev: app.isPackaged , dir: appDir });
+const nextApp = nextServer({ dev: !app.isPackaged , dir: appDir }); // dev: true in dev, false in production
 const handle = nextApp.getRequestHandler();
 const nextJsPort = 9002; // Ensure this matches your Next.js dev port and can be used in prod
 
@@ -39,6 +39,12 @@ function createWindow() {
     }
     return { action: 'deny' };
   });
+
+  // ******************************************************
+  // NEU: Menü komplett entfernen
+  Menu.setApplicationMenu(null);
+  // ******************************************************
+
 
   // The URL will be loaded once the server is ready (see app.on('ready'))
   mainWindow.loadURL(`http://localhost:${nextJsPort}`);
