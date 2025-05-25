@@ -1,6 +1,7 @@
+
 "use client";
 import Link from 'next/link';
-import { Clapperboard, Moon, Sun, ArrowRightLeft, LineChart } from 'lucide-react'; // Added LineChart
+import { Clapperboard, Moon, Sun, Settings, LineChart } from 'lucide-react'; // Added Settings, LineChart. Removed ArrowRightLeft
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
@@ -8,15 +9,14 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import React, { useEffect, useState } from 'react';
-import { ImportExportModal } from '@/components/io/ImportExportModal';
+import { SettingsModal } from '@/components/settings/SettingsModal'; // Import the new SettingsModal
 
 export function Header() {
   const pathname = usePathname();
   const { getFilteredUpcomingSequelsCount } = useAnimeShelf();
-  const { theme, toggleTheme } = useTheme();
+  const { theme } = useTheme(); // Removed toggleTheme as it will be in SettingsModal
   const [mounted, setMounted] = useState(false);
-  const [isImportExportModalOpen, setIsImportExportModalOpen] = useState(false);
-
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -53,31 +53,22 @@ export function Header() {
                 </Badge>
               )}
             </Link>
-            <Link href="/stats" className={navLinkClasses("/stats")}> {/* Added Stats link */}
+            <Link href="/stats" className={navLinkClasses("/stats")}>
               Stats
             </Link>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsImportExportModalOpen(true)}
-              aria-label="Import/Export Data"
+              onClick={() => setIsSettingsModalOpen(true)}
+              aria-label="Open Settings"
               className="text-primary-foreground hover:bg-primary/80 hover:text-accent-foreground ml-2"
             >
-              <ArrowRightLeft size={20} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              aria-label="Toggle theme"
-              className="text-primary-foreground hover:bg-primary/80 hover:text-accent-foreground ml-2"
-            >
-              {mounted ? (theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />) : <Moon size={20} /> }
+              <Settings size={20} />
             </Button>
           </nav>
         </div>
       </header>
-      <ImportExportModal isOpen={isImportExportModalOpen} onOpenChange={setIsImportExportModalOpen} />
+      <SettingsModal isOpen={isSettingsModalOpen} onOpenChange={setIsSettingsModalOpen} />
     </>
   );
 }
