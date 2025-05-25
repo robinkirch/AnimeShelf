@@ -37,6 +37,40 @@ function parseDurationToMinutes(durationStr: string | null | undefined): number 
   return null;
 }
 
+/**
+ * Parses a single line of CSV text into an array of strings.
+ * Handles quoted fields containing delimiters and escaped quotes.
+ * @param line - The CSV line to parse.
+ * @param delimiter - The delimiter character (default is ',').
+ * @returns An array of strings representing the fields in the CSV line.
+ */
+function robustCsvLineParse(line: string, delimiter: string = ','): string[] {
+  const values: string[] = [];
+  let currentField = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') {
+      // Check for an escaped quote ("")
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        currentField += '"';
+        i++; // Skip the second quote of the pair
+      } else {
+        inQuotes = !inQuotes; // Toggle inQuotes state
+      }
+    } else if (char === delimiter && !inQuotes) {
+      values.push(currentField);
+      currentField = '';
+    } else {
+      currentField += char;
+    }
+  }
+  values.push(currentField); // Add the last field
+  return values;
+}
+
 
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   const { importAnimeBatch } = useAnimeShelf();
@@ -62,34 +96,6 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
     }
   };
 
-  const robustCsvLineParse = (line: string, delimiter: string = ','): string[] => {
-    const values: string[] = [];
-    let currentField = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-
-        if (char === '"') {
-            if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
-                // Escaped quote
-                currentField += '"';
-                i++; // Skip next quote
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (char === delimiter && !inQuotes) {
-            values.push(currentField);
-            currentField = '';
-        } else {
-            currentField += char;
-        }
-    }
-    values.push(currentField); // Add the last field
-    return values;
-  };
-
-
   const handleImport = async () => {
     if (!file) {
       toast({ title: "Import Error", description: "Please select a CSV file to import.", variant: "destructive" });
@@ -113,22 +119,22 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
       const lines = text.split(/\r\n|\n|\r/).filter(line => line.trim() !== ''); 
       if (lines.length < 1) { 
          setIsImporting(false);
-         toast({ title: "Import Error", description: "CSV file is empty.", variant: "destructive" });
+         toast({ title: "Import Error", description: "CSV file is empty or contains only empty lines.", variant: "destructive" });
          return;
       }
 
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase()); 
+      const csvHeaders = robustCsvLineParse(lines[0]).map(h => h.trim().toLowerCase());
       
-      const missingCoreRequirements = MINIMUM_REQUIRED_FOR_PROCESSING.filter(rh => !headers.includes(rh.toLowerCase()));
-      const hasIdentifier = headers.includes('mal_id') || headers.includes('title');
+      const missingCoreRequirements = MINIMUM_REQUIRED_FOR_PROCESSING.filter(rh => !csvHeaders.includes(rh.toLowerCase()));
+      const hasIdentifier = csvHeaders.includes('mal_id') || csvHeaders.includes('title');
 
       if (missingCoreRequirements.length > 0 || !hasIdentifier) {
          setIsImporting(false);
          let errorMsg = "CSV headers are invalid. ";
-         if (missingCoreRequirements.length > 0) errorMsg += `Missing: ${missingCoreRequirements.join(', ')}. `;
-         if (!hasIdentifier) errorMsg += "Missing identifier: 'mal_id' or 'title' must be present. ";
-         errorMsg += `Found: ${headers.join(', ')}`;
-         toast({ title: "Import Error", description: errorMsg, variant: "destructive" });
+         if (missingCoreRequirements.length > 0) errorMsg += `Missing required fields: ${missingCoreRequirements.join(', ')}. `;
+         if (!hasIdentifier) errorMsg += "Missing identifier: CSV must contain 'mal_id' or 'title'. ";
+         errorMsg += `Headers found: ${csvHeaders.join(', ')}`;
+         toast({ title: "Import Error", description: errorMsg, variant: "destructive", duration: 10000 });
          return;
       }
       
@@ -149,14 +155,13 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
 
         const values = robustCsvLineParse(lineContent);
 
-        if (values.length !== headers.length) {
-            processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${headers.length} based on CSV header, got ${values.length} values. Ensure row has correct number of commas. Line: "${lineContent.substring(0,100)}..."` });
+        if (values.length !== csvHeaders.length) {
+            processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${csvHeaders.length} based on CSV header, got ${values.length} values. Ensure row has correct number of commas. Line: "${lineContent.substring(0,100)}..."` });
             continue;
         }
 
         const row: Record<string, string> = {};
-        headers.forEach((header, index) => {
-          // parseCsvCell (old function) is not needed with robustCsvLineParse if it handles quotes correctly
+        csvHeaders.forEach((header, index) => {
           row[header] = (values[index] || "").trim(); 
         });
         
@@ -186,20 +191,20 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
                     processingErrors.push({ animeTitle: title_csv, error: `Could not find MAL ID for title. Please provide MAL ID or a more precise title.` });
                     continue;
                 }
-            } catch (apiError) {
-                processingErrors.push({ animeTitle: title_csv, error: `API error while searching for title. Please try again or provide MAL ID.` });
+            } catch (apiError: any) {
+                processingErrors.push({ animeTitle: title_csv, error: `API error while searching for title '${title_csv}': ${apiError.message}. Please try again or provide MAL ID.` });
                 continue;
             }
         } else if (!mal_id && !title_csv) {
             processingErrors.push({ animeTitle: `Row ${i+1}`, error: "Missing 'mal_id' and 'title'. One must be provided." });
             continue;
         } else if (mal_id && !jikanDataFromApi) { // mal_id from CSV, fetch if necessary
-            const needsApiFetch = !row.cover_image || !row.total_episodes || !row.genres || !row.studios || !row.type || !row.year || !row.season || !row.duration_minutes;
+            const needsApiFetch = !row.cover_image || (row.total_episodes === undefined || row.total_episodes === '') || !row.genres || !row.studios || !row.type || !row.year || !row.season || !row.duration_minutes;
             if (needsApiFetch) {
                  try {
                     jikanDataFromApi = await jikanApi.getAnimeById(mal_id);
-                 } catch (apiError) {
-                    console.warn(`Could not fetch details for MAL ID ${mal_id} during import. Proceeding with CSV data.`);
+                 } catch (apiError: any) {
+                    console.warn(`Could not fetch details for MAL ID ${mal_id} during import. Proceeding with CSV data. Error: ${apiError.message}`);
                  }
             }
         }
@@ -212,7 +217,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         // --- User-specific fields from CSV (Required) ---
         const user_status_csv = row.user_status as UserAnimeStatus;
         if (!USER_ANIME_STATUS_OPTIONS.find(opt => opt.value === user_status_csv)) {
-          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'user_status': ${user_status_csv}.` });
+          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'user_status': ${user_status_csv}. Must be one of: ${USER_ANIME_STATUS_OPTIONS.map(o=>o.value).join(', ')}.` });
           continue;
         }
         
@@ -224,28 +229,21 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         if (row.total_episodes?.trim()) {
             const parsed = parseInt(row.total_episodes.trim(), 10);
             if (!isNaN(parsed) && parsed >= 0) total_episodes = parsed;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'total_episodes' in CSV: ${row.total_episodes}.` }); continue; }
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'total_episodes' in CSV: ${row.total_episodes}. Must be a non-negative number.` }); continue; }
         } else if (jikanDataFromApi?.episodes !== undefined) {
             total_episodes = jikanDataFromApi.episodes;
         }
 
-        // --- False Sequenze for total episodes ---
         const current_episode_csv_str = row.current_episode;
         let current_episode_csv = parseInt(current_episode_csv_str, 10);
-        if (isNaN(current_episode_csv)) {
-          if(user_status_csv == "completed") {
-            current_episode_csv = total_episodes ?? Infinity;
-          }
-          else if(user_status_csv == "plan_to_watch") {
-            current_episode_csv = 0;
-          }
-          else 
-            current_episode_csv = 0;
-        }
-        else if (current_episode_csv < 0) {
-          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'current_episode': ${current_episode_csv_str}. Must be a non-negative number.` });
+        if (isNaN(current_episode_csv) || current_episode_csv < 0) {
+          processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'current_episode': ${current_episode_csv_str}. Must be a non-negative number.` });
           continue;
         }
+        if (total_episodes !== null && current_episode_csv > total_episodes && total_episodes !== 0) { // Allow current_episode > 0 for movies (total_episodes: 0)
+            current_episode_csv = total_episodes; // Cap at total episodes
+        }
+
 
         let user_rating: number | null = null;
         if (row.user_rating?.trim()) {
@@ -262,7 +260,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         if (row.year?.trim()) {
             const parsed = parseInt(row.year.trim(), 10);
             if (!isNaN(parsed)) year = parsed;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'year' in CSV: ${row.year}.` }); continue; }
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'year' in CSV: ${row.year}. Must be a number.` }); continue; }
         } else if (jikanDataFromApi?.year !== undefined) {
             year = jikanDataFromApi.year;
         }
@@ -273,8 +271,9 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         let broadcast_day: string | null = null;
         if (row.broadcast_day?.trim()) {
             const csvDay = row.broadcast_day.trim();
-            if (BROADCAST_DAY_OPTIONS.find(opt => opt.value === csvDay) || csvDay.toLowerCase() === 'other') broadcast_day = csvDay;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'broadcast_day' in CSV: ${csvDay}.` }); continue; }
+            if (BROADCAST_DAY_OPTIONS.find(opt => opt.value.toLowerCase() === csvDay.toLowerCase()) || csvDay.toLowerCase() === 'other') {
+                broadcast_day = BROADCAST_DAY_OPTIONS.find(opt => opt.value.toLowerCase() === csvDay.toLowerCase())?.value || 'Other';
+            } else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'broadcast_day' in CSV: ${csvDay}.` }); continue; }
         } else if (jikanDataFromApi?.broadcast?.day) {
             broadcast_day = jikanDataFromApi.broadcast.day;
         }
@@ -283,7 +282,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         if (row.duration_minutes?.trim()) {
             const parsed = parseInt(row.duration_minutes.trim(), 10);
             if (!isNaN(parsed) && parsed >= 0) duration_minutes = parsed;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'duration_minutes' in CSV: ${row.duration_minutes}.`}); continue; }
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'duration_minutes' in CSV: ${row.duration_minutes}. Must be a non-negative number.`}); continue; }
         } else if (jikanDataFromApi?.duration) {
             duration_minutes = parseDurationToMinutes(jikanDataFromApi.duration);
         }
@@ -307,14 +306,15 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         });
       }
 
-      const resultsFromContext = importAnimeBatch(importedAnimeList);
+      // Await the database operation
+      const dbResults = await importAnimeBatch(importedAnimeList);
       const finalResults = {
-        successCount: resultsFromContext.successCount,
-        errors: [...processingErrors, ...resultsFromContext.errors] 
+        successCount: dbResults.successCount,
+        errors: [...processingErrors, ...dbResults.errors] 
       };
 
       setImportResults(finalResults);
-      setIsImporting(false);
+      setIsImporting(false); // Ensure this is set after awaiting
 
       if (finalResults.successCount > 0 && finalResults.errors.length === 0) {
         toast({ title: "Import Successful", description: `${finalResults.successCount} anime entries imported/updated.` });
@@ -324,16 +324,16 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
          toast({ title: "Import Failed", description: `No anime imported. ${finalResults.errors.length} errors occurred. See details below.`, variant: "destructive", duration: 7000 });
       } else if (importedAnimeList.length === 0 && processingErrors.length === 0) {
         toast({ title: "Import Note", description: "No valid anime data found in the file to import." });
-      } else {
-        toast({ title: "Import Note", description: "No new anime data found in the file to import, or all entries were already up-to-date." });
+      } else { // This case might mean all entries were already present and identical, or only processingErrors occurred without any valid to import.
+        toast({ title: "Import Note", description: "No new anime data found to import, or all entries were already up-to-date." });
       }
       
-      onImported();
+      onImported(); // Call the callback to signal import completion
       if (fileInputRef.current) {
         fileInputRef.current.value = ""; 
       }
       setFile(null);
-      // setTotalLines(0); // Resetting here might be too soon if user wants to see the "X of Y" on completion
+      // setTotalLines(0); // Keep totalLines and processedLines for the final status message.
       // setProcessedLines(0);
     };
     reader.onerror = () => {
@@ -344,19 +344,21 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   };
 
   return (
-    <div className="space-y-4 py-4" style={{width: "48%"}}>{/* 100% dosent work*/}
+    <div className="space-y-4 py-4 flex-grow">
       <div>
         <h4 className="font-medium mb-1 text-sm">Expected CSV Format:</h4>
         <p className="text-xs text-muted-foreground">
           The CSV file must have a header row. Column names are case-insensitive.
-          Required columns: <code className="text-xs bg-muted/50 px-1 rounded">mal_id (or title)</code>, <code className="text-xs bg-muted/50 px-1 rounded">user_status</code>, <code className="text-xs bg-muted/50 px-1 rounded">current_episode</code>.
+          Required columns: (<code className="text-xs bg-muted/50 px-1 rounded">mal_id</code> or <code className="text-xs bg-muted/50 px-1 rounded">title</code>), <code className="text-xs bg-muted/50 px-1 rounded">user_status</code>, <code className="text-xs bg-muted/50 px-1 rounded">current_episode</code>.
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           Supported columns (others will be ignored):
         </p>
-        <code className="block bg-muted p-2 rounded-md text-xs mt-1 break-words">
-          {EXPECTED_HEADERS.join(',')}
-        </code>
+        <ScrollArea className="h-auto max-h-20 whitespace-pre-wrap">
+          <code className="block bg-muted p-2 rounded-md text-xs mt-1 break-words">
+            {EXPECTED_HEADERS.join(', ')}
+          </code>
+        </ScrollArea>
         <p className="text-xs text-muted-foreground mt-1">
           For <code className="text-xs bg-muted/50 px-1 rounded">genres</code>, <code className="text-xs bg-muted/50 px-1 rounded">studios</code>, and <code className="text-xs bg-muted/50 px-1 rounded">streaming_platforms</code>, use a semi-colon (;) to separate multiple values (e.g., "Action;Adventure"). Empty fields for optional data will be filled by API if possible.
         </p>
@@ -385,12 +387,12 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
             {importResults.errors.length > 0 && importResults.successCount > 0 && <Info className="h-4 w-4" />}
 
             <AlertTitle className="text-sm">
-              {importResults.successCount > 0 ? `${importResults.successCount} Anime Imported/Updated Successfully.` : 'Import Processed.'}
+              {importResults.successCount > 0 ? `${importResults.successCount} Anime Imported/Updated Successfully.` : (importResults.errors.length > 0 ? 'Import Processed with Errors.' : 'Import Processed.')}
               {importResults.errors.length > 0 && ` ${importResults.errors.length} errors occurred.`}
             </AlertTitle>
-            {(importResults.errors.length > 0 || (importResults.successCount === 0 && importResults.errors.length === 0)) && (
+            {(importResults.errors.length > 0 || (importResults.successCount === 0 && importResults.errors.length === 0 && totalLines > 0)) && (
                  <AlertDescription className="text-xs">
-                    {importResults.errors.length > 0 ? "See error details below." : (importResults.successCount === 0 ? "No data was imported or file was empty." : "")}
+                    {importResults.errors.length > 0 ? "See error details below." : (importResults.successCount === 0 && totalLines > 0 ? "No valid data was imported." : "No data was imported.")}
                 </AlertDescription>
             )}
           </Alert>
@@ -399,7 +401,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
               <ul className="text-xs space-y-1">
                 {importResults.errors.map((err, index) => (
                   <li key={index} className="text-destructive dark:text-red-400">
-                    <strong>{err.animeTitle || (err.malId ? `MAL ID: ${err.malId}` : 'Unknown Entry')}:</strong> {err.error}
+                    <strong>{err.animeTitle || (err.malId ? `MAL ID: ${err.malId}` : `Row ${index + 1}`)}:</strong> {err.error}
                   </li>
                 ))}
               </ul>
@@ -410,5 +412,4 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
     </div>
   );
 }
-
     

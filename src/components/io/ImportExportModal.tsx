@@ -23,9 +23,15 @@ export function ImportExportModal({ isOpen, onOpenChange }: ImportExportModalPro
     setTimeout(() => setView('main'), 300); 
   };
 
+  const handleImportFinished = () => {
+    // This function can be used to potentially switch the view or close the modal
+    // For now, we'll just keep the import view open so the user can see results.
+    // User can click "Done" or "Back" to navigate.
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg md:max-w-xl">
+      <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>
             {view === 'main' && 'Import / Export Data'}
@@ -45,11 +51,14 @@ export function ImportExportModal({ isOpen, onOpenChange }: ImportExportModalPro
             <Button onClick={() => setView('export')} variant="outline" className="w-full">Export Data</Button>
           </div>
         )}
+        
+        <div className={`flex-grow overflow-y-auto ${view !== 'main' ? 'py-2' : ''}`}>
+            {view === 'import' && <ImportCsvSection onImported={handleImportFinished} />}
+            {view === 'export' && <ExportSection />}
+        </div>
 
-        {view === 'import' && <ImportCsvSection onImported={() => { /* Future: Show success message or auto-close */ }} />}
-        {view === 'export' && <ExportSection />}
 
-        <DialogFooter className="mt-4">
+        <DialogFooter className="mt-auto pt-4 border-t">
           {view !== 'main' && (
             <Button variant="ghost" onClick={() => setView('main')} className="mr-auto">
               <ArrowLeft className="mr-2 h-4 w-4" /> Back
@@ -63,3 +72,4 @@ export function ImportExportModal({ isOpen, onOpenChange }: ImportExportModalPro
     </Dialog>
   );
 }
+
