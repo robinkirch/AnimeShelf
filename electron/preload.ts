@@ -1,6 +1,6 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UserAnime, EpisodeWatchEvent } from '@/types/anime';
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from '@/types/anime';
 
 contextBridge.exposeInMainWorld('electronStore', {
   // Anime Shelf
@@ -20,4 +20,8 @@ contextBridge.exposeInMainWorld('electronStore', {
 
   // Batch Import
   importAnimeBatch: (animeList: UserAnime[]): Promise<{ successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => ipcRenderer.invoke('db:importAnimeBatch', animeList),
+
+  // User Profile
+  getUserProfile: (): Promise<UserProfile | null> => ipcRenderer.invoke('db:getUserProfile'),
+  updateUserProfile: (profile: Partial<UserProfile>): Promise<void> => ipcRenderer.invoke('db:updateUserProfile', profile),
 });

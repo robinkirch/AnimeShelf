@@ -1,3 +1,4 @@
+
 export interface JikanImageSet {
   image_url: string;
   small_image_url?: string;
@@ -65,8 +66,8 @@ export interface JikanAnime {
   explicit_genres?: JikanMALItem[];
   themes?: JikanMALItem[];
   demographics?: JikanMALItem[];
-  relations?: JikanAnimeRelation[]; // Added for convenience, though API might provide separately
-  streaming?: JikanMALItem[]; // Added field for streaming platforms
+  relations?: JikanAnimeRelation[]; 
+  streaming?: JikanMALItem[]; 
 }
 
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
@@ -98,14 +99,12 @@ export const ANIME_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'ONA', label: 'ONA' },
   { value: 'Movie', label: 'Movie' },
   { value: 'Special', label: 'Special' },
-  // { value: 'Music', label: 'Music' }, // Potentially too niche for default filter
 ];
 
-// For statistics, we might want to consider all types
 export const STATS_ANIME_TYPE_OPTIONS: { value: string; label: string }[] = [
   ...ANIME_TYPE_FILTER_OPTIONS,
   { value: 'Music', label: 'Music' },
-  { value: 'Unknown', label: 'Unknown' }, // For items where type might be null
+  { value: 'Unknown', label: 'Unknown' }, 
 ];
 
 
@@ -128,7 +127,7 @@ export interface UserAnime {
   total_episodes: number | null;
   user_status: UserAnimeStatus;
   current_episode: number;
-  user_rating: number | null; // 1-10 scale
+  user_rating: number | null; 
   genres: string[]; 
   studios: string[];
   type: string | null;
@@ -136,7 +135,7 @@ export interface UserAnime {
   season: string | null;
   streaming_platforms: string[];
   broadcast_day: string | null;
-  duration_minutes: number | null; // Duration per episode in minutes
+  duration_minutes: number | null; 
 }
 
 export interface JikanAPISearchResponse {
@@ -164,16 +163,15 @@ export interface JikanAPISeasonsResponse {
   }
 }
 
-// Types for Anime Relations
 export interface JikanAnimeRelationEntry {
   mal_id: number;
-  type: string; // e.g., "anime", "manga"
+  type: string; 
   name: string;
   url: string;
 }
 
 export interface JikanAnimeRelation {
-  relation: string; // e.g., "Sequel", "Prequel", "Alternative version"
+  relation: string; 
   entry: JikanAnimeRelationEntry[];
 }
 
@@ -181,9 +179,14 @@ export interface JikanAPIRelationsResponse {
   data: JikanAnimeRelation[];
 }
 
-// For tracking when an episode was watched
 export interface EpisodeWatchEvent {
   mal_id: number;
-  episode_number_watched: number; // The specific episode number that was watched
-  watched_at: string; // ISO datetime string of when it was marked watched
+  episode_number_watched: number; 
+  watched_at: string; 
+}
+
+export interface UserProfile {
+  username: string | null;
+  profilePictureDataUri: string | null; // Base64 data URI
+  profileSetupComplete: boolean;
 }

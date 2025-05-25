@@ -3,10 +3,9 @@
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime'; // BROADCAST_DAY_OPTIONS removed as it's not used here
+import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent, UserProfile } from '@/types/anime';
+import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime'; 
 
-// Define the electronStore API if it's exposed on window
 declare global {
   interface Window {
     electronStore?: {
@@ -20,6 +19,8 @@ declare global {
       addIgnoredPreviewMalId: (mal_id: number) => Promise<void>;
       removeIgnoredPreviewMalId: (mal_id: number) => Promise<void>;
       importAnimeBatch: (animeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
+      getUserProfile: () => Promise<UserProfile | null>;
+      updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
     };
   }
 }
@@ -47,6 +48,10 @@ interface AnimeShelfContextType {
   ignoredPreviewAnimeMalIdsInitialized: boolean;
   importAnimeBatch: (importedAnimeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
   episodeWatchHistory: EpisodeWatchEvent[];
+  userProfile: UserProfile | null;
+  userProfileInitialized: boolean;
+  updateUserProfile: (profileUpdates: Partial<Omit<UserProfile, 'profileSetupComplete'>>) => Promise<void>;
+  markProfileSetupComplete: () => Promise<void>;
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
@@ -72,52 +77,53 @@ export function parseDurationToMinutes(durationStr: string | null | undefined): 
 
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [shelf, setShelf] = useState<UserAnime[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false); // For general shelf data
   const [upcomingSequels, setUpcomingSequelsState] = useState<JikanAnime[]>([]);
   const [ignoredPreviewAnimeMalIds, setIgnoredPreviewAnimeMalIds] = useState<number[]>([]);
   const [ignoredPreviewAnimeMalIdsInitialized, setIgnoredPreviewAnimeMalIdsInitialized] = useState(false);
   const [episodeWatchHistory, setEpisodeWatchHistory] = useState<EpisodeWatchEvent[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [userProfileInitialized, setUserProfileInitialized] = useState(false);
   
-  // Use state for electronStore to ensure it's accessed only on the client
   const [electronStore, setElectronStore] = useState<typeof window.electronStore | undefined>(undefined);
 
   useEffect(() => {
-    // This effect runs only on the client, after mount
     if (typeof window !== 'undefined') {
       setElectronStore(window.electronStore);
     }
-  }, []); // Empty dependency array means it runs once on mount
+  }, []); 
 
-  // Load initial data from SQLite
   useEffect(() => {
     async function loadInitialData() {
       if (!electronStore) {
-        // Warning only if on client and electronStore is confirmed not available after mount attempt
         if (typeof window !== 'undefined') {
-            console.warn("Electron store not available. Running in browser mode or preload script failed.");
+            console.warn("Electron store not available for initial data load.");
         }
         setIsInitialized(true);
         setIgnoredPreviewAnimeMalIdsInitialized(true);
+        setUserProfileInitialized(true); // Also mark profile as initialized (with null data)
         return;
       }
       try {
-        const [dbShelf, dbHistory, dbIgnoredIds] = await Promise.all([
+        const [dbShelf, dbHistory, dbIgnoredIds, dbProfile] = await Promise.all([
           electronStore.getShelf(),
           electronStore.getEpisodeWatchHistory(),
-          electronStore.getIgnoredPreviewMalIds()
+          electronStore.getIgnoredPreviewMalIds(),
+          electronStore.getUserProfile()
         ]);
         setShelf(dbShelf || []);
         setEpisodeWatchHistory(dbHistory || []);
         setIgnoredPreviewAnimeMalIds(dbIgnoredIds || []);
+        setUserProfile(dbProfile || { username: null, profilePictureDataUri: null, profileSetupComplete: false });
       } catch (error) {
         console.error("Failed to load data from SQLite:", error);
+        setUserProfile({ username: null, profilePictureDataUri: null, profileSetupComplete: false }); // Ensure profile is set on error
       } finally {
         setIsInitialized(true);
         setIgnoredPreviewAnimeMalIdsInitialized(true);
+        setUserProfileInitialized(true);
       }
     }
-    // Run loadInitialData if electronStore state has been potentially set
-    // It will re-run if electronStore changes from undefined to the actual store.
     if (electronStore !== undefined || (typeof window !== 'undefined' && !window.electronStore)) {
         loadInitialData();
     }
@@ -167,7 +173,6 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
     const oldCurrentEpisode = animeToUpdate.current_episode;
     
-    // Apply Jikan total episodes if provided and different
     let mostReliableTotalEpisodes = animeToUpdate.total_episodes;
     if (typeof currentJikanTotalEpisodes === 'number' && currentJikanTotalEpisodes !== animeToUpdate.total_episodes) {
         mostReliableTotalEpisodes = currentJikanTotalEpisodes;
@@ -181,7 +186,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       if (finalStatus === 'completed') {
         if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
           finalEpisodeCount = mostReliableTotalEpisodes;
-        } else if (mostReliableTotalEpisodes === 0) { // Movie
+        } else if (mostReliableTotalEpisodes === 0) { 
            finalEpisodeCount = Math.max(1, finalEpisodeCount);
         }
       }
@@ -195,29 +200,28 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
         else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
         else finalStatus = 'watching';
-      } else if (mostReliableTotalEpisodes === 0) { // Movie
+      } else if (mostReliableTotalEpisodes === 0) { 
         finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
-      } else { // total_episodes is null (unknown)
+      } else { 
         finalStatus = (finalEpisodeCount > 0) ? 'watching' : 'plan_to_watch';
       }
-    } else { // No explicit status or episode update, but total_episodes might have changed (e.g. from API)
+    } else { 
         let cappedEpisode = Math.max(0, animeToUpdate.current_episode);
         if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
             cappedEpisode = Math.min(cappedEpisode, mostReliableTotalEpisodes);
         }
-        // Only update episode count and status if capping actually changed the episode count
         if (cappedEpisode !== animeToUpdate.current_episode) {
             finalEpisodeCount = cappedEpisode;
              if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
                 if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
                 else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
                 else finalStatus = 'watching';
-              } else if (mostReliableTotalEpisodes === 0) { // Movie
+              } else if (mostReliableTotalEpisodes === 0) { 
                 finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
-              } else { // total_episodes is null (unknown)
+              } else { 
                 finalStatus = (finalEpisodeCount > 0) ? 'watching' : 'plan_to_watch';
               }
-        } else { // If no change to episode count from capping, ensure it's at least the current value
+        } else { 
             finalEpisodeCount = cappedEpisode;
         }
     }
@@ -226,7 +230,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         ...updates,
         user_status: finalStatus,
         current_episode: finalEpisodeCount,
-        total_episodes: mostReliableTotalEpisodes, // Store the reliable total_episodes
+        total_episodes: mostReliableTotalEpisodes, 
     };
 
     if (electronStore) {
@@ -306,12 +310,10 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const importAnimeBatch = useCallback(async (importedAnimeList: UserAnime[]): Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => {
     if (electronStore) {
       const result = await electronStore.importAnimeBatch(importedAnimeList);
-      // Refresh shelf from DB after batch import
       const dbShelf = await electronStore.getShelf();
       setShelf(dbShelf || []);
       return result;
     }
-    // Fallback if electronStore is not available (should not happen in Electron context)
     let successCount = 0;
     const errors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
     setShelf(prevShelf => {
@@ -328,6 +330,18 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         return newShelf;
     });
     return { successCount, errors };
+  }, [electronStore]);
+
+  const updateUserProfile = useCallback(async (profileUpdates: Partial<Omit<UserProfile, 'profileSetupComplete'>>) => {
+    if (!electronStore) return;
+    await electronStore.updateUserProfile(profileUpdates);
+    setUserProfile(prev => ({ ...(prev || { username: null, profilePictureDataUri: null, profileSetupComplete: false }), ...profileUpdates }));
+  }, [electronStore]);
+
+  const markProfileSetupComplete = useCallback(async () => {
+    if (!electronStore) return;
+    await electronStore.updateUserProfile({ profileSetupComplete: true });
+    setUserProfile(prev => ({ ...(prev || { username: null, profilePictureDataUri: null, profileSetupComplete: false }), profileSetupComplete: true }));
   }, [electronStore]);
 
   return (
@@ -348,7 +362,11 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         isPreviewAnimeIgnored,
         ignoredPreviewAnimeMalIdsInitialized,
         importAnimeBatch,
-        episodeWatchHistory
+        episodeWatchHistory,
+        userProfile,
+        userProfileInitialized,
+        updateUserProfile,
+        markProfileSetupComplete
       }}>
       {children}
     </AnimeShelfContext.Provider>
@@ -362,4 +380,3 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
-

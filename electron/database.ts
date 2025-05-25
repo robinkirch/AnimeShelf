@@ -2,7 +2,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
-import type { UserAnime, EpisodeWatchEvent } from '@/types/anime';
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from '@/types/anime';
 
 const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
 let db: Database.Database;
@@ -42,8 +42,22 @@ export function initDb() {
     CREATE TABLE IF NOT EXISTS ignored_preview_mal_ids (
       mal_id INTEGER PRIMARY KEY
     );
+
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id INTEGER PRIMARY KEY DEFAULT 1, -- Ensures only one row for profile
+      username TEXT,
+      profile_picture_data_uri TEXT,
+      profile_setup_complete INTEGER DEFAULT 0 -- 0 for false, 1 for true
+    );
   `);
   console.log('Tables checked/created.');
+
+  // Ensure a default profile row exists
+  const profileRow = db.prepare('SELECT id FROM user_profile WHERE id = 1').get();
+  if (!profileRow) {
+    db.prepare('INSERT INTO user_profile (id, username, profile_picture_data_uri, profile_setup_complete) VALUES (1, NULL, NULL, 0)').run();
+    console.log('Default user profile row created.');
+  }
 }
 
 export function closeDb() {
@@ -98,7 +112,7 @@ export function updateAnimeOnShelf(mal_id: number, updates: Partial<UserAnime>):
   const existing = db.prepare('SELECT * FROM anime_shelf WHERE mal_id = ?').get(mal_id) as UserAnime | undefined;
   if (!existing) {
     console.warn(`Attempted to update non-existent anime with mal_id: ${mal_id}`);
-    return; // Or throw an error
+    return; 
   }
 
   const fields = Object.keys(updates).filter(key => key !== 'mal_id');
@@ -120,7 +134,7 @@ export function updateAnimeOnShelf(mal_id: number, updates: Partial<UserAnime>):
 }
 
 export function removeAnimeFromShelf(mal_id: number): void {
-  db.prepare('DELETE FROM episode_watch_history WHERE mal_id = ?').run(mal_id); // Cascade delete history
+  db.prepare('DELETE FROM episode_watch_history WHERE mal_id = ?').run(mal_id); 
   db.prepare('DELETE FROM anime_shelf WHERE mal_id = ?').run(mal_id);
 }
 
@@ -203,3 +217,38 @@ export function importAnimeBatch(animeList: UserAnime[]): { successCount: number
     return { successCount, errors };
 }
 
+// User Profile
+export function getUserProfile(): UserProfile | null {
+  const row = db.prepare('SELECT username, profile_picture_data_uri, profile_setup_complete FROM user_profile WHERE id = 1').get() as any;
+  if (row) {
+    return {
+      username: row.username,
+      profilePictureDataUri: row.profile_picture_data_uri,
+      profileSetupComplete: Boolean(row.profile_setup_complete),
+    };
+  }
+  return null; // Should ideally not happen due to initDb ensuring row exists
+}
+
+export function updateUserProfile(profile: Partial<UserProfile>): void {
+  const fields = Object.keys(profile);
+  if (fields.length === 0) return;
+
+  const setClause = fields.map(field => {
+    if (field === 'profileSetupComplete') return `profile_setup_complete = @profileSetupComplete`;
+    return `${field} = @${field}`;
+  }).join(', ');
+
+  const stmt = db.prepare(`UPDATE user_profile SET ${setClause} WHERE id = 1`);
+  
+  const params: any = {};
+   for (const key of fields) {
+    const typedKey = key as keyof UserProfile;
+    if (typedKey === 'profileSetupComplete') {
+        params[typedKey] = profile[typedKey] ? 1 : 0;
+    } else {
+        params[typedKey] = profile[typedKey];
+    }
+  }
+  stmt.run(params);
+}

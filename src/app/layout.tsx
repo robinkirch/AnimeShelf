@@ -1,12 +1,13 @@
+
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
-// import { GeistMono } from 'geist/font/mono'; // Removed as it's not used and causes error
 import './globals.css';
 import { Header } from '@/components/layout/Header';
 import { AnimeShelfProvider } from '@/contexts/AnimeShelfContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { FooterYear } from '@/components/layout/FooterYear';
 import { Toaster } from "@/components/ui/toaster";
+import { ProfileSetupManager } from '@/components/profile/ProfileSetupModal'; // Corrected import path
 
 export const metadata: Metadata = {
   title: 'AnimeShelf',
@@ -23,6 +24,7 @@ export default function RootLayout({
       <body className={`${GeistSans.variable} font-sans antialiased`}>
         <ThemeProvider>
           <AnimeShelfProvider>
+            <ProfileSetupManager /> {/* Add ProfileSetupManager here */}
             <div className="flex flex-col min-h-screen">
               <Header />
               <main className="flex-grow container mx-auto p-4 md:p-6">

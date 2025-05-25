@@ -68,6 +68,8 @@ app.on('ready', async () => {
   ipcMain.handle('db:addIgnoredPreviewMalId', async (event, mal_id) => database.addIgnoredPreviewMalId(mal_id));
   ipcMain.handle('db:removeIgnoredPreviewMalId', async (event, mal_id) => database.removeIgnoredPreviewMalId(mal_id));
   ipcMain.handle('db:importAnimeBatch', async(event, animeList) => database.importAnimeBatch(animeList));
+  ipcMain.handle('db:getUserProfile', async () => database.getUserProfile());
+  ipcMain.handle('db:updateUserProfile', async (event, profile) => database.updateUserProfile(profile));
 
 
   if (!app.isPackaged) {
