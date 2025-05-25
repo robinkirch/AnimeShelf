@@ -231,24 +231,43 @@ export function getUserProfile(): UserProfile | null {
 }
 
 export function updateUserProfile(profile: Partial<UserProfile>): void {
-  const fields = Object.keys(profile);
+  const fields = Object.keys(profile) as Array<keyof UserProfile>;
   if (fields.length === 0) return;
 
-  const setClause = fields.map(field => {
-    if (field === 'profileSetupComplete') return `profile_setup_complete = @profileSetupComplete`;
-    return `${field} = @${field}`;
-  }).join(', ');
+  const fieldToColumnMapping: Partial<Record<keyof UserProfile, string>> = {
+    username: 'username',
+    profilePictureDataUri: 'profile_picture_data_uri',
+    profileSetupComplete: 'profile_setup_complete',
+  };
 
-  const stmt = db.prepare(`UPDATE user_profile SET ${setClause} WHERE id = 1`);
-  
+  const setClauses: string[] = [];
   const params: any = {};
-   for (const key of fields) {
-    const typedKey = key as keyof UserProfile;
-    if (typedKey === 'profileSetupComplete') {
-        params[typedKey] = profile[typedKey] ? 1 : 0;
-    } else {
-        params[typedKey] = profile[typedKey];
+
+  for (const field of fields) {
+    const columnName = fieldToColumnMapping[field];
+    if (columnName) {
+      // Use original JS field name for param binding placeholder in SQL (e.g., @profilePictureDataUri)
+      // And use original JS field name for the key in the params object
+      setClauses.push(`${columnName} = @${field}`); 
+      
+      if (field === 'profileSetupComplete') {
+        params[field] = profile[field] ? 1 : 0;
+      } else {
+        params[field] = profile[field];
+      }
     }
   }
-  stmt.run(params);
+
+  if (setClauses.length === 0) {
+    console.warn("updateUserProfile: No valid fields to update after mapping.", profile);
+    return;
+  }
+  
+  const stmt = db.prepare(`UPDATE user_profile SET ${setClauses.join(', ')} WHERE id = 1`);
+  try {
+    stmt.run(params);
+  } catch (error) {
+    console.error("Error updating user profile in DB:", error, "Query:", `UPDATE user_profile SET ${setClauses.join(', ')} WHERE id = 1`, "Params:", params);
+    // Optionally re-throw or handle as needed
+  }
 }
