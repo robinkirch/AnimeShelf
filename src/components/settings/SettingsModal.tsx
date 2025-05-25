@@ -21,6 +21,7 @@ import { Separator } from '../ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils"; // Import cn utility
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -266,3 +267,4 @@ const ScrollArea = ({ className, children }: { className?: string; children: Rea
         </div>
     );
 };
+
