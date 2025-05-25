@@ -59,7 +59,7 @@ export default function MyShelfPage() {
   const [isLoadingAiSearch, setIsLoadingAiSearch] = useState(false);
   const [aiSearchError, setAiSearchError] = useState<string | null>(null);
 
-  const [isLoadingShelf, setIsLoadingShelf] = useState(true); // True until shelfInitialized from context
+  const [isLoadingShelf, setIsLoadingShelf] = useState(true); 
   const [isLoadingRelations, setIsLoadingRelations] = useState(false); 
 
   const [localShelfSearchQuery, setLocalShelfSearchQuery] = useState('');
@@ -90,10 +90,11 @@ export default function MyShelfPage() {
     const newRelationsFetchedThisCall = new Map<number, JikanAnimeRelation[]>();
     let anyNewDataFetched = false;
 
+    const currentRelationsMap = relationsMap; // Capture current state
+
     try {
       for (const anime of shelf) {
-        // Fetch only if not already in map; this prevents re-fetching if map is partially populated.
-        if (!relationsMap.has(anime.mal_id)) { 
+        if (!currentRelationsMap.has(anime.mal_id)) { 
           const relations = await jikanApi.getAnimeRelations(anime.mal_id);
           newRelationsFetchedThisCall.set(anime.mal_id, relations || []);
           anyNewDataFetched = true;
@@ -114,19 +115,17 @@ export default function MyShelfPage() {
         }
         setIsLoadingRelations(false);
     }
-  }, [shelf, relationsMap]); // relationsMap is a dependency because we read from it and conditionally fetch.
+  }, [shelf, relationsMap]); // relationsMap is a crucial dependency
 
 
   useEffect(() => {
     if (shelfInitialized) {
-      setIsLoadingShelf(false); // Shelf data from context is now available (or confirmed empty)
+      setIsLoadingShelf(false); 
       if (shelf.length > 0) {
-        // Only start fetching relations if they haven't been fetched or partially fetched
-        // This check prevents re-fetching if component re-mounts with existing relationsMap
         if (relationsMap.size < shelf.length) { 
             fetchRelationsForAllShelfItems();
         } else {
-            setIsLoadingRelations(false); // All relations presumably already fetched or attempted
+            setIsLoadingRelations(false);
         }
       } else {
         setIsLoadingRelations(false);
@@ -214,11 +213,9 @@ export default function MyShelfPage() {
 
 
   const groupedAndFilteredShelf = useMemo((): GroupedShelfItem[] => {
-    if (!shelfInitialized) { // Wait until shelf data is loaded
+    if (!shelfInitialized) { 
         return [];
     }
-    // Grouping can proceed with whatever relations are available in relationsMap.
-    // Quality of grouping will improve as relationsMap populates.
 
     const fullyFilteredAnime = itemsPassingOtherFilters.filter(anime => {
         const statusMatch = statusFilter === ALL_FILTER_VALUE ? true : anime.user_status === statusFilter;
@@ -250,7 +247,7 @@ export default function MyShelfPage() {
         let head = 0;
         while(head < queue.length) {
             const currentMalId = queue[head++];
-            const itemRelations = relationsMap.get(currentMalId); // Will be undefined if not yet fetched
+            const itemRelations = relationsMap.get(currentMalId); 
 
             if (itemRelations) {
                 for (const relation of itemRelations) {
@@ -346,17 +343,12 @@ export default function MyShelfPage() {
   useEffect(() => {
     if (!shelfInitialized) {
         setDisplayedShelfItems([]);
-        setHasMoreShelfItems(true); // Assume more once initialized if shelf isn't empty
+        setHasMoreShelfItems(true); 
         return;
     }
-
-    // Populate initial displayed items or update if groupedAndFilteredShelf changes (e.g., due to relations loading)
     if (groupedAndFilteredShelf.length > 0) {
         const currentDisplayLength = displayedShelfItems.length;
-        // If displayedShelfItems is empty, load INITIAL_LOAD_COUNT.
-        // Otherwise, maintain current length or expand if groupedAndFilteredShelf offers more than current display
-        // This handles re-grouping without resetting scroll position/loaded items.
-        const newSliceEnd = Math.max(currentDisplayLength, INITIAL_LOAD_COUNT);
+        const newSliceEnd = currentDisplayLength > 0 ? Math.max(currentDisplayLength, INITIAL_LOAD_COUNT) : INITIAL_LOAD_COUNT;
         
         setDisplayedShelfItems(groupedAndFilteredShelf.slice(0, newSliceEnd));
         setHasMoreShelfItems(groupedAndFilteredShelf.length > newSliceEnd);
@@ -364,9 +356,7 @@ export default function MyShelfPage() {
         setDisplayedShelfItems([]);
         setHasMoreShelfItems(false);
     }
-  // displayedShelfItems.length is included so if it changes externally (it shouldn't much), this effect adapts.
-  // The primary driver for changes here should be groupedAndFilteredShelf changing.
-  }, [groupedAndFilteredShelf, shelfInitialized, INITIAL_LOAD_COUNT]);
+  }, [groupedAndFilteredShelf, shelfInitialized]);
 
 
   const handleLoadMoreShelfItems = useCallback(() => {
@@ -382,13 +372,11 @@ export default function MyShelfPage() {
 
   useEffect(() => {
     const currentRef = loadMoreRef.current;
-    // Do not observe if core shelf isn't initialized or if there are no more items.
-    // Allow observation even if isLoadingRelations is true, as displayedShelfItems should now populate.
     if (!currentRef || !hasMoreShelfItems || !shelfInitialized || isLoadingShelf) return;
 
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting && !isLoadingRelations) { // Only load more if not currently busy with global relations
+        if (entries[0].isIntersecting) { // Removed !isLoadingRelations
           handleLoadMoreShelfItems();
         }
       },
@@ -435,13 +423,11 @@ export default function MyShelfPage() {
     return typeFilter.map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val).join(', ');
   };
 
-  // Revised condition for initial loading skeletons:
-  // Show if shelf from DB is loading, OR if shelf is initialized, items are expected (pass filters),
-  // but nothing is displayed yet (initial processing of groupedAndFilteredShelf might be happening).
   const showInitialLoadingSkeletons = isLoadingShelf || 
                                      (shelfInitialized && 
                                       itemsPassingOtherFilters.length > 0 && 
-                                      displayedShelfItems.length === 0);
+                                      displayedShelfItems.length === 0 &&
+                                      groupedAndFilteredShelf.length === 0); // Added check for groupedAndFilteredShelf
 
   return (
     <div className="space-y-8">
@@ -489,7 +475,7 @@ export default function MyShelfPage() {
           </div>
         </div>
 
-        {apiError && (searchResults.length === 0 && aiSearchResults.length === 0) && ( // Only show search API error if no results from either
+        {apiError && (searchResults.length === 0 && aiSearchResults.length === 0) && ( 
           <Alert variant="destructive" className="mt-4">
             <Info className="h-4 w-4" />
             <AlertTitle>API Error</AlertTitle>
@@ -681,7 +667,7 @@ export default function MyShelfPage() {
             </div>
         </div>
 
-        {apiError && shelf.length > 0 && !isLoadingRelations && ( // Show relation API error only if not actively loading
+        {apiError && shelf.length > 0 && !isLoadingRelations && ( 
           <Alert variant="destructive" className="mb-6">
             <Info className="h-4 w-4" />
             <AlertTitle>API Error Loading Relations</AlertTitle>
@@ -726,7 +712,7 @@ export default function MyShelfPage() {
                 <span className="ml-2 text-muted-foreground">Loading more...</span>
               </div>
             )}
-            {isLoadingRelations && shelf.length > 0 && displayedShelfItems.length > 0 && ( // Show subtle indicator if relations are loading in background
+            {isLoadingRelations && shelf.length > 0 && displayedShelfItems.length > 0 && ( 
                  <div className="text-center py-4 text-sm text-muted-foreground">
                     <Loader2 className="inline h-4 w-4 mr-2 animate-spin" />
                     Updating series information...
