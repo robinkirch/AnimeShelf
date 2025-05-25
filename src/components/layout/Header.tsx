@@ -104,7 +104,7 @@ export function Header() {
                 <Avatar className="h-8 w-8 cursor-pointer" onClick={() => setIsSettingsModalOpen(true)}>
                     <AvatarImage src={userProfile?.profilePictureDataUri || undefined} alt={userProfile?.username || "User"} />
                     <AvatarFallback className="bg-primary/70 text-xs">
-                        {userProfile?.username ? getInitials(userProfile.username) : <UserCircle2 size={20}/>}
+                        <UserCircle2 size={20}/>
                     </AvatarFallback>
                 </Avatar>
                 {userProfile?.username && (
