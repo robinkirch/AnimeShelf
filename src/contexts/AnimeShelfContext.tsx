@@ -77,14 +77,25 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [ignoredPreviewAnimeMalIds, setIgnoredPreviewAnimeMalIds] = useState<number[]>([]);
   const [ignoredPreviewAnimeMalIdsInitialized, setIgnoredPreviewAnimeMalIdsInitialized] = useState(false);
   const [episodeWatchHistory, setEpisodeWatchHistory] = useState<EpisodeWatchEvent[]>([]);
+  
+  // Use state for electronStore to ensure it's accessed only on the client
+  const [electronStore, setElectronStore] = useState<typeof window.electronStore | undefined>(undefined);
 
-  const electronStore = window.electronStore;
+  useEffect(() => {
+    // This effect runs only on the client, after mount
+    if (typeof window !== 'undefined') {
+      setElectronStore(window.electronStore);
+    }
+  }, []); // Empty dependency array means it runs once on mount
 
   // Load initial data from SQLite
   useEffect(() => {
     async function loadInitialData() {
       if (!electronStore) {
-        console.warn("Electron store not available. Running in browser mode or preload script failed.");
+        // Warning only if on client and electronStore is confirmed not available after mount attempt
+        if (typeof window !== 'undefined') {
+            console.warn("Electron store not available. Running in browser mode or preload script failed.");
+        }
         setIsInitialized(true);
         setIgnoredPreviewAnimeMalIdsInitialized(true);
         return;
@@ -105,7 +116,11 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         setIgnoredPreviewAnimeMalIdsInitialized(true);
       }
     }
-    loadInitialData();
+    // Run loadInitialData if electronStore state has been potentially set
+    // It will re-run if electronStore changes from undefined to the actual store.
+    if (electronStore !== undefined || (typeof window !== 'undefined' && !window.electronStore)) {
+        loadInitialData();
+    }
   }, [electronStore]);
 
 
@@ -180,28 +195,29 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
         else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
         else finalStatus = 'watching';
-      } else if (mostReliableTotalEpisodes === 0) {
+      } else if (mostReliableTotalEpisodes === 0) { // Movie
         finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
-      } else {
+      } else { // total_episodes is null (unknown)
         finalStatus = (finalEpisodeCount > 0) ? 'watching' : 'plan_to_watch';
       }
-    } else { // No explicit status or episode update, but total_episodes might have changed
+    } else { // No explicit status or episode update, but total_episodes might have changed (e.g. from API)
         let cappedEpisode = Math.max(0, animeToUpdate.current_episode);
         if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
             cappedEpisode = Math.min(cappedEpisode, mostReliableTotalEpisodes);
         }
+        // Only update episode count and status if capping actually changed the episode count
         if (cappedEpisode !== animeToUpdate.current_episode) {
             finalEpisodeCount = cappedEpisode;
              if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
                 if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
                 else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
                 else finalStatus = 'watching';
-              } else if (mostReliableTotalEpisodes === 0) {
+              } else if (mostReliableTotalEpisodes === 0) { // Movie
                 finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
-              } else {
+              } else { // total_episodes is null (unknown)
                 finalStatus = (finalEpisodeCount > 0) ? 'watching' : 'plan_to_watch';
               }
-        } else {
+        } else { // If no change to episode count from capping, ensure it's at least the current value
             finalEpisodeCount = cappedEpisode;
         }
     }
@@ -346,3 +362,4 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
+
