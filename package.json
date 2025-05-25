@@ -44,6 +44,7 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@tanstack-query-firebase/react": "^1.0.5",
     "@tanstack/react-query": "^5.66.0",
+    "better-sqlite3": "^11.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
@@ -66,6 +67,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
@@ -87,7 +89,7 @@
       "output": "dist_electron"
     },
     "files": [
-      "electron/main.js",
+      "electron/*",
       "package.json",
       "next.config.ts",
       ".env*",
@@ -104,7 +106,7 @@
       }
     ],
     "win": {
-      "target": "nsis" 
+      "target": "nsis"
     },
     "linux": {
       "target": "AppImage"

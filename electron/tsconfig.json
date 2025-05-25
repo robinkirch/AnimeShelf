@@ -1,3 +1,4 @@
+
 {
   "compilerOptions": {
     "moduleResolution": "bundler",
@@ -13,9 +14,10 @@
     "declaration": false,
     "baseUrl": ".",
     "paths": {
-      "*": ["node_modules/*"]
-    }
+      "@/*": ["../src/*"] // Adjusted path to src for type imports
+    },
+    "typeRoots": ["./node_modules/@types", "../node_modules/@types"] // For better-sqlite3 types
   },
-  "include": ["*.ts"],
+  "include": ["*.ts"], // This will include main.ts, preload.ts, database.ts
   "exclude": ["node_modules"]
 }

@@ -4,7 +4,25 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
+import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime'; // BROADCAST_DAY_OPTIONS removed as it's not used here
+
+// Define the electronStore API if it's exposed on window
+declare global {
+  interface Window {
+    electronStore?: {
+      getShelf: () => Promise<UserAnime[]>;
+      addAnimeToShelf: (anime: UserAnime) => Promise<void>;
+      updateAnimeOnShelf: (mal_id: number, updates: Partial<UserAnime>) => Promise<void>;
+      removeAnimeFromShelf: (mal_id: number) => Promise<void>;
+      getEpisodeWatchHistory: () => Promise<EpisodeWatchEvent[]>;
+      addEpisodeWatchEvents: (events: EpisodeWatchEvent[]) => Promise<void>;
+      getIgnoredPreviewMalIds: () => Promise<number[]>;
+      addIgnoredPreviewMalId: (mal_id: number) => Promise<void>;
+      removeIgnoredPreviewMalId: (mal_id: number) => Promise<void>;
+      importAnimeBatch: (animeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
+    };
+  }
+}
 
 
 interface AnimeShelfContextType {
@@ -27,26 +45,20 @@ interface AnimeShelfContextType {
   removeIgnoredPreviewAnime: (mal_id: number) => void; 
   isPreviewAnimeIgnored: (mal_id: number) => boolean;
   ignoredPreviewAnimeMalIdsInitialized: boolean;
-  importAnimeBatch: (importedAnimeList: UserAnime[]) => { successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> };
+  importAnimeBatch: (importedAnimeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
   episodeWatchHistory: EpisodeWatchEvent[];
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
 
-const LOCAL_STORAGE_KEY_SHELF = 'animeShelf';
-const LOCAL_STORAGE_KEY_IGNORED_PREVIEW = 'ignoredPreviewAnimeMalIds';
-const LOCAL_STORAGE_KEY_EPISODE_WATCH_HISTORY = 'animeShelfEpisodeWatchHistory';
 const IGNORED_TYPES_CONTEXT = ['Music'];
 
-// Helper function to parse Jikan duration string to minutes
 export function parseDurationToMinutes(durationStr: string | null | undefined): number | null {
   if (!durationStr) return null;
-  
   const perEpMatch = durationStr.match(/(\d+)\s*min(?:s|\.)?\s*(?:per\s*ep)?/i);
   if (perEpMatch && perEpMatch[1]) {
     return parseInt(perEpMatch[1], 10);
   }
-
   const hrMinMatch = durationStr.match(/(?:(\d+)\s*hr)?\s*(?:(\d+)\s*min)?/i);
   if (hrMinMatch) {
     const hours = hrMinMatch[1] ? parseInt(hrMinMatch[1], 10) : 0;
@@ -58,7 +70,6 @@ export function parseDurationToMinutes(durationStr: string | null | undefined): 
   return null;
 }
 
-
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [shelf, setShelf] = useState<UserAnime[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -67,231 +78,175 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [ignoredPreviewAnimeMalIdsInitialized, setIgnoredPreviewAnimeMalIdsInitialized] = useState(false);
   const [episodeWatchHistory, setEpisodeWatchHistory] = useState<EpisodeWatchEvent[]>([]);
 
+  const electronStore = window.electronStore;
+
+  // Load initial data from SQLite
   useEffect(() => {
-    try {
-      const storedShelf = localStorage.getItem(LOCAL_STORAGE_KEY_SHELF);
-      if (storedShelf) {
-        const parsedShelf: UserAnime[] = JSON.parse(storedShelf);
-        const migratedShelf = parsedShelf.map(anime => ({
-          ...anime,
-          type: anime.type ?? null,
-          year: anime.year ?? null, 
-          season: anime.season ?? null,
-          streaming_platforms: anime.streaming_platforms ?? [],
-          broadcast_day: anime.broadcast_day ?? null,
-          duration_minutes: anime.duration_minutes === undefined ? null : anime.duration_minutes, 
-        }));
-        setShelf(migratedShelf);
+    async function loadInitialData() {
+      if (!electronStore) {
+        console.warn("Electron store not available. Running in browser mode or preload script failed.");
+        setIsInitialized(true);
+        setIgnoredPreviewAnimeMalIdsInitialized(true);
+        return;
       }
-    } catch (error) {
-      console.error("Failed to load anime shelf from localStorage:", error);
-      setShelf([]);
-    }
-    
-    try {
-      const storedIgnored = localStorage.getItem(LOCAL_STORAGE_KEY_IGNORED_PREVIEW);
-      if (storedIgnored) {
-        setIgnoredPreviewAnimeMalIds(JSON.parse(storedIgnored));
-      }
-    } catch (error) {
-      console.error("Failed to load ignored preview anime IDs from localStorage:", error);
-      setIgnoredPreviewAnimeMalIds([]);
-    }
-
-    try {
-        const storedWatchHistory = localStorage.getItem(LOCAL_STORAGE_KEY_EPISODE_WATCH_HISTORY);
-        if (storedWatchHistory) {
-            setEpisodeWatchHistory(JSON.parse(storedWatchHistory));
-        }
-    } catch (error) {
-        console.error("Failed to load episode watch history from localStorage:", error);
-        setEpisodeWatchHistory([]);
-    }
-
-    setIsInitialized(true); 
-    setIgnoredPreviewAnimeMalIdsInitialized(true); 
-  }, []);
-
-  useEffect(() => {
-    if (isInitialized) {
       try {
-        localStorage.setItem(LOCAL_STORAGE_KEY_SHELF, JSON.stringify(shelf));
+        const [dbShelf, dbHistory, dbIgnoredIds] = await Promise.all([
+          electronStore.getShelf(),
+          electronStore.getEpisodeWatchHistory(),
+          electronStore.getIgnoredPreviewMalIds()
+        ]);
+        setShelf(dbShelf || []);
+        setEpisodeWatchHistory(dbHistory || []);
+        setIgnoredPreviewAnimeMalIds(dbIgnoredIds || []);
       } catch (error) {
-        console.error("Failed to save anime shelf to localStorage:", error);
+        console.error("Failed to load data from SQLite:", error);
+      } finally {
+        setIsInitialized(true);
+        setIgnoredPreviewAnimeMalIdsInitialized(true);
       }
     }
-  }, [shelf, isInitialized]);
+    loadInitialData();
+  }, [electronStore]);
 
-  useEffect(() => {
-    if (ignoredPreviewAnimeMalIdsInitialized) {
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY_IGNORED_PREVIEW, JSON.stringify(ignoredPreviewAnimeMalIds));
-      } catch (error) {
-        console.error("Failed to save ignored preview anime IDs to localStorage:", error);
-      }
-    }
-  }, [ignoredPreviewAnimeMalIds, ignoredPreviewAnimeMalIdsInitialized]);
-
-  useEffect(() => {
-    if (isInitialized) { 
-        try {
-            localStorage.setItem(LOCAL_STORAGE_KEY_EPISODE_WATCH_HISTORY, JSON.stringify(episodeWatchHistory));
-        } catch (error) {
-            console.error("Failed to save episode watch history from localStorage:", error);
-        }
-    }
-  }, [episodeWatchHistory, isInitialized]);
 
   const setUpcomingSequels = useCallback((animeList: JikanAnime[]) => {
     setUpcomingSequelsState(animeList);
   }, []);
 
-  const addAnimeToShelf = useCallback((anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => {
-    setShelf(prevShelf => {
-      if (prevShelf.some(item => item.mal_id === anime.mal_id)) return prevShelf; 
+  const addAnimeToShelf = useCallback(async (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => {
+    const newAnime: UserAnime = {
+      mal_id: anime.mal_id,
+      title: anime.title,
+      cover_image: anime.images.webp?.large_image_url || anime.images.webp?.image_url || anime.images.jpg.large_image_url || anime.images.jpg.image_url,
+      total_episodes: anime.episodes,
+      user_status: initialDetails.user_status,
+      current_episode: Math.max(0, initialDetails.current_episode),
+      user_rating: initialDetails.user_rating,
+      genres: anime.genres?.map(g => g.name) || [],
+      studios: anime.studios?.map(s => s.name) || [],
+      type: anime.type || null,
+      year: anime.year || null,
+      season: anime.season || null,
+      streaming_platforms: initialDetails.streaming_platforms || [],
+      broadcast_day: initialDetails.broadcast_day || anime.broadcast?.day || null,
+      duration_minutes: parseDurationToMinutes(anime.duration),
+    };
 
-      const newAnime: UserAnime = {
-        mal_id: anime.mal_id,
-        title: anime.title,
-        cover_image: anime.images.webp?.large_image_url || anime.images.webp?.image_url || anime.images.jpg.large_image_url || anime.images.jpg.image_url,
-        total_episodes: anime.episodes,
-        user_status: initialDetails.user_status,
-        current_episode: Math.max(0, initialDetails.current_episode),
-        user_rating: initialDetails.user_rating,
-        genres: anime.genres?.map(g => g.name) || [],
-        studios: anime.studios?.map(s => s.name) || [],
-        type: anime.type || null,
-        year: anime.year || null,
-        season: anime.season || null,
-        streaming_platforms: initialDetails.streaming_platforms || [],
-        broadcast_day: initialDetails.broadcast_day || anime.broadcast?.day || null,
-        duration_minutes: parseDurationToMinutes(anime.duration),
-      };
+    if (electronStore) {
+      await electronStore.addAnimeToShelf(newAnime);
+    }
+    setShelf(prevShelf => {
+      if (prevShelf.some(item => item.mal_id === anime.mal_id)) return prevShelf;
       return [...prevShelf, newAnime];
     });
     setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
-  }, []);
+  }, [electronStore]);
 
-  const updateAnimeOnShelf = useCallback((
+  const updateAnimeOnShelf = useCallback(async (
     mal_id: number,
     updates: Partial<Omit<UserAnime, 'mal_id' | 'title' | 'cover_image' | 'total_episodes' | 'genres' | 'studios' | 'type' | 'year' | 'season' | 'duration_minutes'>>,
     currentJikanTotalEpisodes?: number | null
   ) => {
-    setShelf(prevShelf =>
-      prevShelf.map(animeItemOnShelf => {
-        if (animeItemOnShelf.mal_id === mal_id) {
-          const oldCurrentEpisode = animeItemOnShelf.current_episode;
-          
-          // Start with a copy of the existing item
-          let workingItem = { ...animeItemOnShelf };
+    let animeToUpdate = shelf.find(a => a.mal_id === mal_id);
+    if (!animeToUpdate) return;
 
-          // Determine the most reliable total_episodes, updating workingItem if Jikan provides a different value
-          let mostReliableTotalEpisodes = workingItem.total_episodes;
-          if (typeof currentJikanTotalEpisodes === 'number' && currentJikanTotalEpisodes !== workingItem.total_episodes) {
-            mostReliableTotalEpisodes = currentJikanTotalEpisodes;
-            workingItem.total_episodes = currentJikanTotalEpisodes;
-          }
-          
-          // Apply explicit updates from the 'updates' object to the working copy
-          workingItem = { ...workingItem, ...updates };
+    const oldCurrentEpisode = animeToUpdate.current_episode;
+    
+    // Apply Jikan total episodes if provided and different
+    let mostReliableTotalEpisodes = animeToUpdate.total_episodes;
+    if (typeof currentJikanTotalEpisodes === 'number' && currentJikanTotalEpisodes !== animeToUpdate.total_episodes) {
+        mostReliableTotalEpisodes = currentJikanTotalEpisodes;
+    }
+    
+    let finalStatus = updates.user_status ?? animeToUpdate.user_status;
+    let finalEpisodeCount = updates.current_episode ?? animeToUpdate.current_episode;
 
-          let finalStatus = workingItem.user_status;
-          let finalEpisodeCount = workingItem.current_episode;
+    if (updates.user_status) {
+      finalStatus = updates.user_status;
+      if (finalStatus === 'completed') {
+        if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+          finalEpisodeCount = mostReliableTotalEpisodes;
+        } else if (mostReliableTotalEpisodes === 0) { // Movie
+           finalEpisodeCount = Math.max(1, finalEpisodeCount);
+        }
+      }
+    } else if (updates.current_episode !== undefined) {
+      finalEpisodeCount = Math.max(0, updates.current_episode);
+      if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+        finalEpisodeCount = Math.min(finalEpisodeCount, mostReliableTotalEpisodes);
+      }
 
-          // Case 1: Status is explicitly being updated
-          if (updates.user_status) {
-            finalStatus = updates.user_status;
-            if (finalStatus === 'completed') {
-              if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
-                finalEpisodeCount = mostReliableTotalEpisodes;
-              }
-              // If total_episodes is null or 0 for a 'completed' movie/special, episode count could be 1 or remain as is if already >0.
-              // For simplicity, if it's a movie (total_episodes: 0 or 1) and completed, current_episode could be 1.
-              // This part can be refined if movies need specific handling for current_episode on completion.
-              else if (mostReliableTotalEpisodes === 0) { // Typically movies
-                 finalEpisodeCount = Math.max(1, finalEpisodeCount); // Assume watching a movie means 1 "episode"
-              }
-            }
-          } 
-          // Case 2: Current episode is explicitly being updated (and status was not)
-          else if (updates.current_episode !== undefined) {
-            finalEpisodeCount = Math.max(0, updates.current_episode);
-            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
-              finalEpisodeCount = Math.min(finalEpisodeCount, mostReliableTotalEpisodes);
-            }
-
-            // Auto-calculate status based on the new episode count
-            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
-              if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
-              else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
-              else finalStatus = 'watching';
-            } else if (mostReliableTotalEpisodes === 0) { // Movie or similar
-              finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
-            } else { // total_episodes is null (unknown)
-              if (finalEpisodeCount > 0) finalStatus = 'watching';
-              else finalStatus = 'plan_to_watch';
-            }
-          }
-          // Case 3: No explicit status or episode update from user, but total_episodes might have changed (e.g. from API)
-          // and current_episode needs capping.
-          else {
-            let cappedEpisode = Math.max(0, workingItem.current_episode);
-            if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
-              cappedEpisode = Math.min(cappedEpisode, mostReliableTotalEpisodes);
-            }
-            
-            if (cappedEpisode !== workingItem.current_episode) { // If capping changed the episode count
-              finalEpisodeCount = cappedEpisode;
-              // Auto-calculate status based on the new capped episode count
-              if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+      if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+        if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
+        else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
+        else finalStatus = 'watching';
+      } else if (mostReliableTotalEpisodes === 0) {
+        finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
+      } else {
+        finalStatus = (finalEpisodeCount > 0) ? 'watching' : 'plan_to_watch';
+      }
+    } else { // No explicit status or episode update, but total_episodes might have changed
+        let cappedEpisode = Math.max(0, animeToUpdate.current_episode);
+        if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
+            cappedEpisode = Math.min(cappedEpisode, mostReliableTotalEpisodes);
+        }
+        if (cappedEpisode !== animeToUpdate.current_episode) {
+            finalEpisodeCount = cappedEpisode;
+             if (typeof mostReliableTotalEpisodes === 'number' && mostReliableTotalEpisodes > 0) {
                 if (finalEpisodeCount === 0) finalStatus = 'plan_to_watch';
                 else if (finalEpisodeCount >= mostReliableTotalEpisodes) finalStatus = 'completed';
                 else finalStatus = 'watching';
               } else if (mostReliableTotalEpisodes === 0) {
                 finalStatus = (finalEpisodeCount > 0) ? 'completed' : 'plan_to_watch';
               } else {
-                if (finalEpisodeCount > 0) finalStatus = 'watching';
-                else finalStatus = 'plan_to_watch';
+                finalStatus = (finalEpisodeCount > 0) ? 'watching' : 'plan_to_watch';
               }
-            } else {
-              finalEpisodeCount = cappedEpisode; // Ensure it's at least capped
-            }
-          }
-          
-          // Construct the final state for the item
-          const newAnimeState: UserAnime = {
-            ...animeItemOnShelf, // Start with original non-progress fields
-            ...updates,         // Apply any other direct updates (e.g. rating, streaming_platforms)
-            user_status: finalStatus,
-            current_episode: finalEpisodeCount,
-            total_episodes: mostReliableTotalEpisodes, // Ensure total_episodes is also up-to-date
-          };
-
-          // Log episode watch events if current_episode increased
-          if (newAnimeState.current_episode > oldCurrentEpisode) {
-            const newEvents: EpisodeWatchEvent[] = [];
-            for (let i = oldCurrentEpisode + 1; i <= newAnimeState.current_episode; i++) {
-              newEvents.push({
-                mal_id: mal_id,
-                episode_number_watched: i,
-                watched_at: new Date().toISOString(),
-              });
-            }
-            if (newEvents.length > 0) {
-              setEpisodeWatchHistory(prevHistory => [...prevHistory, ...newEvents]);
-            }
-          }
-          
-          return newAnimeState;
+        } else {
+            finalEpisodeCount = cappedEpisode;
         }
-        return animeItemOnShelf;
-      })
-    );
-  }, []);
+    }
 
-  const removeAnimeFromShelf = useCallback((mal_id: number) => {
+    const updatedAnimeFields: Partial<UserAnime> = {
+        ...updates,
+        user_status: finalStatus,
+        current_episode: finalEpisodeCount,
+        total_episodes: mostReliableTotalEpisodes, // Store the reliable total_episodes
+    };
+
+    if (electronStore) {
+      await electronStore.updateAnimeOnShelf(mal_id, updatedAnimeFields);
+    }
+
+    setShelf(prevShelf =>
+      prevShelf.map(item =>
+        item.mal_id === mal_id ? { ...item, ...updatedAnimeFields } : item
+      )
+    );
+
+    if (finalEpisodeCount > oldCurrentEpisode) {
+      const newEvents: EpisodeWatchEvent[] = [];
+      for (let i = oldCurrentEpisode + 1; i <= finalEpisodeCount; i++) {
+        newEvents.push({
+          mal_id: mal_id,
+          episode_number_watched: i,
+          watched_at: new Date().toISOString(),
+        });
+      }
+      if (newEvents.length > 0) {
+        if (electronStore) {
+          await electronStore.addEpisodeWatchEvents(newEvents);
+        }
+        setEpisodeWatchHistory(prevHistory => [...prevHistory, ...newEvents]);
+      }
+    }
+  }, [shelf, electronStore]);
+
+  const removeAnimeFromShelf = useCallback(async (mal_id: number) => {
+    if (electronStore) {
+      await electronStore.removeAnimeFromShelf(mal_id);
+    }
     setShelf(prevShelf => prevShelf.filter(anime => anime.mal_id !== mal_id));
-  }, []);
+  }, [electronStore]);
 
   const isAnimeOnShelf = useCallback((mal_id: number) => {
     return shelf.some(anime => anime.mal_id === mal_id);
@@ -301,16 +256,22 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     return shelf.find(anime => anime.mal_id === mal_id);
   }, [shelf]);
 
-  const addIgnoredPreviewAnime = useCallback((mal_id: number) => {
+  const addIgnoredPreviewAnime = useCallback(async (mal_id: number) => {
+    if (electronStore) {
+      await electronStore.addIgnoredPreviewMalId(mal_id);
+    }
     setIgnoredPreviewAnimeMalIds(prev => {
       if (prev.includes(mal_id)) return prev;
       return [...prev, mal_id];
     });
-  }, []);
+  }, [electronStore]);
 
-  const removeIgnoredPreviewAnime = useCallback((mal_id: number) => {
+  const removeIgnoredPreviewAnime = useCallback(async (mal_id: number) => {
+    if (electronStore) {
+      await electronStore.removeIgnoredPreviewMalId(mal_id);
+    }
     setIgnoredPreviewAnimeMalIds(prev => prev.filter(id => id !== mal_id));
-  }, []);
+  }, [electronStore]);
 
   const isPreviewAnimeIgnored = useCallback((mal_id: number) => {
     return ignoredPreviewAnimeMalIds.includes(mal_id);
@@ -318,9 +279,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
   const getFilteredUpcomingSequelsCount = useCallback(() => {
     if (!isInitialized || !ignoredPreviewAnimeMalIdsInitialized) return 0;
-    
     const shelfMalIds = new Set(shelf.map(a => a.mal_id));
-    
     return upcomingSequels.filter(seq => 
       !shelfMalIds.has(seq.mal_id) && 
       !ignoredPreviewAnimeMalIds.includes(seq.mal_id) && 
@@ -328,55 +287,32 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     ).length;
   }, [upcomingSequels, shelf, ignoredPreviewAnimeMalIds, isInitialized, ignoredPreviewAnimeMalIdsInitialized]);
   
-  const importAnimeBatch = useCallback((importedAnimeList: UserAnime[]): { successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> } => {
+  const importAnimeBatch = useCallback(async (importedAnimeList: UserAnime[]): Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => {
+    if (electronStore) {
+      const result = await electronStore.importAnimeBatch(importedAnimeList);
+      // Refresh shelf from DB after batch import
+      const dbShelf = await electronStore.getShelf();
+      setShelf(dbShelf || []);
+      return result;
+    }
+    // Fallback if electronStore is not available (should not happen in Electron context)
     let successCount = 0;
     const errors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
-
     setShelf(prevShelf => {
-      const newShelf = [...prevShelf]; 
-
-      importedAnimeList.forEach(importedAnime => {
-        try {
-          if (typeof importedAnime.mal_id !== 'number' || isNaN(importedAnime.mal_id)) {
-            errors.push({ malId: importedAnime.mal_id, animeTitle: importedAnime.title, error: "Internal: MAL ID missing or not a number for context processing." });
-            return; 
-          }
-          
-          const completeAnime: UserAnime = {
-            mal_id: importedAnime.mal_id,
-            title: importedAnime.title || 'Unknown Title',
-            cover_image: importedAnime.cover_image || '',
-            total_episodes: importedAnime.total_episodes === undefined ? null : importedAnime.total_episodes,
-            user_status: importedAnime.user_status || 'plan_to_watch',
-            current_episode: importedAnime.current_episode || 0,
-            user_rating: importedAnime.user_rating === undefined ? null : importedAnime.user_rating,
-            genres: Array.isArray(importedAnime.genres) ? importedAnime.genres : [],
-            studios: Array.isArray(importedAnime.studios) ? importedAnime.studios : [],
-            type: importedAnime.type === undefined ? null : importedAnime.type,
-            year: importedAnime.year === undefined ? null : importedAnime.year,
-            season: importedAnime.season === undefined ? null : importedAnime.season,
-            streaming_platforms: Array.isArray(importedAnime.streaming_platforms) ? importedAnime.streaming_platforms : [],
-            broadcast_day: importedAnime.broadcast_day === undefined ? null : importedAnime.broadcast_day,
-            duration_minutes: importedAnime.duration_minutes === undefined ? null : importedAnime.duration_minutes,
-          };
-
-
-          const existingIndex = newShelf.findIndex(item => item.mal_id === completeAnime.mal_id);
-          if (existingIndex !== -1) {
-            newShelf[existingIndex] = { ...newShelf[existingIndex], ...completeAnime }; 
-          } else {
-            newShelf.push(completeAnime);
-          }
-          successCount++;
-        } catch (e: any) {
-          errors.push({ malId: importedAnime.mal_id, animeTitle: importedAnime.title, error: e.message || "Unknown error during import processing in context." });
-        }
-      });
-      return newShelf;
+        const newShelf = [...prevShelf];
+        importedAnimeList.forEach(importedAnime => {
+             const existingIndex = newShelf.findIndex(item => item.mal_id === importedAnime.mal_id);
+              if (existingIndex !== -1) {
+                newShelf[existingIndex] = { ...newShelf[existingIndex], ...importedAnime }; 
+              } else {
+                newShelf.push(importedAnime);
+              }
+              successCount++;
+        });
+        return newShelf;
     });
     return { successCount, errors };
-  }, []);
-
+  }, [electronStore]);
 
   return (
     <AnimeShelfContext.Provider value={{ 
@@ -410,5 +346,3 @@ export const useAnimeShelf = () => {
   }
   return context;
 };
-
-    
