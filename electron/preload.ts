@@ -1,6 +1,6 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from '@/types/anime';
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
 
 contextBridge.exposeInMainWorld('electronStore', {
   // Anime Shelf
@@ -25,3 +25,4 @@ contextBridge.exposeInMainWorld('electronStore', {
   getUserProfile: (): Promise<UserProfile | null> => ipcRenderer.invoke('db:getUserProfile'),
   updateUserProfile: (profile: Partial<UserProfile>): Promise<void> => ipcRenderer.invoke('db:updateUserProfile', profile),
 });
+

@@ -1,7 +1,7 @@
 
 {
   "compilerOptions": {
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "module": "ESNext",
     "target": "es2020",
     "outDir": ".", 
@@ -14,10 +14,11 @@
     "declaration": false,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["../src/*"] // Adjusted path to src for type imports
+      "@/*": ["../src/*"] 
     },
-    "typeRoots": ["./node_modules/@types", "../node_modules/@types"] // For better-sqlite3 types
+    "typeRoots": ["../node_modules/@types"] 
   },
-  "include": ["*.ts"], // This will include main.ts, preload.ts, database.ts
+  "include": ["*.ts"], 
   "exclude": ["node_modules"]
 }
+
