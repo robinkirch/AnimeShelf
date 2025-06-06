@@ -21,7 +21,8 @@ import { Separator } from '../ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils"; // Import cn utility
+import { cn } from "@/lib/utils"; 
+import { rendererLogger } from '@/lib/logger'; // Import renderer logger
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -46,6 +47,7 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
 
   useEffect(() => {
     if (isOpen) {
+      rendererLogger.info('SettingsModal opened.', { category: 'ui-event' });
       const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
       if (storedApiKey) {
         setApiKey(storedApiKey);
@@ -53,19 +55,19 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
       if (userProfileInitialized && userProfile) {
         setCurrentUsername(userProfile.username || '');
         setCurrentProfilePic(userProfile.profilePictureDataUri);
-        setPreviewProfilePic(userProfile.profilePictureDataUri); // Initialize preview
+        setPreviewProfilePic(userProfile.profilePictureDataUri); 
       } else if (userProfileInitialized && !userProfile) {
-        // Handle case where profile is initialized but null (e.g. first load error)
         setCurrentUsername('');
         setCurrentProfilePic(null);
         setPreviewProfilePic(null);
       }
-      setNewProfilePicFile(null); // Reset file input on open
+      setNewProfilePicFile(null); 
     }
   }, [isOpen, userProfile, userProfileInitialized]);
 
   const handleSaveApiKey = () => {
     localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
+    rendererLogger.info('Gemini API key saved.', { category: 'user-setting-change', setting: 'api-key' });
     toast({
       title: 'API Key Saved',
       description: 'Your Gemini API key has been saved locally.',
@@ -73,7 +75,9 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
   };
 
   const handleThemeChange = (isDark: boolean) => {
-    setTheme(isDark ? 'dark' : 'light');
+    const newTheme = isDark ? 'dark' : 'light';
+    setTheme(newTheme);
+    rendererLogger.info(`Theme changed to ${newTheme}.`, { category: 'user-setting-change', setting: 'theme', newTheme });
   };
 
   const handleProfilePicFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,10 +89,11 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
         setPreviewProfilePic(reader.result as string);
       };
       reader.readAsDataURL(file);
+      rendererLogger.debug('New profile picture file selected for preview.', { category: 'ui-interaction', fileName: file.name, fileSize: file.size });
     } else if (file) {
+      rendererLogger.warn('Invalid profile picture file type selected.', { category: 'user-input-error', fileName: file.name, fileType: file.type });
       toast({ variant: "destructive", title: "Invalid File", description: "Please select an image file." });
       setNewProfilePicFile(null);
-      // Reset preview to current if invalid file is chosen
       setPreviewProfilePic(currentProfilePic); 
     }
   };
@@ -104,22 +109,29 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
     }
     
     await contextUpdateUserProfile({
-      username: currentUsername.trim() || null, // Store null if empty string
+      username: currentUsername.trim() || null, 
       profilePictureDataUri: newPicDataUri,
     });
-    setCurrentProfilePic(newPicDataUri); // Update local state for current pic
-    setNewProfilePicFile(null); // Clear staged file
+    setCurrentProfilePic(newPicDataUri); 
+    setNewProfilePicFile(null); 
+    rendererLogger.info('User profile updated.', { category: 'user-setting-change', setting: 'profile', username: currentUsername.trim() || 'empty', hasNewPic: !!newProfilePicFile });
     toast({ title: "Profile Updated", description: "Your profile has been saved." });
   };
   
   const getInitials = (name: string | null | undefined) => {
-    if (!name) return 'AN'; // AnimeShelf initials
+    if (!name) return 'AS'; // AnimeShelf initials
     const names = name.split(' ');
     let initials = names[0].substring(0, 1).toUpperCase();
     if (names.length > 1) {
       initials += names[names.length - 1].substring(0, 1).toUpperCase();
     }
     return initials;
+  };
+
+  const handleOpenImportExport = () => {
+    rendererLogger.info('Import/Export modal opened from settings.', { category: 'ui-event' });
+    onOpenChange(false); 
+    setTimeout(() => setIsImportExportModalOpen(true), 150); 
   };
 
 
@@ -232,10 +244,7 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
                 </p>
                 <Button
                     variant="outline"
-                    onClick={() => {
-                    onOpenChange(false); 
-                    setTimeout(() => setIsImportExportModalOpen(true), 150); 
-                    }}
+                    onClick={handleOpenImportExport}
                     className="w-full"
                 >
                     <ArrowRightLeft className="mr-2 h-4 w-4" /> Open Import/Export
@@ -267,4 +276,3 @@ const ScrollArea = ({ className, children }: { className?: string; children: Rea
         </div>
     );
 };
-

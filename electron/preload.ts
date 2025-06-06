@@ -61,6 +61,10 @@ contextBridge.exposeInMainWorld('electronStore', {
     console.log('Preload: Calling db:updateUserProfile', profile); // Log für updateUserProfile
     return ipcRenderer.invoke('db:updateUserProfile', profile);
   },
+
+  logToMain: (level: string, category: string, message: string, metadata?: any): void => {
+    ipcRenderer.send('log-to-main', level, category, message, metadata);
+  },
 });
 
 console.log('Preload script finished exposing API');
