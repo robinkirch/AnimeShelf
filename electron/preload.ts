@@ -1,6 +1,6 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from './animeDB';
 
 contextBridge.exposeInMainWorld('electronStore', {
   // Anime Shelf

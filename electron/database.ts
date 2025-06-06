@@ -2,7 +2,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime'; // Changed from '@/types/anime'
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from './animeDB'; // Changed from '@/types/anime'
 
 const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
 let db: Database.Database;
