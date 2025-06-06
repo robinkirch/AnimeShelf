@@ -19,6 +19,7 @@ const nextJsPort = 9002;
 let mainWindow: BrowserWindow | null;
 
 function createWindow() {
+  console.log('createWindow called');
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -27,7 +28,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false, 
       contextIsolation: true, 
-      preload: path.join(__dirname, 'preload.js'), // Enable preload script
+      preload: path.join(__dirname, 'preload.js'),
     },
     icon: path.join(appDir, 'public', 'favicon.ico') 
   });
@@ -46,10 +47,12 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  console.log('mainWindow created'); 
 }
 
 app.on('ready', async () => {
   // Initialize database
+  console.log('App onReady triggered');
   try {
     database.initDb();
     console.log('Database initialized successfully.');
@@ -112,6 +115,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('activate', () => {
+  console.log('App activate triggered');
   if (mainWindow === null) {
     createWindow();
   }

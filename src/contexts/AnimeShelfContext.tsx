@@ -38,6 +38,7 @@ interface AnimeShelfContextType {
   isAnimeOnShelf: (mal_id: number) => boolean;
   getAnimeFromShelf: (mal_id: number) => UserAnime | undefined;
   isInitialized: boolean;
+  isElectronStoreReady: boolean;
   upcomingSequels: JikanAnime[]; 
   setUpcomingSequels: (animeList: JikanAnime[]) => void; 
   getFilteredUpcomingSequelsCount: () => number; 
@@ -86,22 +87,25 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [userProfileInitialized, setUserProfileInitialized] = useState(false);
   
   const [electronStore, setElectronStore] = useState<typeof window.electronStore | undefined>(undefined);
+  const [isElectronStoreReady, setIsElectronStoreReady] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    console.warn("starting first render.");
+    if (typeof window !== 'undefined' && window.electronStore) {
       setElectronStore(window.electronStore);
+      setIsElectronStoreReady(true);
+    } else {
+      console.warn("window.electronStore is not available. Be sure preload.js is loaded correct.");
     }
-  }, []); 
+  }, []);
 
   useEffect(() => {
     async function loadInitialData() {
-      if (!electronStore) {
-        if (typeof window !== 'undefined') {
-            console.warn("Electron store not available for initial data load.");
-        }
-        setIsInitialized(true);
-        setIgnoredPreviewAnimeMalIdsInitialized(true);
-        setUserProfileInitialized(true); // Also mark profile as initialized (with null data)
+      if (!isElectronStoreReady || !electronStore) {
+        console.warn("Sciping initial loading: electronStore not ready.");
+        setIsInitialized(false); 
+        setIgnoredPreviewAnimeMalIdsInitialized(false);
+        setUserProfileInitialized(false);
         return;
       }
       try {
@@ -117,17 +121,17 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         setUserProfile(dbProfile || { username: null, profilePictureDataUri: null, profileSetupComplete: false });
       } catch (error) {
         console.error("Failed to load data from SQLite:", error);
-        setUserProfile({ username: null, profilePictureDataUri: null, profileSetupComplete: false }); // Ensure profile is set on error
+        setUserProfile({ username: null, profilePictureDataUri: null, profileSetupComplete: false });
       } finally {
         setIsInitialized(true);
         setIgnoredPreviewAnimeMalIdsInitialized(true);
         setUserProfileInitialized(true);
       }
     }
-    if (electronStore !== undefined || (typeof window !== 'undefined' && !window.electronStore)) {
-        loadInitialData();
+    if (isElectronStoreReady) { 
+      loadInitialData();
     }
-  }, [electronStore]);
+  }, [isElectronStoreReady, electronStore]);
 
 
   const setUpcomingSequels = useCallback((animeList: JikanAnime[]) => {
@@ -308,6 +312,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   }, [upcomingSequels, shelf, ignoredPreviewAnimeMalIds, isInitialized, ignoredPreviewAnimeMalIdsInitialized]);
   
   const importAnimeBatch = useCallback(async (importedAnimeList: UserAnime[]): Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => {
+    console.log("Attempting import via AnimeShelfContext. electronStore is:", electronStore ? "available" : "undefined");
     if (electronStore) {
       const result = await electronStore.importAnimeBatch(importedAnimeList);
       const dbShelf = await electronStore.getShelf();
@@ -353,6 +358,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         isAnimeOnShelf, 
         getAnimeFromShelf, 
         isInitialized,
+        isElectronStoreReady,
         upcomingSequels,
         setUpcomingSequels,
         getFilteredUpcomingSequelsCount,

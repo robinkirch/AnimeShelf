@@ -14,7 +14,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "electron:build-main": "tsc -p electron/tsconfig.json",
+    "electron:build-main": "tsc -p electron/tsconfig.json && tsc -p electron/tsconfig.preload.json",
     "electron:dev": "concurrently \"yarn dev\" \"wait-on http://localhost:9002 && yarn electron:build-main && cross-env NODE_ENV=development electron .\"",
     "package:electron": "yarn build && yarn electron:build-main && electron-builder",
     "electron:rebuild": "electron-rebuild"

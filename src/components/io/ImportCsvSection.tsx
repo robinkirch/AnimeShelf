@@ -73,7 +73,7 @@ function robustCsvLineParse(line: string, delimiter: string = ','): string[] {
 
 
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
-  const { importAnimeBatch } = useAnimeShelf();
+  const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> } | null>(null);
@@ -367,7 +367,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         <Label htmlFor="csv-file" className="text-sm">Select CSV File</Label>
         <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} ref={fileInputRef} className="text-sm" />
       </div>
-      <Button onClick={handleImport} disabled={!file || isImporting} className="w-full">
+      <Button onClick={handleImport} disabled={!file || isImporting || !isElectronStoreReady} className="w-full">
         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
         Import from CSV
       </Button>

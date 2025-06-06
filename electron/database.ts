@@ -8,55 +8,65 @@ const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
 let db: Database.Database;
 
 export function initDb() {
+   if (db) {
+        console.log("Database already initialized, skipping.");
+        return;
+    }
+    console.log("Attempting to initialize database at:", dbPath);
+
   db = new Database(dbPath);
   console.log(`Database opened at ${dbPath}`);
+  try {
+    // Create tables if they don't exist
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS anime_shelf (
+        mal_id INTEGER PRIMARY KEY,
+        title TEXT NOT NULL,
+        cover_image TEXT,
+        total_episodes INTEGER,
+        user_status TEXT NOT NULL,
+        current_episode INTEGER NOT NULL DEFAULT 0,
+        user_rating INTEGER,
+        genres TEXT,
+        studios TEXT,
+        type TEXT,
+        year INTEGER,
+        season TEXT,
+        streaming_platforms TEXT,
+        broadcast_day TEXT,
+        duration_minutes INTEGER
+      );
 
-  // Create tables if they don't exist
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS anime_shelf (
-      mal_id INTEGER PRIMARY KEY,
-      title TEXT NOT NULL,
-      cover_image TEXT,
-      total_episodes INTEGER,
-      user_status TEXT NOT NULL,
-      current_episode INTEGER NOT NULL DEFAULT 0,
-      user_rating INTEGER,
-      genres TEXT,
-      studios TEXT,
-      type TEXT,
-      year INTEGER,
-      season TEXT,
-      streaming_platforms TEXT,
-      broadcast_day TEXT,
-      duration_minutes INTEGER
-    );
+      CREATE TABLE IF NOT EXISTS episode_watch_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mal_id INTEGER NOT NULL,
+        episode_number_watched INTEGER NOT NULL,
+        watched_at TEXT NOT NULL,
+        FOREIGN KEY (mal_id) REFERENCES anime_shelf(mal_id) ON DELETE CASCADE
+      );
 
-    CREATE TABLE IF NOT EXISTS episode_watch_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      mal_id INTEGER NOT NULL,
-      episode_number_watched INTEGER NOT NULL,
-      watched_at TEXT NOT NULL,
-      FOREIGN KEY (mal_id) REFERENCES anime_shelf(mal_id) ON DELETE CASCADE
-    );
+      CREATE TABLE IF NOT EXISTS ignored_preview_mal_ids (
+        mal_id INTEGER PRIMARY KEY
+      );
 
-    CREATE TABLE IF NOT EXISTS ignored_preview_mal_ids (
-      mal_id INTEGER PRIMARY KEY
-    );
+      CREATE TABLE IF NOT EXISTS user_profile (
+        id INTEGER PRIMARY KEY DEFAULT 1, -- Ensures only one row for profile
+        username TEXT,
+        profile_picture_data_uri TEXT,
+        profile_setup_complete INTEGER DEFAULT 0 -- 0 for false, 1 for true
+      );
+    `);
+    console.log('Tables checked/created.');
 
-    CREATE TABLE IF NOT EXISTS user_profile (
-      id INTEGER PRIMARY KEY DEFAULT 1, -- Ensures only one row for profile
-      username TEXT,
-      profile_picture_data_uri TEXT,
-      profile_setup_complete INTEGER DEFAULT 0 -- 0 for false, 1 for true
-    );
-  `);
-  console.log('Tables checked/created.');
-
-  // Ensure a default profile row exists
-  const profileRow = db.prepare('SELECT id FROM user_profile WHERE id = 1').get();
-  if (!profileRow) {
-    db.prepare('INSERT INTO user_profile (id, username, profile_picture_data_uri, profile_setup_complete) VALUES (1, NULL, NULL, 0)').run();
-    console.log('Default user profile row created.');
+    // Ensure a default profile row exists
+    const profileRow = db.prepare('SELECT id FROM user_profile WHERE id = 1').get();
+    if (!profileRow) {
+      db.prepare('INSERT INTO user_profile (id, username, profile_picture_data_uri, profile_setup_complete) VALUES (1, NULL, NULL, 0)').run();
+      console.log('Default user profile row created.');
+    }
+  } catch (error) {
+      console.error("Error during database initialization in database.ts:", error); // NEU
+      throw error; // Wichtig: Fehler weitergeben, damit sie im main.ts gefangen werden können
   }
 }
 
