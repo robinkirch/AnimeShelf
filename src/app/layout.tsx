@@ -7,7 +7,8 @@ import { AnimeShelfProvider } from '@/contexts/AnimeShelfContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { FooterYear } from '@/components/layout/FooterYear';
 import { Toaster } from "@/components/ui/toaster";
-import { ProfileSetupManager } from '@/components/profile/ProfileSetupModal'; // Corrected import path
+import { ProfileSetupManager } from '@/components/profile/ProfileSetupModal'; 
+import { rendererLogger } from '@/lib/logger'; // Import renderer logger
 
 export const metadata: Metadata = {
   title: 'AnimeShelf',
@@ -19,12 +20,34 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('error', (event) => {
+      rendererLogger.error('Unhandled Renderer Error:', { 
+        category: 'renderer-error', 
+        message: event.message, 
+        filename: event.filename, 
+        lineno: event.lineno, 
+        colno: event.colno,
+        error: event.error?.toString(),
+        stack: event.error?.stack 
+      });
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      rendererLogger.error('Unhandled Renderer Rejection:', { 
+        category: 'renderer-rejection', 
+        reason: event.reason?.toString(),
+        stack: event.reason?.stack
+      });
+    });
+  }
+
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${GeistSans.variable} font-sans antialiased`}>
         <ThemeProvider>
           <AnimeShelfProvider>
-            <ProfileSetupManager /> {/* Add ProfileSetupManager here */}
+            <ProfileSetupManager /> 
             <div className="flex flex-col min-h-screen">
               <Header />
               <main className="flex-grow container mx-auto p-4 md:p-6">

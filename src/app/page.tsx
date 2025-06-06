@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { searchAnimeWithAi, type AiSearchInput } from '@/ai/flows/anime-search-flow';
 import { StatusDistributionBar } from '@/components/shelf/StatusDistributionBar';
+import { rendererLogger } from '@/lib/logger';
 
 
 const ALL_FILTER_VALUE = "_all_";
@@ -78,33 +79,45 @@ export default function MyShelfPage() {
   const [hasMoreShelfItems, setHasMoreShelfItems] = useState(true);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    rendererLogger.info("MyShelfPage mounted or dependencies changed.", { category: 'ui-lifecycle' });
+    return () => {
+        rendererLogger.info("MyShelfPage unmounted.", { category: 'ui-lifecycle' });
+    };
+  }, []);
+
+
   const fetchRelationsForAllShelfItems = useCallback(async () => {
     if (shelf.length === 0) {
         setRelationsMap(new Map());
         setIsLoadingRelations(false);
+        rendererLogger.debug("Shelf is empty, skipping relation fetching.", { category: 'data-fetch' });
         return;
     }
+    rendererLogger.info("Starting to fetch relations for all shelf items.", { category: 'data-fetch', shelfSize: shelf.length });
     setIsLoadingRelations(true);
     setApiError(null);
     
     const newRelationsFetchedThisCall = new Map<number, JikanAnimeRelation[]>();
     let anyNewDataFetched = false;
 
-    const currentRelationsMap = relationsMap; // Capture current state
+    const currentRelationsMap = relationsMap; 
 
     try {
       for (const anime of shelf) {
         if (!currentRelationsMap.has(anime.mal_id)) { 
+          rendererLogger.debug(`Fetching relations for: ${anime.title} (ID: ${anime.mal_id})`, { category: 'data-fetch' });
           const relations = await jikanApi.getAnimeRelations(anime.mal_id);
           newRelationsFetchedThisCall.set(anime.mal_id, relations || []);
           anyNewDataFetched = true;
         }
       }
-    } catch (e) {
-        console.error("Error fetching relations for shelf items:", e);
+    } catch (e: any) {
+        rendererLogger.error("Error fetching relations for shelf items.", { category: 'data-fetch-error', error: e.message, stack: e.stack });
         setApiError("Could not load all series details due to API issues. Some groupings may be incomplete.");
     } finally {
         if (anyNewDataFetched && newRelationsFetchedThisCall.size > 0) {
+          rendererLogger.info(`Fetched new relations for ${newRelationsFetchedThisCall.size} items. Updating relationsMap.`, { category: 'data-fetch' });
           setRelationsMap(prev => {
             const updatedMap = new Map(prev);
             newRelationsFetchedThisCall.forEach((value, key) => {
@@ -114,8 +127,9 @@ export default function MyShelfPage() {
           });
         }
         setIsLoadingRelations(false);
+        rendererLogger.info("Finished fetching relations for shelf items.", { category: 'data-fetch' });
     }
-  }, [shelf, relationsMap]); // relationsMap is a crucial dependency
+  }, [shelf, relationsMap]); 
 
 
   useEffect(() => {
@@ -142,14 +156,16 @@ export default function MyShelfPage() {
       setSearchResults([]);
       return;
     }
+    rendererLogger.info(`Performing standard Jikan search for: "${searchQuery}"`, { category: 'user-action', action: 'search-standard' });
     setIsLoadingSearch(true);
     setApiError(null);
     try {
         const results = await jikanApi.searchAnime(searchQuery);
         const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
         setSearchResults(uniqueResults);
-    } catch (e) {
-        console.error("Error searching anime:", e);
+        rendererLogger.info(`Standard search for "${searchQuery}" returned ${uniqueResults.length} results.`, { category: 'user-action', action: 'search-standard-result' });
+    } catch (e: any) {
+        rendererLogger.error("Error searching anime with standard search.", { category: 'user-action-error', action: 'search-standard', query: searchQuery, error: e.message });
         setApiError("Failed to perform search due to API issues. Please try again later.");
         setSearchResults([]);
     }
@@ -161,6 +177,7 @@ export default function MyShelfPage() {
       setAiSearchResults([]);
       return;
     }
+    rendererLogger.info(`Performing AI search for: "${aiSearchQuery}"`, { category: 'user-action', action: 'search-ai' });
     setIsLoadingAiSearch(true);
     setAiSearchError(null);
     try {
@@ -168,8 +185,9 @@ export default function MyShelfPage() {
       const results = await searchAnimeWithAi(input);
       const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
       setAiSearchResults(uniqueResults);
-    } catch (e) {
-      console.error("Error searching anime with AI:", e);
+      rendererLogger.info(`AI search for "${aiSearchQuery}" returned ${uniqueResults.length} results.`, { category: 'user-action', action: 'search-ai-result' });
+    } catch (e: any) {
+      rendererLogger.error("Error searching anime with AI.", { category: 'user-action-error', action: 'search-ai', query: aiSearchQuery, error: e.message });
       setAiSearchError("Failed to perform AI search. Please try again later.");
       setAiSearchResults([]);
     }
@@ -364,6 +382,7 @@ export default function MyShelfPage() {
       setHasMoreShelfItems(false);
       return;
     }
+    rendererLogger.debug(`Loading more shelf items. Current: ${displayedShelfItems.length}, Total potential: ${groupedAndFilteredShelf.length}`, { category: 'ui-interaction', action: 'load-more' });
     const currentLength = displayedShelfItems.length;
     const nextItems = groupedAndFilteredShelf.slice(currentLength, currentLength + SUBSEQUENT_LOAD_COUNT);
     setDisplayedShelfItems(prevItems => [...prevItems, ...nextItems]);
@@ -376,7 +395,7 @@ export default function MyShelfPage() {
 
     const observer = new IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting) { // Removed !isLoadingRelations
+        if (entries[0].isIntersecting) {
           handleLoadMoreShelfItems();
         }
       },
@@ -384,10 +403,11 @@ export default function MyShelfPage() {
     );
     observer.observe(currentRef);
     return () => { if (currentRef) { observer.unobserve(currentRef); } observer.disconnect(); };
-  }, [loadMoreRef, hasMoreShelfItems, handleLoadMoreShelfItems, isLoadingShelf, shelfInitialized, isLoadingRelations]);
+  }, [loadMoreRef, hasMoreShelfItems, handleLoadMoreShelfItems, isLoadingShelf, shelfInitialized]);
 
 
   const clearFilters = () => {
+    rendererLogger.info("Clearing all shelf filters.", { category: 'user-action', action: 'clear-filters' });
     setGenreFilter([]);
     setStatusFilter(ALL_FILTER_VALUE);
     setRatingFilter(ALL_FILTER_VALUE);
@@ -427,7 +447,7 @@ export default function MyShelfPage() {
                                      (shelfInitialized && 
                                       itemsPassingOtherFilters.length > 0 && 
                                       displayedShelfItems.length === 0 &&
-                                      groupedAndFilteredShelf.length === 0); // Added check for groupedAndFilteredShelf
+                                      groupedAndFilteredShelf.length === 0); 
 
   return (
     <div className="space-y-8">
@@ -573,6 +593,7 @@ export default function MyShelfPage() {
                     key={genre}
                     checked={genreFilter.includes(genre)}
                     onCheckedChange={(checked) => {
+                      rendererLogger.debug(`Genre filter changed: ${genre}, checked: ${checked}`, { category: 'ui-filter', filterType: 'genre' });
                       setGenreFilter(prev =>
                         checked ? [...prev, genre] : prev.filter(g => g !== genre)
                       );
@@ -587,7 +608,7 @@ export default function MyShelfPage() {
           </div>
           <div>
             <Label htmlFor="status-filter" className="text-sm font-medium mb-1 block">Status</Label>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as UserAnimeStatus | typeof ALL_FILTER_VALUE)}>
+            <Select value={statusFilter} onValueChange={(v) => { rendererLogger.debug(`Status filter changed: ${v}`, { category: 'ui-filter', filterType: 'status' }); setStatusFilter(v as UserAnimeStatus | typeof ALL_FILTER_VALUE)}}>
               <SelectTrigger id="status-filter"><SelectValue placeholder="All Statuses" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Statuses ({statusCounts[ALL_FILTER_VALUE] ?? 0})</SelectItem>
@@ -601,7 +622,7 @@ export default function MyShelfPage() {
           </div>
           <div>
             <Label htmlFor="rating-filter" className="text-sm font-medium mb-1 block">Rating</Label>
-            <Select value={ratingFilter} onValueChange={setRatingFilter}>
+            <Select value={ratingFilter} onValueChange={(v) => {rendererLogger.debug(`Rating filter changed: ${v}`, { category: 'ui-filter', filterType: 'rating' }); setRatingFilter(v)}}>
               <SelectTrigger id="rating-filter"><SelectValue placeholder="All Ratings" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL_FILTER_VALUE}>All Ratings</SelectItem>
@@ -624,6 +645,7 @@ export default function MyShelfPage() {
                     key={option.value}
                     checked={typeFilter.includes(option.value)}
                     onCheckedChange={(checked) => {
+                      rendererLogger.debug(`Type filter changed: ${option.value}, checked: ${checked}`, { category: 'ui-filter', filterType: 'type' });
                       setTypeFilter(prev =>
                         checked ? [...prev, option.value] : prev.filter(v => v !== option.value)
                       );
@@ -641,7 +663,7 @@ export default function MyShelfPage() {
         <div className="flex flex-col sm:flex-row gap-4 mb-6 p-4 bg-card rounded-lg shadow-sm items-end">
             <div className="flex-grow w-full sm:w-auto">
                 <Label htmlFor="sort-option" className="text-sm font-medium mb-1 block">Sort By</Label>
-                <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+                <Select value={sortOption} onValueChange={(value) => { rendererLogger.debug(`Sort option changed: ${value}`, { category: 'ui-sort', sortOption: value }); setSortOption(value as SortOption)}}>
                     <SelectTrigger id="sort-option" className="w-full">
                         <SelectValue placeholder="Sort by..." />
                     </SelectTrigger>
@@ -657,7 +679,7 @@ export default function MyShelfPage() {
                 <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label> 
                 <Button
                     variant="outline"
-                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    onClick={() => { const newOrder = sortOrder === 'asc' ? 'desc' : 'asc'; rendererLogger.debug(`Sort order changed: ${newOrder}`, { category: 'ui-sort', sortOrder: newOrder }); setSortOrder(newOrder);}}
                     className="w-full"
                     aria-label={`Sort order: ${sortOrder === 'asc' ? 'Ascending' : 'Descending'}`}
                 >
@@ -754,4 +776,3 @@ export default function MyShelfPage() {
     </div>
   );
 }
-

@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview AI-powered anime search flow.
@@ -12,6 +13,9 @@ import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime } from '@/types/anime';
 import { JikanAnimeSchema } from '@/types/jikanApiSchemas';
 import { z } from 'genkit';
+import { rendererLogger } from '@/lib/logger'; // Import renderer logger if contextually appropriate (for client-side calls)
+// Note: If this flow is ONLY called server-side, rendererLogger won't work.
+// For now, assuming calls might originate from client actions that can then log.
 
 
 const AiSearchInputSchema = z.object({
@@ -31,21 +35,19 @@ const searchAnimeOnJikanTool = ai.defineTool(
     inputSchema: z.object({
       searchTerm: z.string().describe('A concise search term, anime title, or keywords to search for.'),
     }),
-    // The tool directly returns an array of JikanAnime objects.
-    // Genkit will validate this against JikanAnimeSchema.
     outputSchema: z.array(JikanAnimeSchema).describe("An array of anime found, or an empty array if no results or an error occurred. Each anime object contains details like title, synopsis, MAL ID, etc."),
   },
   async (input) => {
+    // This tool is part of a server-side flow, so rendererLogger cannot be used directly here.
+    // Logging related to this tool's execution would typically be done in the main Genkit flow or the calling Jikan API.
+    // console.log(`[AI Tool: searchAnimeOnJikanTool] Searching for: ${input.searchTerm}`); // Basic console log for server
     try {
-      // Limit results from tool to keep things manageable for the LLM, e.g., top 5.
       const results: JikanAnime[] = await jikanApi.searchAnime(input.searchTerm, 5);
-      // The results from jikanApi.searchAnime are expected to be JikanAnime[].
-      // We rely on Zod in defineTool to validate this against JikanAnimeSchema.
+      // console.log(`[AI Tool: searchAnimeOnJikanTool] Found ${results.length} results for: ${input.searchTerm}`);
       return results;
-    } catch (error) {
-      console.error(`Error in searchAnimeOnJikanTool with term "${input.searchTerm}":`, error);
-      // Return empty array on error to allow LLM to potentially try other terms or indicate no results.
-      return [];
+    } catch (error: any) {
+      // console.error(`[AI Tool: searchAnimeOnJikanTool] Error for term "${input.searchTerm}":`, error.message);
+      return []; // Return empty array on error as per description
     }
   }
 );
@@ -53,7 +55,7 @@ const searchAnimeOnJikanTool = ai.defineTool(
 const animeSearchPrompt = ai.definePrompt({
   name: 'animeSearchPrompt',
   input: { schema: AiSearchInputSchema },
-  output: { schema: AiSearchOutputSchema }, // Expects an array of JikanAnime objects
+  output: { schema: AiSearchOutputSchema }, 
   tools: [searchAnimeOnJikanTool],
   system: `You are an expert AI assistant specializing in anime. Your goal is to help users find anime based on their natural language descriptions.
 You have access to a tool called 'searchAnimeOnJikanTool' that can search MyAnimeList.
@@ -89,38 +91,36 @@ const animeSearchFlow = ai.defineFlow(
   {
     name: 'animeSearchFlow',
     inputSchema: AiSearchInputSchema,
-    outputSchema: AiSearchOutputSchema, // Expects Promise<JikanAnime[]>
+    outputSchema: AiSearchOutputSchema, 
   },
   async (input: AiSearchInput): Promise<JikanAnime[]> => {
+    // Server-side flow: cannot use rendererLogger here directly.
+    // Logging the start and end of this flow, and its inputs/outputs,
+    // would typically be done using a server-side logger if Genkit is run in a Node.js env
+    // OR by the calling client-side function.
+    // For example: console.log(`[AI Flow: animeSearchFlow] Input: ${input.query}`);
+
     const { output } = await animeSearchPrompt(input);
     
     if (!output) {
-      console.warn("AI search flow's prompt returned undefined output. Returning an empty array.");
+      // console.warn("[AI Flow: animeSearchFlow] Prompt returned undefined output. Returning empty array.");
       return [];
     }
-    // The 'output' here is already expected to be JikanAnime[] because
-    // animeSearchPrompt's output.schema is AiSearchOutputSchema (z.array(JikanAnimeSchema)).
-    // Genkit handles the parsing and validation.
+    // console.log(`[AI Flow: animeSearchFlow] Output: ${output.length} anime found.`);
     return output;
   }
 );
 
-/**
- * Takes a natural language query and returns a list of matching anime.
- * @param input - An object containing the natural language query.
- * @returns A promise that resolves to an array of JikanAnime objects.
- */
 export async function searchAnimeWithAi(input: AiSearchInput): Promise<JikanAnime[]> {
+  // This function is exported and might be called from the client-side.
+  // So, we can use rendererLogger here.
+  rendererLogger.info(`Initiating AI anime search.`, { category: 'ai-search', query: input.query });
   try {
     const results: AiSearchOutput = await animeSearchFlow(input);
-    // Ensure results are always an array, even if flow somehow returns non-array 
-    // (should not happen with Zod schema validation in place).
+    rendererLogger.info(`AI anime search completed. Found ${results.length} results.`, { category: 'ai-search', query: input.query, resultsCount: results.length });
     return Array.isArray(results) ? results : [];
-  } catch (error) {
-    console.error("Error executing searchAnimeWithAi flow:", error);
-    // Propagate the error or return an empty array depending on desired UI behavior.
-    // Returning an empty array for now to allow the UI to display "no results" or a generic error.
+  } catch (error: any) {
+    rendererLogger.error("Error executing searchAnimeWithAi flow.", { category: 'ai-search-error', query: input.query, error: error.message, stack: error.stack });
     return []; 
   }
 }
-

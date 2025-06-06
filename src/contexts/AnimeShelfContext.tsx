@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent, UserProfile } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime'; 
+import { rendererLogger } from '@/lib/logger'; // Import renderer logger
 
 declare global {
   interface Window {
@@ -21,6 +22,7 @@ declare global {
       importAnimeBatch: (animeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
       getUserProfile: () => Promise<UserProfile | null>;
       updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
+      logToMain: (level: string, category: string, message: string, metadata?: any) => void; // Added for logger
     };
   }
 }
@@ -85,52 +87,63 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userProfileInitialized, setUserProfileInitialized] = useState(false);
   
-  const [electronStore, setElectronStore] = useState<typeof window.electronStore | undefined>(undefined);
+  const [currentElectronStore, setCurrentElectronStore] = useState<typeof window.electronStore | undefined>(undefined);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setElectronStore(window.electronStore);
+      setCurrentElectronStore(window.electronStore);
+      rendererLogger.info('AnimeShelfContext mounted, Electron store reference set.', { category: 'system-lifecycle'});
     }
   }, []); 
 
   useEffect(() => {
     async function loadInitialData() {
-      if (!electronStore) {
+      rendererLogger.info('Attempting to load initial data from Electron store.', { category: 'system-lifecycle' });
+      if (!currentElectronStore) {
         if (typeof window !== 'undefined') {
-            console.warn("Electron store not available for initial data load.");
+            rendererLogger.warn("Electron store not available for initial data load (Context).", { category: 'system-error' });
         }
         setIsInitialized(true);
         setIgnoredPreviewAnimeMalIdsInitialized(true);
-        setUserProfileInitialized(true); // Also mark profile as initialized (with null data)
+        setUserProfileInitialized(true); 
         return;
       }
       try {
+        rendererLogger.debug('Fetching data from electronStore...', { category: 'db-operation'});
         const [dbShelf, dbHistory, dbIgnoredIds, dbProfile] = await Promise.all([
-          electronStore.getShelf(),
-          electronStore.getEpisodeWatchHistory(),
-          electronStore.getIgnoredPreviewMalIds(),
-          electronStore.getUserProfile()
+          currentElectronStore.getShelf(),
+          currentElectronStore.getEpisodeWatchHistory(),
+          currentElectronStore.getIgnoredPreviewMalIds(),
+          currentElectronStore.getUserProfile()
         ]);
         setShelf(dbShelf || []);
         setEpisodeWatchHistory(dbHistory || []);
         setIgnoredPreviewAnimeMalIds(dbIgnoredIds || []);
         setUserProfile(dbProfile || { username: null, profilePictureDataUri: null, profileSetupComplete: false });
-      } catch (error) {
-        console.error("Failed to load data from SQLite:", error);
-        setUserProfile({ username: null, profilePictureDataUri: null, profileSetupComplete: false }); // Ensure profile is set on error
+        rendererLogger.info('Initial data loaded successfully.', { 
+            category: 'db-operation', 
+            shelfSize: dbShelf?.length, 
+            historySize: dbHistory?.length,
+            ignoredIdsSize: dbIgnoredIds?.length,
+            profileLoaded: !!dbProfile
+        });
+      } catch (error: any) {
+        rendererLogger.error("Failed to load data from SQLite via Electron context.", { category: 'db-error', error: error.message, stack: error.stack });
+        setUserProfile({ username: null, profilePictureDataUri: null, profileSetupComplete: false }); 
       } finally {
         setIsInitialized(true);
         setIgnoredPreviewAnimeMalIdsInitialized(true);
         setUserProfileInitialized(true);
       }
     }
-    if (electronStore !== undefined || (typeof window !== 'undefined' && !window.electronStore)) {
+    if (currentElectronStore !== undefined || (typeof window !== 'undefined' && !window.electronStore)) {
         loadInitialData();
     }
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
 
   const setUpcomingSequels = useCallback((animeList: JikanAnime[]) => {
+    rendererLogger.debug(`Setting upcoming sequels, count: ${animeList.length}`, { category: 'data-update' });
     setUpcomingSequelsState(animeList);
   }, []);
 
@@ -153,15 +166,16 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       duration_minutes: parseDurationToMinutes(anime.duration),
     };
 
-    if (electronStore) {
-      await electronStore.addAnimeToShelf(newAnime);
+    rendererLogger.info(`Adding anime to shelf: "${newAnime.title}" (ID: ${newAnime.mal_id})`, { category: 'user-action', action: 'add-anime', details: initialDetails});
+    if (currentElectronStore) {
+      await currentElectronStore.addAnimeToShelf(newAnime);
     }
     setShelf(prevShelf => {
       if (prevShelf.some(item => item.mal_id === anime.mal_id)) return prevShelf;
       return [...prevShelf, newAnime];
     });
     setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
   const updateAnimeOnShelf = useCallback(async (
     mal_id: number,
@@ -169,7 +183,11 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     currentJikanTotalEpisodes?: number | null
   ) => {
     let animeToUpdate = shelf.find(a => a.mal_id === mal_id);
-    if (!animeToUpdate) return;
+    if (!animeToUpdate) {
+      rendererLogger.warn(`Attempted to update non-existent anime on shelf: ID ${mal_id}`, { category: 'user-action-error', action: 'update-anime'});
+      return;
+    }
+    rendererLogger.info(`Updating anime on shelf: ID ${mal_id}`, { category: 'user-action', action: 'update-anime', updatesCount: Object.keys(updates).length });
 
     const oldCurrentEpisode = animeToUpdate.current_episode;
     
@@ -233,8 +251,8 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         total_episodes: mostReliableTotalEpisodes, 
     };
 
-    if (electronStore) {
-      await electronStore.updateAnimeOnShelf(mal_id, updatedAnimeFields);
+    if (currentElectronStore) {
+      await currentElectronStore.updateAnimeOnShelf(mal_id, updatedAnimeFields);
     }
 
     setShelf(prevShelf =>
@@ -253,20 +271,22 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         });
       }
       if (newEvents.length > 0) {
-        if (electronStore) {
-          await electronStore.addEpisodeWatchEvents(newEvents);
+        rendererLogger.info(`Adding ${newEvents.length} episode watch events for anime ID ${mal_id}`, { category: 'user-action', action: 'watch-episode'});
+        if (currentElectronStore) {
+          await currentElectronStore.addEpisodeWatchEvents(newEvents);
         }
         setEpisodeWatchHistory(prevHistory => [...prevHistory, ...newEvents]);
       }
     }
-  }, [shelf, electronStore]);
+  }, [shelf, currentElectronStore]);
 
   const removeAnimeFromShelf = useCallback(async (mal_id: number) => {
-    if (electronStore) {
-      await electronStore.removeAnimeFromShelf(mal_id);
+    rendererLogger.info(`Removing anime from shelf: ID ${mal_id}`, { category: 'user-action', action: 'remove-anime'});
+    if (currentElectronStore) {
+      await currentElectronStore.removeAnimeFromShelf(mal_id);
     }
     setShelf(prevShelf => prevShelf.filter(anime => anime.mal_id !== mal_id));
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
   const isAnimeOnShelf = useCallback((mal_id: number) => {
     return shelf.some(anime => anime.mal_id === mal_id);
@@ -277,21 +297,23 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   }, [shelf]);
 
   const addIgnoredPreviewAnime = useCallback(async (mal_id: number) => {
-    if (electronStore) {
-      await electronStore.addIgnoredPreviewMalId(mal_id);
+    rendererLogger.info(`Ignoring anime in preview: ID ${mal_id}`, { category: 'user-action', action: 'ignore-preview'});
+    if (currentElectronStore) {
+      await currentElectronStore.addIgnoredPreviewMalId(mal_id);
     }
     setIgnoredPreviewAnimeMalIds(prev => {
       if (prev.includes(mal_id)) return prev;
       return [...prev, mal_id];
     });
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
   const removeIgnoredPreviewAnime = useCallback(async (mal_id: number) => {
-    if (electronStore) {
-      await electronStore.removeIgnoredPreviewMalId(mal_id);
+    rendererLogger.info(`Restoring anime to preview: ID ${mal_id}`, { category: 'user-action', action: 'restore-preview'});
+    if (currentElectronStore) {
+      await currentElectronStore.removeIgnoredPreviewMalId(mal_id);
     }
     setIgnoredPreviewAnimeMalIds(prev => prev.filter(id => id !== mal_id));
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
   const isPreviewAnimeIgnored = useCallback((mal_id: number) => {
     return ignoredPreviewAnimeMalIds.includes(mal_id);
@@ -308,12 +330,15 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   }, [upcomingSequels, shelf, ignoredPreviewAnimeMalIds, isInitialized, ignoredPreviewAnimeMalIdsInitialized]);
   
   const importAnimeBatch = useCallback(async (importedAnimeList: UserAnime[]): Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => {
-    if (electronStore) {
-      const result = await electronStore.importAnimeBatch(importedAnimeList);
-      const dbShelf = await electronStore.getShelf();
+    rendererLogger.info(`Starting batch import of ${importedAnimeList.length} anime.`, { category: 'user-action', action: 'import-batch'});
+    if (currentElectronStore) {
+      const result = await currentElectronStore.importAnimeBatch(importedAnimeList);
+      rendererLogger.info(`Batch import result: ${result.successCount} success, ${result.errors.length} errors.`, { category: 'user-action', action: 'import-batch-result', result});
+      const dbShelf = await currentElectronStore.getShelf();
       setShelf(dbShelf || []);
       return result;
     }
+    // Fallback if no electronStore - This part is mostly for type consistency, real imports need DB.
     let successCount = 0;
     const errors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
     setShelf(prevShelf => {
@@ -329,20 +354,29 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         });
         return newShelf;
     });
+    rendererLogger.warn('Batch import processed without Electron store (simulated).', { category: 'user-action-error', action: 'import-batch-no-store'});
     return { successCount, errors };
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
   const updateUserProfile = useCallback(async (profileUpdates: Partial<Omit<UserProfile, 'profileSetupComplete'>>) => {
-    if (!electronStore) return;
-    await electronStore.updateUserProfile(profileUpdates);
+    rendererLogger.info(`Updating user profile.`, { category: 'user-action', action: 'update-profile', updates: Object.keys(profileUpdates) });
+    if (!currentElectronStore) {
+        rendererLogger.error('Cannot update user profile, Electron store not available.', { category: 'user-action-error', action: 'update-profile-no-store' });
+        return;
+    }
+    await currentElectronStore.updateUserProfile(profileUpdates);
     setUserProfile(prev => ({ ...(prev || { username: null, profilePictureDataUri: null, profileSetupComplete: false }), ...profileUpdates }));
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
   const markProfileSetupComplete = useCallback(async () => {
-    if (!electronStore) return;
-    await electronStore.updateUserProfile({ profileSetupComplete: true });
+    rendererLogger.info(`Marking profile setup as complete.`, { category: 'user-action', action: 'profile-setup-complete'});
+    if (!currentElectronStore) {
+        rendererLogger.error('Cannot mark profile setup complete, Electron store not available.', { category: 'user-action-error', action: 'profile-setup-no-store'});
+        return;
+    }
+    await currentElectronStore.updateUserProfile({ profileSetupComplete: true });
     setUserProfile(prev => ({ ...(prev || { username: null, profilePictureDataUri: null, profileSetupComplete: false }), profileSetupComplete: true }));
-  }, [electronStore]);
+  }, [currentElectronStore]);
 
   return (
     <AnimeShelfContext.Provider value={{ 
