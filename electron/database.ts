@@ -168,6 +168,7 @@ export function removeIgnoredPreviewMalId(mal_id: number): void {
 
 // Batch Import
 export function importAnimeBatch(animeList: UserAnime[]): { successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> } {
+     console.log("ImportAnimeBatch called with:", animeList.length, "items.");
     let successCount = 0;
     const errors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
 
@@ -203,17 +204,21 @@ export function importAnimeBatch(animeList: UserAnime[]): { successCount: number
                 };
                 const exists = findStmt.get(anime.mal_id);
                 if (exists) {
+                    console.log(`Updated new anime: ${anime.title}`);
                     updateStmt.run(params);
                 } else {
+                    console.log(`Inserted new anime: ${anime.title}`);
                     insertStmt.run(params);
                 }
                 successCount++;
             } catch (error: any) {
-                 errors.push({ malId: anime.mal_id, animeTitle: anime.title, error: error.message || "SQLite error during batch import." });
+                console.error(`Error processing anime ${anime.title} (MAL ID: ${anime.mal_id}):`, error);
+                errors.push({ malId: anime.mal_id, animeTitle: anime.title, error: error.message || "SQLite error during batch import." });
             }
         }
     })();
 
+    console.log(`Import finished. Success: ${successCount}, Errors: ${errors.length}`);
     return { successCount, errors };
 }
 

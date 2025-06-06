@@ -312,7 +312,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         successCount: dbResults.successCount,
         errors: [...processingErrors, ...dbResults.errors] 
       };
-
+      console.log(finalResults.successCount+"successes to "+finalResults.errors.length+" errors");
       setImportResults(finalResults);
       setIsImporting(false); // Ensure this is set after awaiting
 

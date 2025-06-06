@@ -1,11 +1,13 @@
-
 import { app, BrowserWindow, shell, Menu, ipcMain } from 'electron';
 import * as path from 'path';
 import { fileURLToPath, parse } from 'url';
 import { createServer } from 'http';
-// Correct import for Next.js
 import nextServer from 'next';
-import * as database from './database'; // Import database module
+import * as database from './database.js';
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Determine the correct directory for the Next.js app
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
