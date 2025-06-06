@@ -171,15 +171,15 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     };
 
     rendererLogger.info(`Adding anime to shelf: "${newAnime.title}" (ID: ${newAnime.mal_id})`, { category: 'user-action', action: 'add-anime', details: initialDetails});
-    if (currentElectronStore) {
-      await currentElectronStore.addAnimeToShelf(newAnime);
+    if (electronStore) {
+      await electronStore.addAnimeToShelf(newAnime);
     }
     setShelf(prevShelf => {
       if (prevShelf.some(item => item.mal_id === anime.mal_id)) return prevShelf;
       return [...prevShelf, newAnime];
     });
     setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
-  }, [currentElectronStore]);
+  }, [electronStore]);
 
   const updateAnimeOnShelf = useCallback(async (
     mal_id: number,
@@ -255,8 +255,8 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
         total_episodes: mostReliableTotalEpisodes, 
     };
 
-    if (currentElectronStore) {
-      await currentElectronStore.updateAnimeOnShelf(mal_id, updatedAnimeFields);
+    if (electronStore) {
+      await electronStore.updateAnimeOnShelf(mal_id, updatedAnimeFields);
     }
 
     setShelf(prevShelf =>
@@ -276,21 +276,21 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       }
       if (newEvents.length > 0) {
         rendererLogger.info(`Adding ${newEvents.length} episode watch events for anime ID ${mal_id}`, { category: 'user-action', action: 'watch-episode'});
-        if (currentElectronStore) {
-          await currentElectronStore.addEpisodeWatchEvents(newEvents);
+        if (electronStore) {
+          await electronStore.addEpisodeWatchEvents(newEvents);
         }
         setEpisodeWatchHistory(prevHistory => [...prevHistory, ...newEvents]);
       }
     }
-  }, [shelf, currentElectronStore]);
+  }, [shelf, electronStore]);
 
   const removeAnimeFromShelf = useCallback(async (mal_id: number) => {
     rendererLogger.info(`Removing anime from shelf: ID ${mal_id}`, { category: 'user-action', action: 'remove-anime'});
-    if (currentElectronStore) {
-      await currentElectronStore.removeAnimeFromShelf(mal_id);
+    if (electronStore) {
+      await electronStore.removeAnimeFromShelf(mal_id);
     }
     setShelf(prevShelf => prevShelf.filter(anime => anime.mal_id !== mal_id));
-  }, [currentElectronStore]);
+  }, [electronStore]);
 
   const isAnimeOnShelf = useCallback((mal_id: number) => {
     return shelf.some(anime => anime.mal_id === mal_id);
@@ -302,22 +302,22 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
 
   const addIgnoredPreviewAnime = useCallback(async (mal_id: number) => {
     rendererLogger.info(`Ignoring anime in preview: ID ${mal_id}`, { category: 'user-action', action: 'ignore-preview'});
-    if (currentElectronStore) {
-      await currentElectronStore.addIgnoredPreviewMalId(mal_id);
+    if (electronStore) {
+      await electronStore.addIgnoredPreviewMalId(mal_id);
     }
     setIgnoredPreviewAnimeMalIds(prev => {
       if (prev.includes(mal_id)) return prev;
       return [...prev, mal_id];
     });
-  }, [currentElectronStore]);
+  }, [electronStore]);
 
   const removeIgnoredPreviewAnime = useCallback(async (mal_id: number) => {
     rendererLogger.info(`Restoring anime to preview: ID ${mal_id}`, { category: 'user-action', action: 'restore-preview'});
-    if (currentElectronStore) {
-      await currentElectronStore.removeIgnoredPreviewMalId(mal_id);
+    if (electronStore) {
+      await electronStore.removeIgnoredPreviewMalId(mal_id);
     }
     setIgnoredPreviewAnimeMalIds(prev => prev.filter(id => id !== mal_id));
-  }, [currentElectronStore]);
+  }, [electronStore]);
 
   const isPreviewAnimeIgnored = useCallback((mal_id: number) => {
     return ignoredPreviewAnimeMalIds.includes(mal_id);
