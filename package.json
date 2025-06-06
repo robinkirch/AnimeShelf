@@ -1,3 +1,4 @@
+
 {
   "name": "nextn",
   "version": "0.8.0",
@@ -14,7 +15,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "electron:build-main": "tsc -p electron/tsconfig.json",
+    "electron:build-main": "cd .. && tsc -p electron/tsconfig.json",
     "electron:dev": "concurrently \"yarn dev\" \"wait-on http://localhost:9002 && yarn electron:build-main && cross-env NODE_ENV=development electron .\"",
     "package:electron": "yarn build && yarn electron:build-main && electron-builder"
   },
@@ -67,7 +68,6 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.10",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

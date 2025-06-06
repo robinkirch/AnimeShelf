@@ -2,7 +2,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from '@/types/anime';
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime'; // Changed from '@/types/anime'
 
 const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
 let db: Database.Database;
@@ -271,3 +271,4 @@ export function updateUserProfile(profile: Partial<UserProfile>): void {
     // Optionally re-throw or handle as needed
   }
 }
+
