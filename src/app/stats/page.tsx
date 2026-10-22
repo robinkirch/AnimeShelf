@@ -9,9 +9,11 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { Loader2, Info } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import { useI18n } from '@/i18n/I18nContext';
 
 export default function StatisticsPage() {
   const { isInitialized: shelfInitialized, shelf, episodeWatchHistory } = useAnimeShelf();
+  const { t } = useI18n();
 
   if (!shelfInitialized) {
     return (
@@ -25,9 +27,9 @@ export default function StatisticsPage() {
     return (
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
             <Info className="h-16 w-16 text-muted-foreground mb-6" />
-            <h2 className="text-2xl font-semibold text-primary">No Statistics Available</h2>
+            <h2 className="text-2xl font-semibold text-primary">{t('stats.emptyTitle')}</h2>
             <p className="text-muted-foreground mt-2">
-                Your anime shelf is empty. Add some anime to see your statistics.
+                {t('stats.emptyDescription')}
             </p>
       </div>
     );
@@ -37,9 +39,9 @@ export default function StatisticsPage() {
   return (
     <div className="space-y-8">
       <header className="pb-2">
-        <h1 className="text-4xl font-bold tracking-tight text-primary mb-2">Your Anime Statistics</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-primary mb-2">{t('stats.title')}</h1>
         <p className="text-lg text-muted-foreground max-w-3xl">
-          A visual overview of your anime watching habits and preferences.
+          {t('stats.subtitle')}
         </p>
       </header>
 

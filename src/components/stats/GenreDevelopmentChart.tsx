@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { TrendingUp, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useI18n } from '@/i18n/I18nContext';
+import { seasonLabel } from '@/i18n/labels';
 
 const seasonOrder = ['winter', 'spring', 'summer', 'fall'];
 
@@ -42,6 +44,7 @@ function getPreviousNSeasons(currentYear: number, currentSeasonName: string, n: 
 
 export function GenreDevelopmentChart() {
   const { shelf, isInitialized } = useAnimeShelf();
+  const { t } = useI18n();
   
   const genreColors = useMemo(() => [
     'hsl(var(--chart-1))', 
@@ -83,7 +86,7 @@ export function GenreDevelopmentChart() {
       .map(([genre]) => genre);
 
     const formattedChartData = last12Seasons.map(s => {
-      const seasonData: { name: string; [key: string]: string | number } = { name: s.label };
+      const seasonData: { name: string; [key: string]: string | number } = { name: `${seasonLabel(t, s.season)} ${s.year}` };
       topGenres.forEach(genre => {
         seasonData[genre] = genreCountsBySeason[s.key]?.[genre] || 0;
       });
@@ -100,18 +103,18 @@ export function GenreDevelopmentChart() {
     
     return { chartData: formattedChartData, allGenres: topGenres, chartConfig: generatedChartConfig };
 
-  }, [shelf, isInitialized, genreColors]);
+  }, [shelf, isInitialized, genreColors, t]);
   
 
   if (!isInitialized) {
      return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><TrendingUp className="mr-3 h-6 w-6" />Genre Popularity Over Seasons</CardTitle>
-          <CardDescription>Count of your watched anime by genre for the last 12 airing seasons.</CardDescription>
+          <CardTitle className="flex items-center"><TrendingUp className="mr-3 h-6 w-6" />{t('stats.genre.title')}</CardTitle>
+          <CardDescription>{t('stats.genre.description')}</CardDescription>
         </CardHeader>
         <CardContent className="h-[350px] flex items-center justify-center">
-          <p className="text-muted-foreground">Loading chart data...</p>
+          <p className="text-muted-foreground">{t('stats.loadingChart')}</p>
         </CardContent>
       </Card>
     );
@@ -121,14 +124,14 @@ export function GenreDevelopmentChart() {
      return (
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center"><TrendingUp className="mr-3 h-6 w-6" />Genre Popularity Over Seasons</CardTitle>
-                <CardDescription>Count of your watched anime by genre for the last 12 airing seasons.</CardDescription>
+                <CardTitle className="flex items-center"><TrendingUp className="mr-3 h-6 w-6" />{t('stats.genre.title')}</CardTitle>
+                <CardDescription>{t('stats.genre.description')}</CardDescription>
             </CardHeader>
             <CardContent>
                  <Alert>
                     <Info className="h-4 w-4" />
                     <AlertDescription>
-                        Not enough data to display genre trends. Ensure anime on your shelf have year, season, and genre information, and are marked as watched/completed.
+                        {t('stats.genre.empty')}
                     </AlertDescription>
                 </Alert>
             </CardContent>
@@ -139,8 +142,8 @@ export function GenreDevelopmentChart() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center"><TrendingUp className="mr-3 h-6 w-6" />Genre Popularity (Top {allGenres.length}) Over Seasons</CardTitle>
-        <CardDescription>Count of your watched/completed anime by genre for the last 12 airing seasons. Shows top {allGenres.length} genres.</CardDescription>
+        <CardTitle className="flex items-center"><TrendingUp className="mr-3 h-6 w-6" />{t('stats.genre.titleTop', { count: allGenres.length })}</CardTitle>
+        <CardDescription>{t('stats.genre.descriptionTop', { count: allGenres.length })}</CardDescription>
       </CardHeader>
       <CardContent className="h-[400px] pb-0">
         <ChartContainer config={chartConfig} className="aspect-auto w-full h-full">
@@ -158,7 +161,7 @@ export function GenreDevelopmentChart() {
                     fontSize={11}
                 />
                 <YAxis 
-                    label={{ value: 'Anime Count', angle: -90, position: 'insideLeft', offset:-5, style: {textAnchor: 'middle', fontSize: '12px', fill: 'hsl(var(--muted-foreground))'} }} 
+                    label={{ value: t('stats.genre.axis'), angle: -90, position: 'insideLeft', offset:-5, style: {textAnchor: 'middle', fontSize: '12px', fill: 'hsl(var(--muted-foreground))'} }} 
                     allowDecimals={false}
                     tickLine={false}
                     axisLine={false}

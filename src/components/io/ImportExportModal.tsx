@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ExportSection } from './ExportSection';
 import { ImportCsvSection } from './ImportCsvSection';
 import { ArrowLeft } from 'lucide-react';
+import { useI18n } from '@/i18n/I18nContext';
 
 interface ImportExportModalProps {
   isOpen: boolean;
@@ -15,7 +16,8 @@ interface ImportExportModalProps {
 type ModalView = 'main' | 'import' | 'export';
 
 export function ImportExportModal({ isOpen, onOpenChange }: ImportExportModalProps) {
-  const [view, setView] = useState<ModalView>('main');
+  const { t } = useI18n();
+const [view, setView] = useState<ModalView>('main');
 
   const handleClose = () => {
     onOpenChange(false);
@@ -34,21 +36,21 @@ export function ImportExportModal({ isOpen, onOpenChange }: ImportExportModalPro
       <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>
-            {view === 'main' && 'Import / Export Data'}
-            {view === 'import' && 'Import from CSV'}
-            {view === 'export' && 'Export to CSV'}
+            {view === 'main' && t('io.modal.titleMain')}
+            {view === 'import' && t('io.modal.titleImport')}
+            {view === 'export' && t('io.modal.titleExport')}
           </DialogTitle>
           <DialogDescription>
-            {view === 'main' && 'Choose an action to manage your anime shelf data.'}
-            {view === 'import' && 'Upload a CSV file to import anime to your shelf.'}
-            {view === 'export' && 'Download your current anime shelf as a CSV file.'}
+            {view === 'main' && t('io.modal.descriptionMain')}
+            {view === 'import' && t('io.modal.descriptionImport')}
+            {view === 'export' && t('io.modal.descriptionExport')}
           </DialogDescription>
         </DialogHeader>
 
         {view === 'main' && (
           <div className="grid gap-4 py-4">
-            <Button onClick={() => setView('import')} variant="outline" className="w-full">Import Data</Button>
-            <Button onClick={() => setView('export')} variant="outline" className="w-full">Export Data</Button>
+            <Button onClick={() => setView('import')} variant="outline" className="w-full">{t('io.modal.importData')}</Button>
+            <Button onClick={() => setView('export')} variant="outline" className="w-full">{t('io.modal.exportData')}</Button>
           </div>
         )}
         
@@ -61,11 +63,11 @@ export function ImportExportModal({ isOpen, onOpenChange }: ImportExportModalPro
         <DialogFooter className="mt-auto pt-4 border-t">
           {view !== 'main' && (
             <Button variant="ghost" onClick={() => setView('main')} className="mr-auto">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back
+              <ArrowLeft className="mr-2 h-4 w-4" /> {t('io.modal.back')}
             </Button>
           )}
           <Button variant="outline" onClick={handleClose}>
-            {view === 'main' ? 'Close' : (view === 'import' && 'Done') || 'Close'}
+            {view === 'import' ? t('io.modal.done') : t('common.close')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -25,6 +25,8 @@ import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime'
 import { RatingInput } from './RatingInput';
 import Image from 'next/image';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
+import { useI18n } from '@/i18n/I18nContext';
+import { broadcastDayLabel, statusLabel } from '@/i18n/labels';
 
 interface AddToShelfDialogProps {
   anime: JikanAnime;
@@ -41,7 +43,8 @@ interface AddToShelfDialogProps {
 const NO_BROADCAST_DAY_VALUE = "_none_";
 
 export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const { t } = useI18n();
+const [isOpen, setIsOpen] = useState(false);
   const [userStatus, setUserStatus] = useState<UserAnimeStatus>('plan_to_watch');
   const [currentEpisode, setCurrentEpisode] = useState(0);
   const [userRating, setUserRating] = useState<number | null>(null);
@@ -99,9 +102,9 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Add "{anime.title}" to Shelf</DialogTitle>
+          <DialogTitle>{t('anime.addDialog.title', { title: anime.title })}</DialogTitle>
           <DialogDescription>
-            Set your initial progress and rating for this anime.
+            {t('anime.addDialog.description')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 py-4">
@@ -116,25 +119,25 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
             />
             <div>
               <h3 className="font-semibold">{anime.title}</h3>
-              <p className="text-sm text-muted-foreground">{anime.episodes ? `${anime.episodes} episodes` : 'Episodes unknown'}</p>
-              {anime.broadcast?.string && <p className="text-xs text-muted-foreground">Broadcast: {anime.broadcast.string}</p>}
+              <p className="text-sm text-muted-foreground">{anime.episodes ? t('common.episodes', { count: anime.episodes }) : t('common.episodesUnknown')}</p>
+              {anime.broadcast?.string && <p className="text-xs text-muted-foreground">{t('anime.broadcast', { value: anime.broadcast.string })}</p>}
             </div>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="status" className="text-right">Status</Label>
+            <Label htmlFor="status" className="text-right">{t('anime.status')}</Label>
             <Select value={userStatus} onValueChange={(value) => setUserStatus(value as UserAnimeStatus)}>
               <SelectTrigger id="status" className="col-span-3">
-                <SelectValue placeholder="Select status" />
+                <SelectValue placeholder={t('anime.selectStatus')} />
               </SelectTrigger>
               <SelectContent>
                 {USER_ANIME_STATUS_OPTIONS.map(option => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>{statusLabel(t, option.value)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="current-episode" className="text-right">Episode</Label>
+            <Label htmlFor="current-episode" className="text-right">{t('anime.episode')}</Label>
             <Input
               id="current-episode"
               type="number"
@@ -146,40 +149,40 @@ export function AddToShelfDialog({ anime, onAddToShelf, children }: AddToShelfDi
             />
           </div>
            <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="rating" className="text-right">Rating</Label>
+            <Label htmlFor="rating" className="text-right">{t('anime.rating')}</Label>
             <div className="col-span-3">
               <RatingInput value={userRating} onChange={setUserRating} />
             </div>
           </div>
            <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="broadcast-day" className="text-right">Broadcast Day</Label>
+            <Label htmlFor="broadcast-day" className="text-right">{t('anime.broadcastDay')}</Label>
             <Select value={broadcastDay || NO_BROADCAST_DAY_VALUE} onValueChange={(value) => setBroadcastDay(value === NO_BROADCAST_DAY_VALUE ? null : value)}>
               <SelectTrigger id="broadcast-day" className="col-span-3">
-                <SelectValue placeholder="Select broadcast day" />
+                <SelectValue placeholder={t('anime.selectBroadcastDay')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_BROADCAST_DAY_VALUE}>Unknown / Not Set</SelectItem>
+                <SelectItem value={NO_BROADCAST_DAY_VALUE}>{t('anime.broadcastNotSet')}</SelectItem>
                 {BROADCAST_DAY_OPTIONS.map(option => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>{broadcastDayLabel(t, option.value)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="grid grid-cols-4 items-start gap-4 pt-1">
-            <Label htmlFor="streaming-platforms" className="text-right mt-2">Streaming</Label>
+            <Label htmlFor="streaming-platforms" className="text-right mt-2">{t('anime.streaming')}</Label>
             <div className="col-span-3">
               <StreamingPlatformsInput
                 value={streamingPlatforms}
                 onChange={setStreamingPlatforms}
                 apiSuggestions={apiPlatformSuggestions}
-                placeholder="Add streaming platforms..."
+                placeholder={t('anime.addStreamingPlatforms')}
               />
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
-          <Button type="submit" onClick={handleSubmit}>Add to Shelf</Button>
+          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{t('common.cancel')}</Button>
+          <Button type="submit" onClick={handleSubmit}>{t('anime.addToShelf')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

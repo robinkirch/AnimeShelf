@@ -1,13 +1,17 @@
 // AI models selectable for the AI search (settings). Shared by client (settings, search) and server (flow);
 // the server only accepts IDs from this list. IDs use Genkit's "<plugin>/<model>" naming.
 
+import type { Messages } from '@/i18n/messages/en';
+
 export type AiProvider = 'gemini' | 'anthropic';
 
 export interface AiModelOption {
   id: string;
   provider: AiProvider;
+  /** Product name, not translated. */
   label: string;
-  description: string;
+  /** Key of the translated description (settings.aiModelDescriptions). */
+  descriptionKey: keyof Messages['settings']['aiModelDescriptions'];
 }
 
 export const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
@@ -16,12 +20,12 @@ export const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
 };
 
 export const AI_MODELS: AiModelOption[] = [
-  { id: 'googleai/gemini-flash-latest', provider: 'gemini', label: 'Gemini Flash (latest)', description: 'Fast, good default' },
-  { id: 'googleai/gemini-flash-lite-latest', provider: 'gemini', label: 'Gemini Flash-Lite (latest)', description: 'Fastest and cheapest' },
-  { id: 'googleai/gemini-pro-latest', provider: 'gemini', label: 'Gemini Pro (latest)', description: 'Most capable Gemini, slower' },
-  { id: 'anthropic/claude-opus-5-5', provider: 'anthropic', label: 'Claude Opus 5.5', description: 'Most capable Opus ($4 / $20 per 1M tokens)' },
-  { id: 'anthropic/claude-sonnet-5-5', provider: 'anthropic', label: 'Claude Sonnet 5.5', description: 'Balanced ($2 / $10 per 1M tokens)' },
-  { id: 'anthropic/claude-haiku-5-5', provider: 'anthropic', label: 'Claude Haiku 5.5', description: 'Fastest and cheapest ($0.10 / $0.50 per 1M tokens)' },
+  { id: 'googleai/gemini-flash-latest', provider: 'gemini', label: 'Gemini Flash (latest)', descriptionKey: 'geminiFlash' },
+  { id: 'googleai/gemini-flash-lite-latest', provider: 'gemini', label: 'Gemini Flash-Lite (latest)', descriptionKey: 'geminiFlashLite' },
+  { id: 'googleai/gemini-pro-latest', provider: 'gemini', label: 'Gemini Pro (latest)', descriptionKey: 'geminiPro' },
+  { id: 'anthropic/claude-opus-5-5', provider: 'anthropic', label: 'Claude Opus 5.5', descriptionKey: 'claudeOpus' },
+  { id: 'anthropic/claude-sonnet-5-5', provider: 'anthropic', label: 'Claude Sonnet 5.5', descriptionKey: 'claudeSonnet' },
+  { id: 'anthropic/claude-haiku-5-5', provider: 'anthropic', label: 'Claude Haiku 5.5', descriptionKey: 'claudeHaiku' },
 ];
 
 export const DEFAULT_AI_MODEL_ID = 'googleai/gemini-flash-latest';

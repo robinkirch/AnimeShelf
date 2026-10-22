@@ -11,6 +11,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
+import { statusLabel } from '@/i18n/labels';
 
 interface StatusDistributionBarProps {
   shelf: UserAnime[];
@@ -27,17 +29,19 @@ interface StatusInfo {
 
 const statusOrder: UserAnimeStatus[] = ['completed', 'watching', 'plan_to_watch', 'on_hold', 'dropped'];
 
-const statusDisplayConfig: Record<UserAnimeStatus, { label: string; colorClass: string, textColorClass?: string }> = {
-  completed: { label: 'Completed', colorClass: 'bg-[hsl(var(--chart-2))]', textColorClass: 'text-primary-foreground' }, // Green
-  watching: { label: 'Watching', colorClass: 'bg-primary', textColorClass: 'text-primary-foreground' },         // Blue
-  plan_to_watch: { label: 'Plan to Watch', colorClass: 'bg-muted', textColorClass: 'text-muted-foreground' },// Gray
-  on_hold: { label: 'On Hold', colorClass: 'bg-[hsl(var(--chart-5))]', textColorClass: 'text-primary-foreground'  },        // Orange
-  dropped: { label: 'Dropped', colorClass: 'bg-destructive', textColorClass: 'text-destructive-foreground' },     // Red
+// Labels are translated (statusLabel); only the colors are configured here.
+const statusDisplayConfig: Record<UserAnimeStatus, { colorClass: string, textColorClass?: string }> = {
+  completed: { colorClass: 'bg-[hsl(var(--chart-2))]', textColorClass: 'text-primary-foreground' }, // Green
+  watching: { colorClass: 'bg-primary', textColorClass: 'text-primary-foreground' },         // Blue
+  plan_to_watch: { colorClass: 'bg-muted', textColorClass: 'text-muted-foreground' },// Gray
+  on_hold: { colorClass: 'bg-[hsl(var(--chart-5))]', textColorClass: 'text-primary-foreground'  },        // Orange
+  dropped: { colorClass: 'bg-destructive', textColorClass: 'text-destructive-foreground' },     // Red
 };
 
 
 export function StatusDistributionBar({ shelf }: StatusDistributionBarProps) {
-  const statusData = useMemo(() => {
+  const { t, locale } = useI18n();
+const statusData = useMemo(() => {
     if (shelf.length === 0) {
       return [];
     }
@@ -59,10 +63,10 @@ export function StatusDistributionBar({ shelf }: StatusDistributionBarProps) {
     return statusOrder.map(status => {
       const count = counts[status];
       const percentage = total > 0 ? (count / total) * 100 : 0;
-      const config = statusDisplayConfig[status] || { label: status, colorClass: 'bg-gray-500', textColorClass: 'text-white' };
+      const config = statusDisplayConfig[status] || { colorClass: 'bg-gray-500', textColorClass: 'text-white' };
       return {
         status,
-        label: config.label,
+        label: statusLabel(t, status),
         count,
         percentage,
         colorClass: config.colorClass,
@@ -70,7 +74,7 @@ export function StatusDistributionBar({ shelf }: StatusDistributionBarProps) {
       };
     }).filter(item => item.count > 0); // Only include segments with count > 0 for display
 
-  }, [shelf]);
+  }, [shelf, t]);
 
   if (shelf.length === 0) {
     return null; // Don't render if shelf is empty
@@ -79,7 +83,7 @@ export function StatusDistributionBar({ shelf }: StatusDistributionBarProps) {
   return (
     <TooltipProvider delayDuration={100}>
       <div className="w-full mb-6">
-        <div className="text-sm font-medium text-muted-foreground mb-2">Shelf Status Overview:</div>
+        <div className="text-sm font-medium text-muted-foreground mb-2">{t('stats.statusOverview')}</div>
         <div className="flex h-6 w-full rounded-full overflow-hidden shadow-inner bg-muted/30">
           {statusData.map(item => (
             <Tooltip key={item.status}>
@@ -99,7 +103,7 @@ export function StatusDistributionBar({ shelf }: StatusDistributionBarProps) {
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{item.label}: {item.count} anime ({item.percentage.toFixed(1)}%)</p>
+                <p>{t('stats.statusTooltip', { label: item.label, count: item.count, percent: item.percentage.toLocaleString(locale, { maximumFractionDigits: 1 }) })}</p>
               </TooltipContent>
             </Tooltip>
           ))}

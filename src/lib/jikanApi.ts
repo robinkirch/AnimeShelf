@@ -27,8 +27,11 @@ export interface JikanRequestOptions {
   signal?: AbortSignal;
 }
 
+export type JikanApiErrorCode = 'rateLimit' | 'blocked' | 'failed';
+
+/** `message` is English for logs; the UI shows a translated text based on `code` (apiErrors.<code>). */
 export class JikanApiError extends Error {
-  constructor(message: string, public status?: number) {
+  constructor(message: string, public code: JikanApiErrorCode, public status?: number) {
     super(message);
     this.name = 'JikanApiError';
   }
@@ -157,6 +160,7 @@ async function executeTask(task: Task): Promise<unknown> {
             // Tenrai's anti-abuse system blocks the IP (usually clears within 24 hours).
             ? 'Access to the anime API is temporarily blocked (HTTP 403). This usually clears within 24 hours.'
             : `Anime API request failed${status ? ` (HTTP ${status})` : ''}: ${axiosError.message}`,
+        status === 429 ? 'rateLimit' : status === 403 ? 'blocked' : 'failed',
         status,
       );
     }

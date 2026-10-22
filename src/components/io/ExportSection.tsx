@@ -5,9 +5,11 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 // import type { UserAnime } from '@/types/anime'; // Not explicitly used as type, but shelf is UserAnime[]
 import { DownloadCloud } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useI18n } from '@/i18n/I18nContext';
 
 export function ExportSection() {
-  const { shelf } = useAnimeShelf();
+  const { t } = useI18n();
+const { shelf } = useAnimeShelf();
   const { toast } = useToast();
 
   const escapeCsvCell = (cellData: any): string => {
@@ -20,7 +22,7 @@ export function ExportSection() {
 
   const exportToCsv = () => {
     if (shelf.length === 0) {
-      toast({ title: "Export Failed", description: "Your shelf is empty. Nothing to export.", variant: "destructive" });
+      toast({ title: t('io.export.failedTitle'), description: t('io.export.emptyShelf'), variant: "destructive" });
       return;
     }
 
@@ -61,16 +63,16 @@ export function ExportSection() {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     
-    toast({ title: "Export Successful", description: `${shelf.length} anime entries exported.` });
+    toast({ title: t('io.export.successTitle'), description: t('io.export.successDescription', { count: shelf.length }) });
   };
 
   return (
     <div className="space-y-4 py-4">
       <p className="text-sm text-muted-foreground">
-        This will download a CSV file containing all anime currently on your shelf. Ensure your browser allows file downloads.
+        {t('io.export.description')}
       </p>
       <Button onClick={exportToCsv} className="w-full">
-        <DownloadCloud className="mr-2 h-4 w-4" /> Export Shelf to CSV
+        <DownloadCloud className="mr-2 h-4 w-4" /> {t('io.export.button')}
       </Button>
     </div>
   );

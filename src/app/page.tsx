@@ -32,6 +32,8 @@ import { searchAnimeWithAi, type AiSearchInput } from '@/ai/flows/anime-search-f
 import { readStoredAiSettings } from '@/ai/models';
 import { StatusDistributionBar } from '@/components/shelf/StatusDistributionBar';
 import { rendererLogger } from '@/lib/logger';
+import { useI18n, type MessageKey, type TranslationParams } from '@/i18n/I18nContext';
+import { ratingLabel, statusLabel, typeLabel } from '@/i18n/labels';
 
 
 const ALL_FILTER_VALUE = "_all_";
@@ -47,10 +49,19 @@ interface GroupedShelfItem {
 }
 
 type SortOption = 'title' | 'rating' | 'year' | 'completion';
+// Errors are stored as message keys so they are shown in the current UI language.
+type UiMessage = { key: MessageKey; params?: TranslationParams };
+
+const AI_ERROR_KEYS: Record<'invalidApiKey' | 'overloaded' | 'failed', MessageKey> = {
+  invalidApiKey: 'search.aiInvalidApiKey',
+  overloaded: 'search.aiOverloaded',
+  failed: 'search.aiFailed',
+};
 type SortOrder = 'asc' | 'desc';
 
 export default function MyShelfPage() {
   const { shelf, isInitialized: shelfInitialized } = useAnimeShelf();
+  const { t } = useI18n();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<JikanAnime[]>([]);
@@ -59,7 +70,7 @@ export default function MyShelfPage() {
   const [aiSearchQuery, setAiSearchQuery] = useState('');
   const [aiSearchResults, setAiSearchResults] = useState<JikanAnime[]>([]);
   const [isLoadingAiSearch, setIsLoadingAiSearch] = useState(false);
-  const [aiSearchError, setAiSearchError] = useState<string | null>(null);
+  const [aiSearchError, setAiSearchError] = useState<UiMessage | null>(null);
 
   const [isLoadingShelf, setIsLoadingShelf] = useState(true); 
   const [isLoadingRelations, setIsLoadingRelations] = useState(false); 
@@ -74,7 +85,7 @@ export default function MyShelfPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   const [relationsMap, setRelationsMap] = useState<Map<number, JikanAnimeRelation[]>>(new Map());
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<UiMessage | null>(null);
 
   const [displayedShelfItems, setDisplayedShelfItems] = useState<GroupedShelfItem[]>([]);
   const [hasMoreShelfItems, setHasMoreShelfItems] = useState(true);
@@ -153,7 +164,7 @@ export default function MyShelfPage() {
       }
       flush();
       if (failedCount > 0) {
-        setApiError(`Could not load series details for ${failedCount} anime due to API issues.`);
+        setApiError({ key: 'shelf.relationsFailed', params: { count: failedCount } });
       }
       setIsLoadingRelations(false);
       rendererLogger.info("Finished fetching relations for shelf items.", { category: 'data-fetch', failedCount });
@@ -179,7 +190,7 @@ export default function MyShelfPage() {
         rendererLogger.info(`Standard search for "${searchQuery}" returned ${uniqueResults.length} results.`, { category: 'user-action', action: 'search-standard-result' });
     } catch (e: any) {
         rendererLogger.error("Error searching anime with standard search.", { category: 'user-action-error', action: 'search-standard', query: searchQuery, error: e.message });
-        setApiError("Failed to perform search due to API issues. Please try again later.");
+        setApiError({ key: 'search.searchFailed' });
         setSearchResults([]);
     }
     setIsLoadingSearch(false);
@@ -196,13 +207,21 @@ export default function MyShelfPage() {
     try {
       const { model, apiKey } = readStoredAiSettings();
       const input: AiSearchInput = { query: aiSearchQuery, modelId: model.id, apiKey: apiKey || undefined };
-      const results = await searchAnimeWithAi(input);
+      const response = await searchAnimeWithAi(input);
+      if ('error' in response) {
+        rendererLogger.warn("AI search returned an error.", { category: 'user-action-error', action: 'search-ai', error: response.error });
+        setAiSearchError({ key: AI_ERROR_KEYS[response.error], params: { provider: response.provider } });
+        setAiSearchResults([]);
+        setIsLoadingAiSearch(false);
+        return;
+      }
+      const results = response.results;
       const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
       setAiSearchResults(uniqueResults);
       rendererLogger.info(`AI search for "${aiSearchQuery}" returned ${uniqueResults.length} results.`, { category: 'user-action', action: 'search-ai-result' });
     } catch (e: any) {
       rendererLogger.error("Error searching anime with AI.", { category: 'user-action-error', action: 'search-ai', query: aiSearchQuery, error: e.message });
-      setAiSearchError(e?.message || "Failed to perform AI search. Please try again later.");
+      setAiSearchError({ key: 'search.aiFailed' });
       setAiSearchResults([]);
     }
     setIsLoadingAiSearch(false);
@@ -283,7 +302,8 @@ export default function MyShelfPage() {
 
             if (itemRelations) {
                 for (const relation of itemRelations) {
-                    if (['Sequel', 'Prequel', 'Parent story', 'Full story', 'Side story', 'Alternative version', 'Other'].includes(relation.relation)) {
+                    // Case-insensitive: Tenrai returns e.g. 'Side Story', older Jikan data 'Side story'.
+                    if (['sequel', 'prequel', 'parent story', 'full story', 'side story', 'alternative version', 'other'].includes(relation.relation.toLowerCase())) {
                         for (const entry of relation.entry) {
                             if (entry.type === 'anime' && shelfItemsMap.has(entry.mal_id) && !currentSeriesMalIds.has(entry.mal_id)) {
                                 visited.add(entry.mal_id);
@@ -455,20 +475,20 @@ export default function MyShelfPage() {
   );
 
   const getGenreFilterDisplayValue = () => {
-    if (genreFilter.length === 0) return "All Genres";
-    if (uniqueGenres.length > 0 && genreFilter.length === uniqueGenres.length) return "All Genres";
-    if (genreFilter.length > 2) return `${genreFilter.slice(0, 2).join(', ')}, +${genreFilter.length - 2} more`;
+    if (genreFilter.length === 0) return t('shelf.allGenres');
+    if (uniqueGenres.length > 0 && genreFilter.length === uniqueGenres.length) return t('shelf.allGenres');
+    if (genreFilter.length > 2) return `${genreFilter.slice(0, 2).join(', ')}, ${t('common.moreCount', { count: genreFilter.length - 2 })}`;
     return genreFilter.join(', ');
   };
 
   const getTypeFilterDisplayValue = () => {
-    if (typeFilter.length === 0) return "All Types";
-    if (ANIME_TYPE_FILTER_OPTIONS.length > 0 && typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) return "All Types";
+    if (typeFilter.length === 0) return t('shelf.allTypes');
+    if (ANIME_TYPE_FILTER_OPTIONS.length > 0 && typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) return t('shelf.allTypes');
     if (typeFilter.length > 2) {
-      const displayedTypes = typeFilter.slice(0, 2).map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val);
-      return `${displayedTypes.join(', ')}, +${typeFilter.length - 2} more`;
+      const displayedTypes = typeFilter.slice(0, 2).map(val => typeLabel(t, val));
+      return `${displayedTypes.join(', ')}, ${t('common.moreCount', { count: typeFilter.length - 2 })}`;
     }
-    return typeFilter.map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val).join(', ');
+    return typeFilter.map(val => typeLabel(t, val)).join(', ');
   };
 
   const showInitialLoadingSkeletons = isLoadingShelf || 
@@ -480,17 +500,17 @@ export default function MyShelfPage() {
   return (
     <div className="space-y-8">
       <section className="bg-card p-6 rounded-lg shadow-xs">
-        <h1 className="text-3xl font-bold mb-2 text-primary">Find Your Next Obsession</h1>
-        <p className="text-muted-foreground mb-6">Search for anime by title or use AI to find anime based on description.</p>
+        <h1 className="text-3xl font-bold mb-2 text-primary">{t('search.title')}</h1>
+        <p className="text-muted-foreground mb-6">{t('search.subtitle')}</p>
 
         <div className="space-y-4">
           <div>
-            <Label htmlFor="standard-search-input" className="text-sm font-medium mb-1 block">Standard Search</Label>
+            <Label htmlFor="standard-search-input" className="text-sm font-medium mb-1 block">{t('search.standardLabel')}</Label>
             <div className="flex gap-2">
               <Input
                 id="standard-search-input"
                 type="search"
-                placeholder="Search for anime by title..."
+                placeholder={t('search.standardPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -498,18 +518,18 @@ export default function MyShelfPage() {
               />
               <Button onClick={handleSearch} disabled={isLoadingSearch}>
                 {isLoadingSearch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
-                Search
-              </Button>
+                {t('search.searchButton')}
+</Button>
             </div>
           </div>
 
           <div>
-            <Label htmlFor="ai-search-input" className="text-sm font-medium mb-1 block">AI-Powered Search</Label>
+            <Label htmlFor="ai-search-input" className="text-sm font-medium mb-1 block">{t('search.aiLabel')}</Label>
             <div className="flex gap-2">
               <Input
                 id="ai-search-input"
                 type="search"
-                placeholder="Describe the anime you're looking for..."
+                placeholder={t('search.aiPlaceholder')}
                 value={aiSearchQuery}
                 onChange={(e) => setAiSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleAiSearch()}
@@ -517,8 +537,8 @@ export default function MyShelfPage() {
               />
               <Button onClick={handleAiSearch} disabled={isLoadingAiSearch} variant="outline">
                 {isLoadingAiSearch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 text-yellow-500" />}
-                Search with AI
-              </Button>
+                {t('search.aiButton')}
+</Button>
             </div>
           </div>
         </div>
@@ -526,15 +546,15 @@ export default function MyShelfPage() {
         {apiError && (searchResults.length === 0 && aiSearchResults.length === 0) && ( 
           <Alert variant="destructive" className="mt-4">
             <Info className="h-4 w-4" />
-            <AlertTitle>API Error</AlertTitle>
-            <AlertDescription>{apiError}</AlertDescription>
+            <AlertTitle>{t('search.apiErrorTitle')}</AlertTitle>
+            <AlertDescription>{t(apiError.key, apiError.params)}</AlertDescription>
           </Alert>
         )}
         {aiSearchError && (
           <Alert variant="destructive" className="mt-4">
             <Info className="h-4 w-4" />
-            <AlertTitle>AI Search Error</AlertTitle>
-            <AlertDescription>{aiSearchError}</AlertDescription>
+            <AlertTitle>{t('search.aiErrorTitle')}</AlertTitle>
+            <AlertDescription>{t(aiSearchError.key, aiSearchError.params)}</AlertDescription>
           </Alert>
         )}
 
@@ -547,7 +567,7 @@ export default function MyShelfPage() {
 
         {!isLoadingSearch && searchResults.length > 0 && (
           <div className="mt-6">
-            <h2 className="text-2xl font-semibold mb-4">Search Results</h2>
+            <h2 className="text-2xl font-semibold mb-4">{t('search.resultsTitle')}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {searchResults.map(anime => (
                 <AnimeCard key={`search-${anime.mal_id}`} anime={anime} />
@@ -556,12 +576,12 @@ export default function MyShelfPage() {
           </div>
         )}
         {!isLoadingSearch && searchQuery && searchResults.length === 0 && !apiError && !isLoadingAiSearch && aiSearchResults.length === 0 && (
-          <p className="text-center text-muted-foreground py-4 mt-4">No results found for "{searchQuery}". Try a different title or use AI search.</p>
+          <p className="text-center text-muted-foreground py-4 mt-4">{t('search.noResults', { query: searchQuery })}</p>
         )}
 
         {!isLoadingAiSearch && aiSearchResults.length > 0 && (
           <div className="mt-6">
-            <h2 className="text-2xl font-semibold mb-4">AI Search Results</h2>
+            <h2 className="text-2xl font-semibold mb-4">{t('search.aiResultsTitle')}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
               {aiSearchResults.map(anime => (
                 <AnimeCard key={`ai-search-${anime.mal_id}`} anime={anime} />
@@ -570,7 +590,7 @@ export default function MyShelfPage() {
           </div>
         )}
         {!isLoadingAiSearch && aiSearchQuery && aiSearchResults.length === 0 && !aiSearchError && !isLoadingSearch && searchResults.length === 0 && (
-          <p className="text-center text-muted-foreground py-4 mt-4">AI search found no results for "{aiSearchQuery}". Try rephrasing your description.</p>
+          <p className="text-center text-muted-foreground py-4 mt-4">{t('search.aiNoResults', { query: aiSearchQuery })}</p>
         )}
       </section>
 
@@ -578,10 +598,10 @@ export default function MyShelfPage() {
 
       <section>
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-          <h2 className="text-3xl font-bold text-primary">My Anime Shelf</h2>
+          <h2 className="text-3xl font-bold text-primary">{t('shelf.title')}</h2>
           <div className="flex gap-2 flex-wrap">
               <Button variant="outline" onClick={clearFilters} className="text-sm">
-                <X className="mr-2 h-4 w-4" /> Clear All Filters
+                <X className="mr-2 h-4 w-4" /> {t('shelf.clearAllFilters')}
               </Button>
           </div>
         </div>
@@ -591,13 +611,13 @@ export default function MyShelfPage() {
         )}
 
         <div className="mb-6 p-4 bg-card rounded-lg shadow-xs">
-            <Label htmlFor="local-shelf-search" className="text-sm font-medium mb-1 block">Search My Shelf</Label>
+            <Label htmlFor="local-shelf-search" className="text-sm font-medium mb-1 block">{t('shelf.searchLabel')}</Label>
             <div className="relative">
                 <SearchCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                     id="local-shelf-search"
                     type="search"
-                    placeholder="Search by title in your shelf..."
+                    placeholder={t('shelf.searchPlaceholder')}
                     value={localShelfSearchQuery}
                     onChange={(e) => setLocalShelfSearchQuery(e.target.value)}
                     className="pl-10 w-full"
@@ -607,7 +627,7 @@ export default function MyShelfPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-card rounded-lg shadow-xs">
           <div>
-            <Label htmlFor="genre-filter-shelf" className="text-sm font-medium mb-1 block">Genre</Label>
+            <Label htmlFor="genre-filter-shelf" className="text-sm font-medium mb-1 block">{t('shelf.genre')}</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="genre-filter-shelf" className="w-full justify-between text-left font-normal">
@@ -635,31 +655,31 @@ export default function MyShelfPage() {
             </DropdownMenu>
           </div>
           <div>
-            <Label htmlFor="status-filter" className="text-sm font-medium mb-1 block">Status</Label>
+            <Label htmlFor="status-filter" className="text-sm font-medium mb-1 block">{t('shelf.status')}</Label>
             <Select value={statusFilter} onValueChange={(v) => { rendererLogger.debug(`Status filter changed: ${v}`, { category: 'ui-filter', filterType: 'status' }); setStatusFilter(v as UserAnimeStatus | typeof ALL_FILTER_VALUE)}}>
-              <SelectTrigger id="status-filter"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+              <SelectTrigger id="status-filter"><SelectValue placeholder={t('shelf.allStatuses')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All Statuses ({statusCounts[ALL_FILTER_VALUE] ?? 0})</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>{t('shelf.allStatuses')} ({statusCounts[ALL_FILTER_VALUE] ?? 0})</SelectItem>
                 {USER_ANIME_STATUS_OPTIONS.map(opt =>
                   <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label} ({statusCounts[opt.value] ?? 0})
+                    {statusLabel(t, opt.value)} ({statusCounts[opt.value] ?? 0})
                   </SelectItem>
                 )}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="rating-filter" className="text-sm font-medium mb-1 block">Rating</Label>
+            <Label htmlFor="rating-filter" className="text-sm font-medium mb-1 block">{t('shelf.rating')}</Label>
             <Select value={ratingFilter} onValueChange={(v) => {rendererLogger.debug(`Rating filter changed: ${v}`, { category: 'ui-filter', filterType: 'rating' }); setRatingFilter(v)}}>
-              <SelectTrigger id="rating-filter"><SelectValue placeholder="All Ratings" /></SelectTrigger>
+              <SelectTrigger id="rating-filter"><SelectValue placeholder={t('shelf.allRatings')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All Ratings</SelectItem>
-                {RATING_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value.toString()}>{opt.label}</SelectItem>)}
+                <SelectItem value={ALL_FILTER_VALUE}>{t('shelf.allRatings')}</SelectItem>
+                {RATING_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value.toString()}>{ratingLabel(t, opt.value)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="type-filter-shelf" className="text-sm font-medium mb-1 block">Type</Label>
+            <Label htmlFor="type-filter-shelf" className="text-sm font-medium mb-1 block">{t('shelf.type')}</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="type-filter-shelf" className="w-full justify-between text-left font-normal">
@@ -680,8 +700,8 @@ export default function MyShelfPage() {
                     }}
                     onSelect={(e) => e.preventDefault()} 
                   >
-                    {option.label}
-                  </DropdownMenuCheckboxItem>
+                    {typeLabel(t, option.value)}
+</DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -690,29 +710,29 @@ export default function MyShelfPage() {
 
         <div className="flex flex-col sm:flex-row gap-4 mb-6 p-4 bg-card rounded-lg shadow-xs items-end">
             <div className="grow w-full sm:w-auto">
-                <Label htmlFor="sort-option" className="text-sm font-medium mb-1 block">Sort By</Label>
+                <Label htmlFor="sort-option" className="text-sm font-medium mb-1 block">{t('shelf.sortBy')}</Label>
                 <Select value={sortOption} onValueChange={(value) => { rendererLogger.debug(`Sort option changed: ${value}`, { category: 'ui-sort', sortOption: value }); setSortOption(value as SortOption)}}>
                     <SelectTrigger id="sort-option" className="w-full">
-                        <SelectValue placeholder="Sort by..." />
+                        <SelectValue placeholder={t('shelf.sortByPlaceholder')} />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="title">Title</SelectItem>
-                        <SelectItem value="rating">Rating</SelectItem>
-                        <SelectItem value="year">Release Year</SelectItem>
-                        <SelectItem value="completion">Completion Ratio</SelectItem>
+                        <SelectItem value="title">{t('shelf.sort.title')}</SelectItem>
+                        <SelectItem value="rating">{t('shelf.sort.rating')}</SelectItem>
+                        <SelectItem value="year">{t('shelf.sort.year')}</SelectItem>
+                        <SelectItem value="completion">{t('shelf.sort.completion')}</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
             <div className="w-full sm:w-auto">
-                <Label className="text-sm font-medium mb-1 block sm:invisible">Order</Label> 
+                <Label className="text-sm font-medium mb-1 block sm:invisible">{t('shelf.order')}</Label> 
                 <Button
                     variant="outline"
                     onClick={() => { const newOrder = sortOrder === 'asc' ? 'desc' : 'asc'; rendererLogger.debug(`Sort order changed: ${newOrder}`, { category: 'ui-sort', sortOrder: newOrder }); setSortOrder(newOrder);}}
                     className="w-full"
-                    aria-label={`Sort order: ${sortOrder === 'asc' ? 'Ascending' : 'Descending'}`}
+                    aria-label={t('shelf.sortOrderLabel', { order: sortOrder === 'asc' ? t('shelf.ascending') : t('shelf.descending') })}
                 >
                     {sortOrder === 'asc' ? <ArrowUpAZ className="mr-2 h-4 w-4" /> : <ArrowDownAZ className="mr-2 h-4 w-4" />}
-                    {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+                    {sortOrder === 'asc' ? t('shelf.ascending') : t('shelf.descending')}
                 </Button>
             </div>
         </div>
@@ -720,12 +740,12 @@ export default function MyShelfPage() {
         {apiError && shelf.length > 0 && !isLoadingRelations && ( 
           <Alert variant="destructive" className="mb-6">
             <Info className="h-4 w-4" />
-            <AlertTitle>API Error Loading Relations</AlertTitle>
+            <AlertTitle>{t('shelf.relationsErrorTitle')}</AlertTitle>
             <AlertDescription>
-              {apiError} Some anime may not be grouped correctly.
+              {t(apiError.key, apiError.params)} {t('shelf.relationsFailedHint')}
               <Button variant="link" size="sm" onClick={() => setRelationsRetryToken(t => t + 1)} className="p-0 h-auto ml-2 text-destructive-foreground hover:underline">
-                Retry fetching details
-              </Button>
+                {t('shelf.retryRelations')}
+</Button>
             </AlertDescription>
           </Alert>
         )}
@@ -759,13 +779,13 @@ export default function MyShelfPage() {
             {hasMoreShelfItems && (
               <div ref={loadMoreRef} className="flex justify-center items-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <span className="ml-2 text-muted-foreground">Loading more...</span>
+                <span className="ml-2 text-muted-foreground">{t('shelf.loadingMore')}</span>
               </div>
             )}
             {isLoadingRelations && shelf.length > 0 && displayedShelfItems.length > 0 && ( 
                  <div className="text-center py-4 text-sm text-muted-foreground">
                     <Loader2 className="inline h-4 w-4 mr-2 animate-spin" />
-                    Updating series information... ({relationsLoadedCount} / {shelf.length})
+                    {t('shelf.updatingSeries', { loaded: relationsLoadedCount, total: shelf.length })}
                 </div>
             )}
           </>
@@ -774,9 +794,9 @@ export default function MyShelfPage() {
         {!showInitialLoadingSkeletons && shelfInitialized && itemsPassingOtherFilters.length > 0 && displayedShelfItems.length === 0 && !isLoadingRelations &&(
            <div className="text-center py-10">
             <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-2 text-xl font-semibold">No Anime Match Filters</h3>
+            <h3 className="mt-2 text-xl font-semibold">{t('shelf.noMatchTitle')}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Try adjusting your filters or local shelf search.
+              {t('shelf.noMatchHint')}
             </p>
           </div>
         )}
@@ -784,9 +804,9 @@ export default function MyShelfPage() {
         {!showInitialLoadingSkeletons && shelfInitialized && itemsPassingOtherFilters.length === 0 && shelf.length > 0 && !isLoadingRelations &&(
            <div className="text-center py-10">
             <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-2 text-xl font-semibold">No Anime Match Filters</h3>
+            <h3 className="mt-2 text-xl font-semibold">{t('shelf.noMatchTitle')}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Try adjusting your filters or local shelf search.
+              {t('shelf.noMatchHint')}
             </p>
           </div>
         )}
@@ -794,9 +814,9 @@ export default function MyShelfPage() {
         {!showInitialLoadingSkeletons && shelfInitialized && shelf.length === 0 && (
           <div className="text-center py-10">
             <Search className="mx-auto h-12 w-12 text-muted-foreground" />
-            <h3 className="mt-2 text-xl font-semibold">Your Shelf is Empty</h3>
+            <h3 className="mt-2 text-xl font-semibold">{t('shelf.emptyTitle')}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              Search for anime above and add them to start tracking.
+              {t('shelf.emptyHint')}
             </p>
           </div>
         )}

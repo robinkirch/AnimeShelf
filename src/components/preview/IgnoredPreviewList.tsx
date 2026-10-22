@@ -12,15 +12,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { HelpCircle } from 'lucide-react';
+import { useI18n } from '@/i18n/I18nContext';
 
 
 export function IgnoredPreviewList() {
   const { ignoredPreviewAnimeMalIds, removeIgnoredPreviewAnime, ignoredPreviewAnimeMalIdsInitialized } = useAnimeShelf();
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const [detailedIgnoredAnime, setDetailedIgnoredAnime] = useState<JikanAnime[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [hasBeenVisible, setHasBeenVisible] = useState(false);
 
   const observerRef = useRef<HTMLDivElement | null>(null);
@@ -33,7 +35,7 @@ export function IgnoredPreviewList() {
     }
 
     setIsLoading(true);
-    setError(null);
+    setError(false);
     const fetchedAnime: JikanAnime[] = [];
     try {
       for (const mal_id of ignoredPreviewAnimeMalIds) {
@@ -47,7 +49,7 @@ export function IgnoredPreviewList() {
       setDetailedIgnoredAnime(fetchedAnime.sort((a,b) => a.title.localeCompare(b.title)));
     } catch (e) {
       console.error("Error fetching ignored anime details:", e);
-      setError("Failed to load details for ignored anime. API issues or rate limits may be the cause.");
+      setError(true);
     } finally {
       setIsLoading(false);
     }
@@ -86,8 +88,8 @@ export function IgnoredPreviewList() {
   const handleRestorePreview = (mal_id: number, title: string) => {
     removeIgnoredPreviewAnime(mal_id);
     toast({
-      title: "Anime Restored to Preview",
-      description: `"${title}" will now appear in previews if relevant.`,
+      title: t('preview.restoredToastTitle'),
+      description: t('preview.restoredToastDescription', { title }),
     });
   };
   
@@ -130,11 +132,11 @@ export function IgnoredPreviewList() {
       <div ref={observerRef} className="py-6">
         <Alert variant="destructive">
             <HelpCircle className="h-4 w-4" />
-            <AlertTitle>Error Loading Ignored List</AlertTitle>
+            <AlertTitle>{t('preview.ignoredErrorTitle')}</AlertTitle>
             <AlertDescription>
-            {error}
+            {t('preview.ignoredLoadFailed')}
             <Button variant="link" onClick={fetchData} className="p-0 h-auto text-destructive-foreground hover:underline ml-1">
-                Try again?
+                {t('common.tryAgainQuestion')}
             </Button>
             </AlertDescription>
         </Alert>
@@ -146,8 +148,8 @@ export function IgnoredPreviewList() {
      return (
         <div ref={observerRef} className="text-center py-10 bg-card p-6 rounded-lg shadow-xs border border-dashed">
           <Eye className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="mt-2 text-xl font-semibold text-muted-foreground">No Ignored Anime</h3>
-          <p className="mt-1 text-sm text-muted-foreground">You haven't ignored any anime from the preview page yet.</p>
+          <h3 className="mt-2 text-xl font-semibold text-muted-foreground">{t('preview.noIgnoredTitle')}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{t('preview.noIgnoredDescription')}</p>
         </div>
     );
   }
@@ -156,9 +158,9 @@ export function IgnoredPreviewList() {
      return (
         <div ref={observerRef} className="text-center py-10 bg-card p-6 rounded-lg shadow-xs border border-dashed">
           <ListFilter className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="mt-2 text-xl font-semibold text-muted-foreground">Loading Details...</h3>
+          <h3 className="mt-2 text-xl font-semibold text-muted-foreground">{t('preview.ignoredLoadingTitle')}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Fetching details for your {ignoredPreviewAnimeMalIds.length} ignored anime. If this persists, try reloading.
+            {t('preview.ignoredLoadingDescription', { count: ignoredPreviewAnimeMalIds.length })}
           </p>
         </div>
     );

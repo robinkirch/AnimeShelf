@@ -8,10 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Film, Info } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useI18n } from '@/i18n/I18nContext';
 
 
 export function StudioStatsChart() {
   const { shelf, isInitialized } = useAnimeShelf();
+  const { t } = useI18n();
 
   const chartData = useMemo(() => {
     if (!isInitialized || shelf.length === 0) return [];
@@ -34,21 +36,21 @@ export function StudioStatsChart() {
   
   const chartConfig = useMemo(() => ({
     count: {
-      label: "Completed Anime",
+      label: t('stats.studio.series'),
       color: "hsl(var(--chart-5))",
     },
-  } as ChartConfig), []);
+  } as ChartConfig), [t]);
 
 
   if (!isInitialized) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center"><Film className="mr-3 h-6 w-6" />Anime by Studio</CardTitle>
-          <CardDescription>Number of completed anime per animation studio (Top 15).</CardDescription>
+          <CardTitle className="flex items-center"><Film className="mr-3 h-6 w-6" />{t('stats.studio.title')}</CardTitle>
+          <CardDescription>{t('stats.studio.description')}</CardDescription>
         </CardHeader>
         <CardContent className="h-[350px] flex items-center justify-center">
-          <p className="text-muted-foreground">Loading chart data...</p>
+          <p className="text-muted-foreground">{t('stats.loadingChart')}</p>
         </CardContent>
       </Card>
     );
@@ -58,14 +60,14 @@ export function StudioStatsChart() {
      return (
         <Card>
             <CardHeader>
-                 <CardTitle className="flex items-center"><Film className="mr-3 h-6 w-6" />Anime by Studio</CardTitle>
-                <CardDescription>Number of completed anime per animation studio (Top 15).</CardDescription>
+                 <CardTitle className="flex items-center"><Film className="mr-3 h-6 w-6" />{t('stats.studio.title')}</CardTitle>
+                <CardDescription>{t('stats.studio.description')}</CardDescription>
             </CardHeader>
             <CardContent>
                  <Alert>
                     <Info className="h-4 w-4" />
                     <AlertDescription>
-                        No completed anime with studio information found on your shelf. Complete some anime to see studio statistics.
+                        {t('stats.studio.empty')}
                     </AlertDescription>
                 </Alert>
             </CardContent>
@@ -76,8 +78,8 @@ export function StudioStatsChart() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center"><Film className="mr-3 h-6 w-6" />Anime by Studio (Top {chartData.length})</CardTitle>
-        <CardDescription>Number of completed anime per animation studio. Showing top {chartData.length} studios.</CardDescription>
+        <CardTitle className="flex items-center"><Film className="mr-3 h-6 w-6" />{t('stats.studio.titleTop', { count: chartData.length })}</CardTitle>
+        <CardDescription>{t('stats.studio.descriptionTop', { count: chartData.length })}</CardDescription>
       </CardHeader>
       <CardContent className="h-[400px] pb-0">
         <ChartContainer config={chartConfig} className="aspect-auto w-full h-full">
@@ -89,7 +91,7 @@ export function StudioStatsChart() {
                     tickLine={false} 
                     axisLine={false} 
                     fontSize={12}
-                    label={{ value: 'Anime Count', position: 'insideBottom', offset: -15, style: {textAnchor: 'middle', fontSize: '12px', fill: 'hsl(var(--muted-foreground))'} }}
+                    label={{ value: t('stats.studio.axis'), position: 'insideBottom', offset: -15, style: {textAnchor: 'middle', fontSize: '12px', fill: 'hsl(var(--muted-foreground))'} }}
                 />
                 <YAxis 
                     dataKey="name" 
@@ -107,7 +109,7 @@ export function StudioStatsChart() {
                     return (
                             <div className="flex flex-col">
                             <span className="text-sm font-bold">{item.payload.name}</span>
-                            <span className="text-xs text-muted-foreground">Completed Anime: {value}</span>
+                            <span className="text-xs text-muted-foreground">{t('stats.studio.tooltip', { value: String(value) })}</span>
                             </div>
                         );
                 }} 
@@ -119,7 +121,7 @@ export function StudioStatsChart() {
                     wrapperStyle={{paddingTop: '24px'}}
                     formatter={(value) => <span style={{color: 'hsl(var(--foreground))'}}>{value}</span>}
                 />
-                <Bar dataKey="count" name="Completed Anime" fill="hsl(var(--chart-5))" radius={[0, 4, 4, 0]} barSize={20}/>
+                <Bar dataKey="count" name={t('stats.studio.series')} fill="hsl(var(--chart-5))" radius={[0, 4, 4, 0]} barSize={20}/>
             </BarChart>
         </ChartContainer>
       </CardContent>

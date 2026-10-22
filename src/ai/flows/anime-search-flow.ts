@@ -126,7 +126,12 @@ function isModelOverloaded(error: unknown): boolean {
   return /UNAVAILABLE|\b503\b|high demand|overloaded/i.test(message);
 }
 
-export async function searchAnimeWithAi(input: AiSearchInput): Promise<JikanAnime[]> {
+/** Errors are returned as codes (not thrown): Next.js hides server action error messages in production builds. */
+export type AiSearchResult =
+  | { results: JikanAnime[] }
+  | { error: 'invalidApiKey' | 'overloaded' | 'failed'; provider: string };
+
+export async function searchAnimeWithAi(input: AiSearchInput): Promise<AiSearchResult> {
   rendererLogger.info(`Initiating AI anime search.`, { category: 'ai-search', query: input.query });
   try {
     const { mal_ids } = await animeSearchFlow({ query: input.query, modelId: input.modelId, apiKey: input.apiKey || undefined });
@@ -134,15 +139,13 @@ export async function searchAnimeWithAi(input: AiSearchInput): Promise<JikanAnim
     const details = await Promise.all(uniqueIds.map(id => jikanApi.getAnimeById(id, { priority: 'high' })));
     const results = details.filter((anime): anime is JikanAnime => anime !== null);
     rendererLogger.info(`AI anime search completed. Found ${results.length} results.`, { category: 'ai-search', query: input.query, resultsCount: results.length });
-    return results;
+    return { results };
   } catch (error: any) {
     rendererLogger.error("Error executing searchAnimeWithAi flow.", { category: 'ai-search-error', query: input.query, error: error.message, stack: error.stack });
-    // Rethrow a plain message: server action errors are serialized to the client.
     const providerLabel = AI_PROVIDER_LABELS[(getAiModel(input.modelId) ?? getAiModel(DEFAULT_AI_MODEL_ID)!).provider];
-    throw new Error(/api.?key|authentication/i.test(error?.message ?? '')
-      ? `No valid ${providerLabel} API key. Please set your key in the settings.`
-      : isModelOverloaded(error)
-        ? `The ${providerLabel} AI service is currently overloaded. Please try again in a few minutes.`
-        : 'AI search failed. Please try again later.');
+    const code = /api.?key|authentication/i.test(error?.message ?? '')
+      ? 'invalidApiKey'
+      : isModelOverloaded(error) ? 'overloaded' : 'failed';
+    return { error: code, provider: providerLabel };
   }
 }

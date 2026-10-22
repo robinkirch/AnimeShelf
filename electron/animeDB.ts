@@ -72,51 +72,52 @@ export interface JikanAnime {
 
 export type UserAnimeStatus = 'watching' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_watch';
 
-export const USER_ANIME_STATUS_OPTIONS: { value: UserAnimeStatus; label: string }[] = [
-  { value: 'watching', label: 'Watching' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'on_hold', label: 'On Hold' },
-  { value: 'dropped', label: 'Dropped' },
-  { value: 'plan_to_watch', label: 'Plan to Watch' },
+// Labels for these values are translated in the UI (src/i18n/labels.ts).
+export const USER_ANIME_STATUS_OPTIONS: { value: UserAnimeStatus }[] = [
+  { value: 'watching' },
+  { value: 'completed' },
+  { value: 'on_hold' },
+  { value: 'dropped' },
+  { value: 'plan_to_watch' },
 ];
 
 export const RATING_OPTIONS = [
-    { value: 10, label: '10 (Masterpiece)'},
-    { value: 9, label: '9 (Great)'},
-    { value: 8, label: '8 (Very Good)'},
-    { value: 7, label: '7 (Good)'},
-    { value: 6, label: '6 (Fine)'},
-    { value: 5, label: '5 (Average)'},
-    { value: 4, label: '4 (Bad)'},
-    { value: 3, label: '3 (Very Bad)'},
-    { value: 2, label: '2 (Horrible)'},
-    { value: 1, label: '1 (Appalling)'},
+    { value: 10 },
+    { value: 9 },
+    { value: 8 },
+    { value: 7 },
+    { value: 6 },
+    { value: 5 },
+    { value: 4 },
+    { value: 3 },
+    { value: 2 },
+    { value: 1 },
 ];
 
-export const ANIME_TYPE_FILTER_OPTIONS: { value: string; label: string }[] = [
-  { value: 'TV', label: 'TV Series' },
-  { value: 'OVA', label: 'OVA' },
-  { value: 'ONA', label: 'ONA' },
-  { value: 'Movie', label: 'Movie' },
-  { value: 'Special', label: 'Special' },
+export const ANIME_TYPE_FILTER_OPTIONS: { value: string }[] = [
+  { value: 'TV' },
+  { value: 'OVA' },
+  { value: 'ONA' },
+  { value: 'Movie' },
+  { value: 'Special' },
 ];
 
-export const STATS_ANIME_TYPE_OPTIONS: { value: string; label: string }[] = [
+export const STATS_ANIME_TYPE_OPTIONS: { value: string }[] = [
   ...ANIME_TYPE_FILTER_OPTIONS,
-  { value: 'Music', label: 'Music' },
-  { value: 'Unknown', label: 'Unknown' }, 
+  { value: 'Music' },
+  { value: 'Unknown' }, 
 ];
 
 
-export const BROADCAST_DAY_OPTIONS: { value: string; label: string }[] = [
-    { value: 'Mondays', label: 'Mondays' },
-    { value: 'Tuesdays', label: 'Tuesdays' },
-    { value: 'Wednesdays', label: 'Wednesdays' },
-    { value: 'Thursdays', label: 'Thursdays' },
-    { value: 'Fridays', label: 'Fridays' },
-    { value: 'Saturdays', label: 'Saturdays' },
-    { value: 'Sundays', label: 'Sundays' },
-    { value: 'Other', label: 'Other/Unknown' },
+export const BROADCAST_DAY_OPTIONS: { value: string }[] = [
+    { value: 'Mondays' },
+    { value: 'Tuesdays' },
+    { value: 'Wednesdays' },
+    { value: 'Thursdays' },
+    { value: 'Fridays' },
+    { value: 'Saturdays' },
+    { value: 'Sundays' },
+    { value: 'Other' },
 ];
 
 

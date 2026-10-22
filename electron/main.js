@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, Menu, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, shell, Menu, ipcMain, dialog, session } from 'electron';
 import * as path from 'path';
 import { fileURLToPath, parse } from 'url';
 import { createServer } from 'http';
@@ -61,6 +61,13 @@ function createWindow() {
 }
 app.on('ready', async () => {
     mainLogger.info('Electron app is ready.');
+    // Settings stored as cookies (e.g. the UI language) must survive a crash or forced quit. Electron writes
+    // cookies to disk lazily, so flush right after every change.
+    session.defaultSession.cookies.on('changed', () => {
+        session.defaultSession.cookies.flushStore().catch((err) => {
+            mainLogger.warn('Failed to flush cookie store.', { error: err.message });
+        });
+    });
     try {
         mainLogger.info('Initializing database...');
         database.initDb();

@@ -20,6 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
+import { useI18n } from "@/i18n/I18nContext";
 
 interface StreamingPlatformsInputProps {
   value: string[]; // Current selected platforms
@@ -32,9 +33,10 @@ export function StreamingPlatformsInput({
   value,
   onChange,
   apiSuggestions = [],
-  placeholder = "Select platforms...",
+  placeholder,
 }: StreamingPlatformsInputProps) {
-  const [open, setOpen] = React.useState(false);
+  const { t } = useI18n();
+const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
   
   // Memoize selectedPlatforms to avoid unnecessary recalculations
@@ -79,9 +81,9 @@ export function StreamingPlatformsInput({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="w-full justify-between h-auto min-h-10 py-2 text-left font-normal"
+            className="w-full justify-between h-auto min-h-10 py-2 text-left font-normal whitespace-normal"
           >
-            <span className="flex flex-wrap gap-1 items-center">
+            <span className="flex flex-wrap gap-1 items-center min-w-0">
               {value.length > 0
                 ? value.map((platform) => (
                     <Badge
@@ -97,7 +99,7 @@ export function StreamingPlatformsInput({
                       <X className="ml-1.5 h-3 w-3 cursor-pointer hover:text-destructive" />
                     </Badge>
                   ))
-                : <span className="text-muted-foreground">{placeholder}</span>}
+                : <span className="text-muted-foreground">{placeholder ?? t('anime.platforms.select')}</span>}
             </span>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
@@ -114,7 +116,7 @@ export function StreamingPlatformsInput({
             }}
           >
             <CommandInput
-              placeholder="Search or add platform..."
+              placeholder={t('anime.platforms.search')}
               value={inputValue}
               onValueChange={setInputValue}
               onKeyDown={(e) => {
@@ -127,9 +129,9 @@ export function StreamingPlatformsInput({
             <CommandList>
               <CommandEmpty>
                 {inputValue.trim() ? (
-                    <span>No results. Press Enter to add "<strong>{inputValue.trim()}</strong>".</span>
+                    <span>{t('anime.platforms.noResultsAdd', { value: inputValue.trim() })}</span>
                 ) : (
-                    "No platforms found."
+                    t('anime.platforms.noPlatforms')
                 )}
               </CommandEmpty>
               <CommandGroup>
@@ -169,7 +171,7 @@ export function StreamingPlatformsInput({
                         className="text-sm"
                     >
                         <PlusCircle className="mr-2 h-4 w-4" />
-                        Add "{inputValue.trim()}"
+                        {t('anime.platforms.add', { value: inputValue.trim() })}
                     </CommandItem>
                 </CommandGroup>
               )}

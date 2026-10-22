@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { usePreview } from '@/contexts/PreviewContext';
+import { useI18n } from '@/i18n/I18nContext';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import React, { useEffect, useState } from 'react';
@@ -16,6 +17,7 @@ export function Header() {
   const pathname = usePathname();
   const { userProfile, userProfileInitialized } = useAnimeShelf();
   const { currentUpcoming } = usePreview();
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
@@ -77,13 +79,13 @@ export function Header() {
           </Link>
           <nav className="flex items-center gap-1 sm:gap-2">
             <Link href="/" className={navLinkClasses("/")}>
-              My Shelf
+              {t('layout.nav.shelf')}
             </Link>
             <Link href="/seasonal" className={navLinkClasses("/seasonal")}>
-              Seasonal
+              {t('layout.nav.seasonal')}
             </Link>
             <Link href="/preview" className={navLinkClasses("/preview")}>
-              Preview
+              {t('layout.nav.preview')}
               {upcomingCount > 0 && (
                 <Badge variant="destructive" className="absolute -top-1 -right-2 h-5 min-w-5 p-0 flex items-center justify-center text-xs">
                   {upcomingCount > 99 ? '99+' : upcomingCount}
@@ -91,20 +93,20 @@ export function Header() {
               )}
             </Link>
             <Link href="/stats" className={navLinkClasses("/stats")}>
-              Stats
+              {t('layout.nav.stats')}
             </Link>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setIsSettingsModalOpen(true)}
-              aria-label="Open Settings"
+              aria-label={t('layout.openSettings')}
               className="text-primary-foreground hover:bg-primary/80 hover:text-accent-foreground ml-2"
             >
               <Settings size={20} />
             </Button>
             <div className="flex items-center gap-2 pl-2 border-l border-primary-foreground/30 ml-2">
                 <Avatar className="h-8 w-8 cursor-pointer" onClick={() => setIsSettingsModalOpen(true)}>
-                    <AvatarImage src={userProfile?.profilePictureDataUri || undefined} alt={userProfile?.username || "User"} />
+                    <AvatarImage src={userProfile?.profilePictureDataUri || undefined} alt={userProfile?.username || t('layout.userFallback')} />
                     <AvatarFallback className="bg-primary/70 text-xs">
                         <UserCircle2 size={20}/>
                     </AvatarFallback>

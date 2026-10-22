@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { IgnoredPreviewList } from '@/components/preview/IgnoredPreviewList';
+import { useI18n } from '@/i18n/I18nContext';
 
 const LOADING_SKELETON_COUNT = 4;
 
@@ -33,14 +34,15 @@ export default function PreviewPage() {
   } = useAnimeShelf();
   const { currentUpcoming, past, airingCount, primary, tenrai, enrichProgress, applyTenraiResults, retry } = usePreview();
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const isPrimaryLoading = primary.status === 'loading';
 
   const handleIgnorePreview = (mal_id: number, title: string) => {
     addIgnoredPreviewAnime(mal_id);
     toast({
-      title: "Anime Hidden in Preview",
-      description: `"${title}" will no longer be shown on this page.`,
+      title: t('preview.hiddenToastTitle'),
+      description: t('preview.hiddenToastDescription', { title }),
     });
   };
 
@@ -85,7 +87,7 @@ export default function PreviewPage() {
       ) : (
         <div className="text-center py-10 bg-card p-6 rounded-lg shadow-xs border border-dashed">
           <ListFilter className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="mt-2 text-xl font-semibold text-muted-foreground">No Anime Found</h3>
+          <h3 className="mt-2 text-xl font-semibold text-muted-foreground">{t('preview.noAnimeFound')}</h3>
           <p className="mt-1 text-sm text-muted-foreground">{emptyMessage}</p>
         </div>
       )}
@@ -94,18 +96,18 @@ export default function PreviewPage() {
 
   const renderTenraiStatus = () => {
     const progressValue = tenrai.total > 0 ? (tenrai.checked / tenrai.total) * 100 : 0;
-    const failedNote = tenrai.failedCount > 0 ? ` (${tenrai.failedCount} could not be checked)` : '';
+    const failedNote = tenrai.failedCount > 0 ? t('preview.tenrai.failedNote', { count: tenrai.failedCount }) : '';
     let content: React.ReactNode;
     switch (tenrai.status) {
       case 'seasons':
-        content = <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Tenrai cross-check: loading current and upcoming seasons...</span>;
+        content = <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{t('preview.tenrai.loadingSeasons')}</span>;
         break;
       case 'running':
         content = (
           <div className="space-y-2">
             <div className="flex justify-between gap-4">
-              <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 shrink-0 animate-spin" />Tenrai cross-check: {tenrai.checked} / {tenrai.total} checked</span>
-              <span className="shrink-0 font-medium text-foreground">{tenrai.newCount} new found</span>
+              <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 shrink-0 animate-spin" />{t('preview.tenrai.progress', { checked: tenrai.checked, total: tenrai.total })}</span>
+              <span className="shrink-0 font-medium text-foreground">{t('preview.tenrai.newFound', { count: tenrai.newCount })}</span>
             </div>
             <Progress value={progressValue} className="h-1.5" />
           </div>
@@ -117,12 +119,12 @@ export default function PreviewPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-accent" />
-              Tenrai cross-check complete: {tenrai.newCount} new {tenrai.newCount === 1 ? 'entry' : 'entries'} found
-              {tenrai.upgradeCount > 0 && `, full data for ${tenrai.upgradeCount} current/upcoming`}{failedNote}.
+              {t('preview.tenrai.complete', { count: tenrai.newCount })}
+              {tenrai.upgradeCount > 0 && t('preview.tenrai.fullData', { count: tenrai.upgradeCount })}{failedNote}.
             </span>
             {hasChanges && (
               <Button size="sm" onClick={applyTenraiResults}>
-                <RefreshCw className="mr-2 h-4 w-4" /> Update
+                <RefreshCw className="mr-2 h-4 w-4" /> {t('preview.tenrai.update')}
               </Button>
             )}
           </div>
@@ -130,13 +132,13 @@ export default function PreviewPage() {
         break;
       }
       case 'applied':
-        content = <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-accent" />Tenrai cross-check complete, list is up to date{failedNote}.</span>;
+        content = <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-accent" />{t('preview.tenrai.upToDate')}{failedNote}.</span>;
         break;
       case 'error':
         content = (
           <span className="flex items-center gap-2">
-            <HelpCircle className="h-4 w-4 text-destructive" />Tenrai cross-check failed.
-            <Button variant="link" size="sm" className="h-auto p-0" onClick={retry}>Try again</Button>
+            <HelpCircle className="h-4 w-4 text-destructive" />{t('preview.tenrai.failed')}
+            <Button variant="link" size="sm" className="h-auto p-0" onClick={retry}>{t('preview.tenrai.tryAgain')}</Button>
           </span>
         );
         break;
@@ -157,34 +159,34 @@ export default function PreviewPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8 bg-card rounded-xl shadow-lg">
         <History className="h-20 w-20 text-primary mb-8" />
-        <h2 className="text-3xl font-semibold mb-3">Your Shelf is Empty</h2>
+        <h2 className="text-3xl font-semibold mb-3">{t('preview.emptyShelfTitle')}</h2>
         <p className="text-lg text-muted-foreground mb-6 max-w-md">
-          Add some anime to your shelf first. Then, this page will show you exciting previews of upcoming seasons and other related shows!
+          {t('preview.emptyShelfDescription')}
         </p>
         <Button asChild size="lg">
-          <a href="/">Go to My Shelf</a>
+          <a href="/">{t('preview.goToShelf')}</a>
         </Button>
       </div>
     );
   }
 
   const summaryItems = [
-    { id: SECTION_IDS.currentUpcoming, label: 'Current & Upcoming', detail: `${airingCount} airing now`, count: currentUpcoming.length, icon: CalendarDays, loading: isPrimaryLoading },
-    { id: SECTION_IDS.past, label: 'Past Related', detail: 'already aired', count: past.length, icon: History, loading: isPrimaryLoading },
-    { id: SECTION_IDS.ignored, label: 'Ignored', detail: 'hidden from preview', count: ignoredPreviewAnimeMalIds.length, icon: ArchiveRestore, loading: false },
+    { id: SECTION_IDS.currentUpcoming, label: t('preview.summary.currentUpcoming'), detail: t('preview.summary.airingNow', { count: airingCount }), count: currentUpcoming.length, icon: CalendarDays, loading: isPrimaryLoading },
+    { id: SECTION_IDS.past, label: t('preview.summary.past'), detail: t('preview.summary.alreadyAired'), count: past.length, icon: History, loading: isPrimaryLoading },
+    { id: SECTION_IDS.ignored, label: t('preview.summary.ignored'), detail: t('preview.summary.hidden'), count: ignoredPreviewAnimeMalIds.length, icon: ArchiveRestore, loading: false },
   ];
 
   return (
     <div className="space-y-10">
       <header className="pb-2">
-        <h1 className="text-4xl font-bold tracking-tight text-primary mb-2">Anime Preview</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-primary mb-2">{t('preview.title')}</h1>
         <p className="text-lg text-muted-foreground max-w-3xl">
-          Discover future seasons and other continuations for anime you're tracking. Add them to your plan-to-watch list or hide them from this view.
+          {t('preview.subtitle')}
         </p>
       </header>
 
       <div className="space-y-3">
-        <nav aria-label="Preview sections" className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <nav aria-label={t('preview.sectionsLabel')} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {summaryItems.map(item => (
             <button
               key={item.id}
@@ -207,23 +209,23 @@ export default function PreviewPage() {
         {isPrimaryLoading && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Finding related anime via AniList...
-            {primary.totalBatches > 0 && ` (${primary.doneBatches} / ${primary.totalBatches})`}
+            {t('preview.findingViaAniList')}
+{primary.totalBatches > 0 && ` (${primary.doneBatches} / ${primary.totalBatches})`}
           </div>
         )}
 
         {enrichProgress && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Loading full data for current & upcoming anime... ({enrichProgress.done} / {enrichProgress.total})
+            {t('preview.loadingFullData', { done: enrichProgress.done, total: enrichProgress.total })}
           </div>
         )}
 
         {primary.status === 'error' && (
           <Alert variant="destructive">
             <HelpCircle className="h-5 w-5" />
-            <AlertTitle>AniList is not reachable</AlertTitle>
-            <AlertDescription>Results will be shown as soon as the Tenrai cross-check below is complete.</AlertDescription>
+            <AlertTitle>{t('preview.aniListUnreachableTitle')}</AlertTitle>
+            <AlertDescription>{t('preview.aniListUnreachableDescription')}</AlertDescription>
           </Alert>
         )}
 
@@ -232,22 +234,22 @@ export default function PreviewPage() {
 
       {renderSection(
         SECTION_IDS.currentUpcoming,
-        'Current & Upcoming',
-        'Related anime that are airing this season or have been announced (including entries without a date yet).',
+        t('preview.currentUpcoming.title'),
+        t('preview.currentUpcoming.description'),
         CalendarDays,
         currentUpcoming,
-        'No related anime airing now or announced (or all are hidden).',
+        t('preview.currentUpcoming.empty'),
       )}
 
       <Separator className="my-10" />
 
       {renderSection(
         SECTION_IDS.past,
-        'Past Related',
-        'Already aired sequels, prequels and side stories you have not added yet. Load details to add one to your shelf.',
+        t('preview.past.title'),
+        t('preview.past.description'),
         History,
         past,
-        'No past related anime found (or all are hidden).',
+        t('preview.past.empty'),
       )}
 
       <Separator className="my-12" />
@@ -255,10 +257,10 @@ export default function PreviewPage() {
       <section id={SECTION_IDS.ignored} className="scroll-mt-24">
         <div className="flex items-center gap-3 mb-6">
           <ArchiveRestore className="h-8 w-8 text-primary" />
-          <h2 className="text-2xl font-semibold text-primary">Ignored in Preview ({ignoredPreviewAnimeMalIds.length})</h2>
+          <h2 className="text-2xl font-semibold text-primary">{t('preview.ignoredTitle', { count: ignoredPreviewAnimeMalIds.length })}</h2>
         </div>
         <p className="text-muted-foreground mb-4 text-sm">
-          Anime you've chosen to hide from the main preview sections. They will still appear in "My Shelf" and "Seasonal" if applicable.
+          {t('preview.ignoredDescription')}
         </p>
         <IgnoredPreviewList />
       </section>

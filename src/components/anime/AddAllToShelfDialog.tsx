@@ -29,6 +29,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
+import { useI18n } from '@/i18n/I18nContext';
+import { broadcastDayLabel, statusLabel } from '@/i18n/labels';
 
 interface SeasonEntryState {
   mal_id: number;
@@ -68,7 +70,8 @@ const IGNORED_TYPES = ['Music'];
 const NO_BROADCAST_DAY_VALUE = "_none_";
 
 export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, children }: AddAllToShelfDialogProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const { t } = useI18n();
+const [isOpen, setIsOpen] = useState(false);
   const [seasonEntries, setSeasonEntries] = useState<SeasonEntryState[]>([]);
   const [isFetchingDetails, setIsFetchingDetails] = useState(false);
 
@@ -231,35 +234,35 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
         <div>
           <h4 className="font-semibold text-md">{entry.title}</h4>
           <p className="text-xs text-muted-foreground">
-            {entry.total_episodes ? `${entry.total_episodes} episodes` : 'Episodes unknown'}
+            {entry.total_episodes ? t('common.episodes', { count: entry.total_episodes }) : t('common.episodesUnknown')}
           </p>
-          {entry.animeData?.broadcast?.string && <p className="text-xs text-muted-foreground">Broadcast: {entry.animeData.broadcast.string}</p>}
+          {entry.animeData?.broadcast?.string && <p className="text-xs text-muted-foreground">{t('anime.broadcast', { value: entry.animeData.broadcast.string })}</p>}
           {entry.genres.length > 0 && (
             <p className="text-xs text-muted-foreground truncate" title={entry.genres.join(', ')}>
-              Genres: {entry.genres.slice(0,3).join(', ')}{entry.genres.length > 3 ? '...' : ''}
+              {t('anime.genres', { value: entry.genres.slice(0,3).join(', ') + (entry.genres.length > 3 ? '...' : '') })}
             </p>
           )}
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-            <Label htmlFor={`status-${entry.mal_id}`} className="text-xs">Status</Label>
+            <Label htmlFor={`status-${entry.mal_id}`} className="text-xs">{t('anime.status')}</Label>
             <Select
             value={entry.user_status}
             onValueChange={(value) => handleSeasonChange(entry.mal_id, 'user_status', value as UserAnimeStatus)}
             >
             <SelectTrigger id={`status-${entry.mal_id}`} className="h-9 text-xs">
-                <SelectValue placeholder="Select status" />
+                <SelectValue placeholder={t('anime.selectStatus')} />
             </SelectTrigger>
             <SelectContent>
                 {USER_ANIME_STATUS_OPTIONS.map(option => (
-                <SelectItem key={option.value} value={option.value} className="text-xs">{option.label}</SelectItem>
+                <SelectItem key={option.value} value={option.value} className="text-xs">{statusLabel(t, option.value)}</SelectItem>
                 ))}
             </SelectContent>
             </Select>
         </div>
         <div>
-          <Label htmlFor={`current-episode-${entry.mal_id}`} className="text-xs">Episode</Label>
+          <Label htmlFor={`current-episode-${entry.mal_id}`} className="text-xs">{t('anime.episode')}</Label>
           <Input
             id={`current-episode-${entry.mal_id}`}
             type="number"
@@ -273,34 +276,34 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
       </div>
        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
         <div>
-            <Label htmlFor={`broadcast-day-${entry.mal_id}`} className="text-xs">Broadcast Day</Label>
+            <Label htmlFor={`broadcast-day-${entry.mal_id}`} className="text-xs">{t('anime.broadcastDay')}</Label>
             <Select
                 value={entry.broadcast_day || NO_BROADCAST_DAY_VALUE}
                 onValueChange={(value) => handleSeasonChange(entry.mal_id, 'broadcast_day', value === NO_BROADCAST_DAY_VALUE ? null : value)}
             >
             <SelectTrigger id={`broadcast-day-${entry.mal_id}`} className="h-9 text-xs mt-0.5">
-                <SelectValue placeholder="Select broadcast day" />
+                <SelectValue placeholder={t('anime.selectBroadcastDay')} />
             </SelectTrigger>
             <SelectContent>
-                <SelectItem value={NO_BROADCAST_DAY_VALUE} className="text-xs">Unknown / Not Set</SelectItem>
-                {BROADCAST_DAY_OPTIONS.map(option => (
-                <SelectItem key={option.value} value={option.value} className="text-xs">{option.label}</SelectItem>
+                <SelectItem value={NO_BROADCAST_DAY_VALUE} className="text-xs">{t('anime.broadcastNotSet')}</SelectItem>
+              {BROADCAST_DAY_OPTIONS.map(option => (
+                <SelectItem key={option.value} value={option.value} className="text-xs">{broadcastDayLabel(t, option.value)}</SelectItem>
                 ))}
             </SelectContent>
             </Select>
         </div>
         <div>
-            <Label htmlFor={`streaming-platforms-${entry.mal_id}`} className="text-xs">Streaming</Label>
+            <Label htmlFor={`streaming-platforms-${entry.mal_id}`} className="text-xs">{t('anime.streaming')}</Label>
              <StreamingPlatformsInput
                 value={entry.streaming_platforms}
                 onChange={(newPlatforms) => handleSeasonChange(entry.mal_id, 'streaming_platforms', newPlatforms)}
                 apiSuggestions={entry.apiStreamingSuggestions}
-                placeholder="Add platforms..."
+                placeholder={t('anime.addPlatforms')}
             />
         </div>
       </div>
       <div>
-        <Label htmlFor={`rating-${entry.mal_id}`} className="text-xs">Rating</Label>
+        <Label htmlFor={`rating-${entry.mal_id}`} className="text-xs">{t('anime.rating')}</Label>
         <RatingInput
           value={entry.user_rating}
           onChange={(value) => handleSeasonChange(entry.mal_id, 'user_rating', value)}
@@ -338,30 +341,30 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-lg md:max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Add "{mainAnime.title}" Series to Shelf</DialogTitle>
+          <DialogTitle>{t('anime.addAllDialog.title', { title: mainAnime.title })}</DialogTitle>
           <DialogDescription>
-            Set initial progress for each season in the series. Related seasons are fetched and shown below.
+            {t('anime.addAllDialog.description')}
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="grow max-h-[calc(90vh-200px)] pr-3">
             <div className="space-y-4 py-2">
             {isFetchingDetails && renderSkeletons(3)}
             {!isFetchingDetails && seasonEntries.length === 0 && (
-                <p className="text-center text-muted-foreground py-4">No related seasons found or all were ignored (e.g. Music type).</p>
+                <p className="text-center text-muted-foreground py-4">{t('anime.addAllDialog.noSeasons')}</p>
             )}
             {!isFetchingDetails && seasonEntries.map(entry => renderSeasonForm(entry))}
             </div>
         </ScrollArea>
         <DialogFooter className="mt-auto pt-4 border-t">
-          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
+          <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{t('common.cancel')}</Button>
           <Button 
             type="submit" 
             onClick={handleSubmit} 
             disabled={isFetchingDetails || seasonEntries.filter(e => e.animeData).length === 0}
           >
             {isFetchingDetails && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Add Series to Shelf
-          </Button>
+            {t('anime.addAllDialog.submit')}
+</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

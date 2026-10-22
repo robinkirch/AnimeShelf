@@ -7,6 +7,8 @@ import { jikanApi, isAbortError, JikanApiError } from '@/lib/jikanApi';
 import type { JikanAnime, JikanMALItem } from '@/types/anime';
 import { ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
 import { Loader2, ListFilter, ChevronDown, X, ChevronRight, CalendarClock } from 'lucide-react';
+import { useI18n, type MessageKey } from '@/i18n/I18nContext';
+import { seasonLabel, typeLabel } from '@/i18n/labels';
 import {
   Select,
   SelectContent,
@@ -40,7 +42,9 @@ function getCurrentSeasonName(): string {
 export default function SeasonalPage() {
   const [seasonalAnime, setSeasonalAnime] = useState<JikanAnime[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
+  // Stored as a message key so it is shown in the current UI language.
+  const [error, setError] = useState<MessageKey | null>(null);
 
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [season, setSeason] = useState<string>(getCurrentSeasonName());
@@ -91,7 +95,7 @@ export default function SeasonalPage() {
       } catch (e) {
         if (isAbortError(e)) return;
         console.error(e);
-        setError(e instanceof JikanApiError ? e.message : 'Failed to fetch seasonal anime. Please try again later.');
+        setError(e instanceof JikanApiError ? `apiErrors.${e.code}` : 'apiErrors.failed');
         setIsLoading(false);
       }
     };
@@ -145,32 +149,32 @@ export default function SeasonalPage() {
 
   const getGenreFilterDisplayValue = () => {
     if (genreFilter.length === 0) {
-      return "All Genres";
+      return t('shelf.allGenres');
     }
     if (uniqueGenres.length > 0 && genreFilter.length === uniqueGenres.length) {
-       return "All Genres";
+       return t('shelf.allGenres');
     }
     if (genreFilter.length > 2) {
-      return `${genreFilter.slice(0, 2).join(', ')}, +${genreFilter.length - 2} more`;
+      return `${genreFilter.slice(0, 2).join(', ')}, ${t('common.moreCount', { count: genreFilter.length - 2 })}`;
     }
     return genreFilter.join(', ');
   };
 
   const getTypeFilterDisplayValue = () => {
     if (typeFilter.length === 0) {
-      return "All Types";
+      return t('shelf.allTypes');
     }
     if (ANIME_TYPE_FILTER_OPTIONS.length > 0 && typeFilter.length === ANIME_TYPE_FILTER_OPTIONS.length) {
-      return "All Types";
+      return t('shelf.allTypes');
     }
      if (typeFilter.length > 2) {
       const displayedTypes = typeFilter
         .slice(0, 2)
-        .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val);
-      return `${displayedTypes.join(', ')}, +${typeFilter.length - 2} more`;
+        .map(val => typeLabel(t, val));
+      return `${displayedTypes.join(', ')}, ${t('common.moreCount', { count: typeFilter.length - 2 })}`;
     }
     return typeFilter
-      .map(val => ANIME_TYPE_FILTER_OPTIONS.find(opt => opt.value === val)?.label || val)
+      .map(val => typeLabel(t, val))
       .join(', ');
   };
 
@@ -190,18 +194,18 @@ export default function SeasonalPage() {
       <section className="bg-card p-6 rounded-lg shadow-xs">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-primary">Seasonal Anime</h1>
+            <h1 className="text-3xl font-bold text-primary">{t('seasonal.title')}</h1>
             {isFutureSelectedSeason && (
               <Badge variant="outline" className="border-accent text-accent">
                 <CalendarClock className="mr-1.5 h-4 w-4" />
-                Future
-              </Badge>
+                {t('seasonal.future')}
+</Badge>
             )}
           </div>
           <div className="flex gap-2 flex-wrap justify-center md:justify-end items-center">
             <Select value={year.toString()} onValueChange={(val) => setYear(parseInt(val))}>
               <SelectTrigger className="w-[120px] text-sm h-10">
-                <SelectValue placeholder="Year" />
+                <SelectValue placeholder={t('seasonal.year')} />
               </SelectTrigger>
               <SelectContent>
                 {availableYears.map(y => <SelectItem key={y} value={y.toString()}>{y}</SelectItem>)}
@@ -209,21 +213,21 @@ export default function SeasonalPage() {
             </Select>
             <Select value={season} onValueChange={setSeason}>
               <SelectTrigger className="w-[120px] text-sm h-10">
-                <SelectValue placeholder="Season" />
+                <SelectValue placeholder={t('seasonal.season')} />
               </SelectTrigger>
               <SelectContent>
-                {seasons.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}
+                {seasons.map(s => <SelectItem key={s} value={s}>{seasonLabel(t, s)}</SelectItem>)}
               </SelectContent>
             </Select>
             <Button onClick={handleNextSeason} variant="outline" size="sm" className="h-10 px-3">
-              Next <ChevronRight className="ml-1 h-4 w-4" />
+              {t('seasonal.next')} <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
           <div>
-            <Label htmlFor="genre-filter-seasonal" className="text-sm font-medium mb-1 block">Genre</Label>
+            <Label htmlFor="genre-filter-seasonal" className="text-sm font-medium mb-1 block">{t('shelf.genre')}</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="genre-filter-seasonal" className="w-full justify-between text-left font-normal">
@@ -250,17 +254,17 @@ export default function SeasonalPage() {
             </DropdownMenu>
           </div>
           <div>
-            <Label htmlFor="studio-filter-seasonal" className="text-sm font-medium mb-1 block">Studio</Label>
+            <Label htmlFor="studio-filter-seasonal" className="text-sm font-medium mb-1 block">{t('seasonal.studio')}</Label>
             <Select value={studioFilter} onValueChange={setStudioFilter}>
-              <SelectTrigger id="studio-filter-seasonal"><SelectValue placeholder="All Studios" /></SelectTrigger>
+              <SelectTrigger id="studio-filter-seasonal"><SelectValue placeholder={t('seasonal.allStudios')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_FILTER_VALUE}>All Studios</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>{t('seasonal.allStudios')}</SelectItem>
                 {uniqueStudios.map(studio => <SelectItem key={studio} value={studio}>{studio}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="type-filter-seasonal" className="text-sm font-medium mb-1 block">Type</Label>
+            <Label htmlFor="type-filter-seasonal" className="text-sm font-medium mb-1 block">{t('shelf.type')}</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="type-filter-seasonal" className="w-full justify-between text-left font-normal">
@@ -280,14 +284,14 @@ export default function SeasonalPage() {
                     }}
                     onSelect={(e) => e.preventDefault()}
                   >
-                    {option.label}
-                  </DropdownMenuCheckboxItem>
+                    {typeLabel(t, option.value)}
+</DropdownMenuCheckboxItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
            <Button variant="outline" onClick={clearFilters} className="self-end mt-auto sm:mt-0"> 
-              <X className="mr-2 h-4 w-4" /> Clear Filters
+              <X className="mr-2 h-4 w-4" /> {t('common.clearFilters')}
             </Button>
         </div>
       </section>
@@ -300,8 +304,8 @@ export default function SeasonalPage() {
 
       {!isLoading && error && (
         <div className="text-center py-10 text-destructive">
-          <p>{error}</p>
-          <Button onClick={() => setReloadToken(t => t + 1)} className="mt-4">Try Again</Button>
+          <p>{t(error)}</p>
+          <Button onClick={() => setReloadToken(token => token + 1)} className="mt-4">{t('common.tryAgain')}</Button>
         </div>
       )}
 
@@ -316,9 +320,9 @@ export default function SeasonalPage() {
       {!isLoading && !error && filteredAnime.length === 0 && seasonalAnime.length > 0 && (
         <div className="text-center py-10">
           <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-2 text-xl font-semibold">No Anime Match Filters</h3>
+          <h3 className="mt-2 text-xl font-semibold">{t('shelf.noMatchTitle')}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Try adjusting your filters for {season.charAt(0).toUpperCase() + season.slice(1)} {year}.
+            {t('seasonal.noMatchHint', { season: seasonLabel(t, season), year })}
           </p>
         </div>
       )}
@@ -326,9 +330,9 @@ export default function SeasonalPage() {
       {!isLoading && !error && seasonalAnime.length === 0 && (
          <div className="text-center py-10">
           <ListFilter className="mx-auto h-12 w-12 text-muted-foreground" />
-          <h3 className="mt-2 text-xl font-semibold">No Anime Found</h3>
+          <h3 className="mt-2 text-xl font-semibold">{t('seasonal.noAnimeTitle')}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            There appears to be no anime data for {season.charAt(0).toUpperCase() + season.slice(1)} {year}. Try a different season or year.
+            {t('seasonal.noAnimeHint', { season: seasonLabel(t, season), year })}
           </p>
         </div>
       )}

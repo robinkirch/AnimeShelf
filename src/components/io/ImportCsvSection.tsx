@@ -12,6 +12,7 @@ import { CheckCircle, XCircle, UploadCloud, Loader2, Info } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { jikanApi } from '@/lib/jikanApi'; // Import jikanApi
+import { useI18n } from '@/i18n/I18nContext';
 
 const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes'];
 const MINIMUM_REQUIRED_FOR_PROCESSING = ['user_status', 'current_episode'];
@@ -73,7 +74,8 @@ function robustCsvLineParse(line: string, delimiter: string = ','): string[] {
 
 
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
-  const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
+  const { t } = useI18n();
+const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResults, setImportResults] = useState<{ successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> } | null>(null);
@@ -90,7 +92,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         setTotalLines(0);
         setProcessedLines(0);
       } else {
-        toast({ title: "Invalid File Type", description: "Please select a valid .csv file.", variant: "destructive"});
+        toast({ title: t('io.import.toast.invalidTypeTitle'), description: t('io.import.toast.invalidTypeDescription'), variant: "destructive"});
         event.target.value = ""; 
       }
     }
@@ -98,7 +100,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
 
   const handleImport = async () => {
     if (!file) {
-      toast({ title: "Import Error", description: "Please select a CSV file to import.", variant: "destructive" });
+      toast({ title: t('io.import.toast.errorTitle'), description: t('io.import.toast.noFile'), variant: "destructive" });
       return;
     }
     setIsImporting(true);
@@ -112,14 +114,14 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
       const text = e.target?.result as string;
       if (!text) {
         setIsImporting(false);
-        toast({ title: "Import Error", description: "Could not read file content.", variant: "destructive" });
+        toast({ title: t('io.import.toast.errorTitle'), description: t('io.import.toast.unreadable'), variant: "destructive" });
         return;
       }
       
       const lines = text.split(/\r\n|\n|\r/).filter(line => line.trim() !== ''); 
       if (lines.length < 1) { 
          setIsImporting(false);
-         toast({ title: "Import Error", description: "CSV file is empty or contains only empty lines.", variant: "destructive" });
+         toast({ title: t('io.import.toast.errorTitle'), description: t('io.import.toast.empty'), variant: "destructive" });
          return;
       }
 
@@ -130,17 +132,17 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
 
       if (missingCoreRequirements.length > 0 || !hasIdentifier) {
          setIsImporting(false);
-         let errorMsg = "CSV headers are invalid. ";
-         if (missingCoreRequirements.length > 0) errorMsg += `Missing required fields: ${missingCoreRequirements.join(', ')}. `;
-         if (!hasIdentifier) errorMsg += "Missing identifier: CSV must contain 'mal_id' or 'title'. ";
-         errorMsg += `Headers found: ${csvHeaders.join(', ')}`;
-         toast({ title: "Import Error", description: errorMsg, variant: "destructive", duration: 10000 });
+         let errorMsg = t('io.import.toast.invalidHeaders') + ' ';
+         if (missingCoreRequirements.length > 0) errorMsg += t('io.import.toast.missingFields', { fields: missingCoreRequirements.join(', ') }) + ' ';
+         if (!hasIdentifier) errorMsg += t('io.import.toast.missingIdentifier') + ' ';
+         errorMsg += t('io.import.toast.headersFound', { headers: csvHeaders.join(', ') });
+         toast({ title: t('io.import.toast.errorTitle'), description: errorMsg, variant: "destructive", duration: 10000 });
          return;
       }
       
       if (lines.length < 2) { 
          setIsImporting(false);
-         toast({ title: "Import Error", description: "CSV file has a header row but no data rows.", variant: "destructive" });
+         toast({ title: t('io.import.toast.errorTitle'), description: t('io.import.toast.noDataRows'), variant: "destructive" });
          return;
       }
 
@@ -156,7 +158,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         const values = robustCsvLineParse(lineContent);
 
         if (values.length !== csvHeaders.length) {
-            processingErrors.push({ animeTitle: `Row ${i+1}`, error: `Column count mismatch. Expected ${csvHeaders.length} based on CSV header, got ${values.length} values. Ensure row has correct number of commas. Line: "${lineContent.substring(0,100)}..."` });
+            processingErrors.push({ animeTitle: t('io.import.row', { row: i + 1 }), error: t('io.import.errors.columnMismatch', { expected: csvHeaders.length, actual: values.length, line: lineContent.substring(0, 100) }) });
             continue;
         }
 
@@ -174,7 +176,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
             if (!isNaN(parsed_mal_id) && parsed_mal_id > 0) {
                 mal_id = parsed_mal_id;
             } else if (mal_id_csv_str !== '') { // Non-empty but invalid
-                 processingErrors.push({ animeTitle: row.title?.trim() || `Row ${i+1}`, error: `Invalid 'mal_id' in CSV: ${mal_id_csv_str}.` });
+                 processingErrors.push({ animeTitle: row.title?.trim() || t('io.import.row', { row: i + 1 }), error: t('io.import.errors.invalidMalId', { value: mal_id_csv_str }) });
                  continue;
             }
         }
@@ -188,15 +190,15 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
                     jikanDataFromApi = searchResults[0];
                     mal_id = jikanDataFromApi.mal_id;
                 } else {
-                    processingErrors.push({ animeTitle: title_csv, error: `Could not find MAL ID for title. Please provide MAL ID or a more precise title.` });
+                    processingErrors.push({ animeTitle: title_csv, error: t('io.import.errors.titleNotFound') });
                     continue;
                 }
             } catch (apiError: any) {
-                processingErrors.push({ animeTitle: title_csv, error: `API error while searching for title '${title_csv}': ${apiError.message}. Please try again or provide MAL ID.` });
+                processingErrors.push({ animeTitle: title_csv, error: t('io.import.errors.searchFailed', { title: title_csv, message: apiError.message }) });
                 continue;
             }
         } else if (!mal_id && !title_csv) {
-            processingErrors.push({ animeTitle: `Row ${i+1}`, error: "Missing 'mal_id' and 'title'. One must be provided." });
+            processingErrors.push({ animeTitle: t('io.import.row', { row: i + 1 }), error: t('io.import.errors.missingIdAndTitle') });
             continue;
         } else if (mal_id && !jikanDataFromApi) { // mal_id from CSV, fetch if necessary
             const needsApiFetch = !row.cover_image || (row.total_episodes === undefined || row.total_episodes === '') || !row.genres || !row.studios || !row.type || !row.year || !row.season || !row.duration_minutes;
@@ -210,14 +212,14 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         }
         
         if (!mal_id) { // Should be caught earlier, but safety net
-            processingErrors.push({ animeTitle: title_csv || `Row ${i+1}`, error: "Failed to determine MAL ID for processing." });
+            processingErrors.push({ animeTitle: title_csv || t('io.import.row', { row: i + 1 }), error: t('io.import.errors.noMalId') });
             continue;
         }
         
         // --- User-specific fields from CSV (Required) ---
         const user_status_csv = row.user_status as UserAnimeStatus;
         if (!USER_ANIME_STATUS_OPTIONS.find(opt => opt.value === user_status_csv)) {
-          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: `Invalid 'user_status': ${user_status_csv}. Must be one of: ${USER_ANIME_STATUS_OPTIONS.map(o=>o.value).join(', ')}.` });
+          processingErrors.push({ malId: mal_id, animeTitle: title_csv, error: t('io.import.errors.invalidStatus', { value: user_status_csv, allowed: USER_ANIME_STATUS_OPTIONS.map(o => o.value).join(', ') }) });
           continue;
         }
         
@@ -229,7 +231,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         if (row.total_episodes?.trim()) {
             const parsed = parseInt(row.total_episodes.trim(), 10);
             if (!isNaN(parsed) && parsed >= 0) total_episodes = parsed;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'total_episodes' in CSV: ${row.total_episodes}. Must be a non-negative number.` }); continue; }
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: t('io.import.errors.invalidTotalEpisodes', { value: row.total_episodes }) }); continue; }
         } else if (jikanDataFromApi?.episodes !== undefined) {
             total_episodes = jikanDataFromApi.episodes;
         }
@@ -237,7 +239,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         const current_episode_csv_str = row.current_episode;
         let current_episode_csv = parseInt(current_episode_csv_str, 10);
         if (isNaN(current_episode_csv) || current_episode_csv < 0) {
-          processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'current_episode': ${current_episode_csv_str}. Must be a non-negative number.` });
+          processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: t('io.import.errors.invalidCurrentEpisode', { value: current_episode_csv_str }) });
           continue;
         }
         if (total_episodes !== null && current_episode_csv > total_episodes && total_episodes !== 0) { // Allow current_episode > 0 for movies (total_episodes: 0)
@@ -249,7 +251,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         if (row.user_rating?.trim()) {
             const parsed = parseInt(row.user_rating.trim(), 10);
             if (!isNaN(parsed) && parsed >= 1 && parsed <= 10) user_rating = parsed;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'user_rating' in CSV: ${row.user_rating}. Must be 1-10 or empty.` }); continue; }
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: t('io.import.errors.invalidRating', { value: row.user_rating }) }); continue; }
         }
         
         const genres = row.genres?.trim() ? row.genres.trim().split(';').map(g => g.trim()).filter(g => g) : (jikanDataFromApi?.genres?.map(g => g.name) || []);
@@ -260,7 +262,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         if (row.year?.trim()) {
             const parsed = parseInt(row.year.trim(), 10);
             if (!isNaN(parsed)) year = parsed;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'year' in CSV: ${row.year}. Must be a number.` }); continue; }
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: t('io.import.errors.invalidYear', { value: row.year }) }); continue; }
         } else if (jikanDataFromApi?.year !== undefined) {
             year = jikanDataFromApi.year;
         }
@@ -273,7 +275,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
             const csvDay = row.broadcast_day.trim();
             if (BROADCAST_DAY_OPTIONS.find(opt => opt.value.toLowerCase() === csvDay.toLowerCase()) || csvDay.toLowerCase() === 'other') {
                 broadcast_day = BROADCAST_DAY_OPTIONS.find(opt => opt.value.toLowerCase() === csvDay.toLowerCase())?.value || 'Other';
-            } else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'broadcast_day' in CSV: ${csvDay}.` }); continue; }
+            } else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: t('io.import.errors.invalidBroadcastDay', { value: csvDay }) }); continue; }
         } else if (jikanDataFromApi?.broadcast?.day) {
             broadcast_day = jikanDataFromApi.broadcast.day;
         }
@@ -282,7 +284,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
         if (row.duration_minutes?.trim()) {
             const parsed = parseInt(row.duration_minutes.trim(), 10);
             if (!isNaN(parsed) && parsed >= 0) duration_minutes = parsed;
-            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: `Invalid 'duration_minutes' in CSV: ${row.duration_minutes}. Must be a non-negative number.`}); continue; }
+            else { processingErrors.push({ malId: mal_id, animeTitle: finalTitle, error: t('io.import.errors.invalidDuration', { value: row.duration_minutes }) }); continue; }
         } else if (jikanDataFromApi?.duration) {
             duration_minutes = parseDurationToMinutes(jikanDataFromApi.duration);
         }
@@ -317,15 +319,15 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
       setIsImporting(false); // Ensure this is set after awaiting
 
       if (finalResults.successCount > 0 && finalResults.errors.length === 0) {
-        toast({ title: "Import Successful", description: `${finalResults.successCount} anime entries imported/updated.` });
+        toast({ title: t('io.import.toast.successTitle'), description: t('io.import.toast.successDescription', { count: finalResults.successCount }) });
       } else if (finalResults.successCount > 0 && finalResults.errors.length > 0) {
-        toast({ title: "Import Partially Successful", description: `${finalResults.successCount} entries imported/updated. ${finalResults.errors.length} errors occurred.`, duration: 7000 });
+        toast({ title: t('io.import.toast.partialTitle'), description: t('io.import.toast.partialDescription', { success: finalResults.successCount, errors: finalResults.errors.length }), duration: 7000 });
       } else if (finalResults.errors.length > 0) {
-         toast({ title: "Import Failed", description: `No anime imported. ${finalResults.errors.length} errors occurred. See details below.`, variant: "destructive", duration: 7000 });
+         toast({ title: t('io.import.toast.failedTitle'), description: t('io.import.toast.failedDescription', { errors: finalResults.errors.length }), variant: "destructive", duration: 7000 });
       } else if (importedAnimeList.length === 0 && processingErrors.length === 0) {
-        toast({ title: "Import Note", description: "No valid anime data found in the file to import." });
+        toast({ title: t('io.import.toast.noteTitle'), description: t('io.import.toast.noValidData') });
       } else { // This case might mean all entries were already present and identical, or only processingErrors occurred without any valid to import.
-        toast({ title: "Import Note", description: "No new anime data found to import, or all entries were already up-to-date." });
+        toast({ title: t('io.import.toast.noteTitle'), description: t('io.import.toast.nothingNew') });
       }
       
       onImported(); // Call the callback to signal import completion
@@ -338,7 +340,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
     };
     reader.onerror = () => {
       setIsImporting(false);
-      toast({ title: "Import Error", description: "Failed to read the selected file.", variant: "destructive" });
+      toast({ title: t('io.import.toast.errorTitle'), description: t('io.import.toast.readFailed'), variant: "destructive" });
     };
     reader.readAsText(file);
   };
@@ -346,13 +348,13 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   return (
     <div className="space-y-4 py-4 grow">
       <div>
-        <h4 className="font-medium mb-1 text-sm">Expected CSV Format:</h4>
+        <h4 className="font-medium mb-1 text-sm">{t('io.import.formatTitle')}</h4>
         <p className="text-xs text-muted-foreground">
-          The CSV file must have a header row. Column names are case-insensitive.
-          Required columns: (<code className="text-xs bg-muted/50 px-1 rounded">mal_id</code> or <code className="text-xs bg-muted/50 px-1 rounded">title</code>), <code className="text-xs bg-muted/50 px-1 rounded">user_status</code>, <code className="text-xs bg-muted/50 px-1 rounded">current_episode</code>.
+          {t('io.import.formatHeader')}{' '}
+          {t('io.import.requiredColumns')} (<code className="text-xs bg-muted/50 px-1 rounded">mal_id</code> {t('io.import.or')} <code className="text-xs bg-muted/50 px-1 rounded">title</code>), <code className="text-xs bg-muted/50 px-1 rounded">user_status</code>, <code className="text-xs bg-muted/50 px-1 rounded">current_episode</code>.
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Supported columns (others will be ignored):
+          {t('io.import.supportedColumns')}
         </p>
         <ScrollArea className="h-auto max-h-20 whitespace-pre-wrap">
           <code className="block bg-muted p-2 rounded-md text-xs mt-1 wrap-break-word">
@@ -360,39 +362,39 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
           </code>
         </ScrollArea>
         <p className="text-xs text-muted-foreground mt-1">
-          For <code className="text-xs bg-muted/50 px-1 rounded">genres</code>, <code className="text-xs bg-muted/50 px-1 rounded">studios</code>, and <code className="text-xs bg-muted/50 px-1 rounded">streaming_platforms</code>, use a semi-colon (;) to separate multiple values (e.g., "Action;Adventure"). Empty fields for optional data will be filled by API if possible.
+          {t('io.import.multiValueIntro')} <code className="text-xs bg-muted/50 px-1 rounded">genres</code>, <code className="text-xs bg-muted/50 px-1 rounded">studios</code>, <code className="text-xs bg-muted/50 px-1 rounded">streaming_platforms</code>. {t('io.import.multiValueNote')}
         </p>
       </div>
       <div className="space-y-1">
-        <Label htmlFor="csv-file" className="text-sm">Select CSV File</Label>
+        <Label htmlFor="csv-file" className="text-sm">{t('io.import.selectFile')}</Label>
         <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} ref={fileInputRef} className="text-sm" />
       </div>
       <Button onClick={handleImport} disabled={!file || isImporting || !isElectronStoreReady} className="w-full">
         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
-        Import from CSV
+        {t('io.import.button')}
       </Button>
 
       {isImporting && totalLines > 0 && (
         <div className="text-sm text-muted-foreground text-center mt-2">
-          Processing line {processedLines} of {totalLines}...
+          {t('io.import.processing', { current: processedLines, total: totalLines })}
         </div>
       )}
 
       {importResults && (
         <div className="mt-4">
-          <h4 className="font-medium mb-2 text-sm">Import Results:</h4>
+          <h4 className="font-medium mb-2 text-sm">{t('io.import.resultsTitle')}</h4>
           <Alert variant={importResults.errors.length > 0 && importResults.successCount === 0 ? "destructive" : (importResults.errors.length > 0 ? "default" : "default")}>
             {importResults.errors.length === 0 && importResults.successCount > 0 && <CheckCircle className="h-4 w-4" />}
             {importResults.errors.length > 0 && importResults.successCount === 0 && <XCircle className="h-4 w-4" />}
             {importResults.errors.length > 0 && importResults.successCount > 0 && <Info className="h-4 w-4" />}
 
             <AlertTitle className="text-sm">
-              {importResults.successCount > 0 ? `${importResults.successCount} Anime Imported/Updated Successfully.` : (importResults.errors.length > 0 ? 'Import Processed with Errors.' : 'Import Processed.')}
-              {importResults.errors.length > 0 && ` ${importResults.errors.length} errors occurred.`}
+              {importResults.successCount > 0 ? t('io.import.resultSuccess', { count: importResults.successCount }) : (importResults.errors.length > 0 ? t('io.import.resultWithErrors') : t('io.import.resultProcessed'))}
+              {importResults.errors.length > 0 && t('io.import.resultErrorCount', { count: importResults.errors.length })}
             </AlertTitle>
             {(importResults.errors.length > 0 || (importResults.successCount === 0 && importResults.errors.length === 0 && totalLines > 0)) && (
                  <AlertDescription className="text-xs">
-                    {importResults.errors.length > 0 ? "See error details below." : (importResults.successCount === 0 && totalLines > 0 ? "No valid data was imported." : "No data was imported.")}
+                    {importResults.errors.length > 0 ? t('io.import.seeDetails') : (importResults.successCount === 0 && totalLines > 0 ? t('io.import.noValidData') : t('io.import.noData'))}
                 </AlertDescription>
             )}
           </Alert>
@@ -401,7 +403,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
               <ul className="text-xs space-y-1">
                 {importResults.errors.map((err, index) => (
                   <li key={index} className="text-destructive dark:text-red-400">
-                    <strong>{err.animeTitle || (err.malId ? `MAL ID: ${err.malId}` : `Row ${index + 1}`)}:</strong> {err.error}
+                    <strong>{err.animeTitle || (err.malId ? t('io.import.malId', { id: err.malId }) : t('io.import.row', { row: index + 1 }))}:</strong> {err.error}
                   </li>
                 ))}
               </ul>

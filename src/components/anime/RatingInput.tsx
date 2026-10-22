@@ -7,6 +7,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RATING_OPTIONS } from "@/types/anime";
+import { useI18n } from '@/i18n/I18nContext';
+import { ratingLabel } from '@/i18n/labels';
 
 interface RatingInputProps {
   value: number | null;
@@ -17,7 +19,8 @@ interface RatingInputProps {
 const NO_RATING_VALUE = "_none_"; // Use a distinct non-empty string
 
 export function RatingInput({ value, onChange, disabled }: RatingInputProps) {
-  const handleChange = (selectedValue: string) => {
+  const { t } = useI18n();
+const handleChange = (selectedValue: string) => {
     if (selectedValue === NO_RATING_VALUE) {
       onChange(null);
     } else {
@@ -33,14 +36,14 @@ export function RatingInput({ value, onChange, disabled }: RatingInputProps) {
       disabled={disabled}
     >
       <SelectTrigger className="w-[180px] text-sm">
-        <SelectValue placeholder="Rate anime..." />
+        <SelectValue placeholder={t('anime.ratePlaceholder')} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={NO_RATING_VALUE}>No Rating</SelectItem>
+        <SelectItem value={NO_RATING_VALUE}>{t('anime.noRating')}</SelectItem>
         {RATING_OPTIONS.map((option) => (
           <SelectItem key={option.value} value={option.value.toString()}>
-            {option.label}
-          </SelectItem>
+            {ratingLabel(t, option.value)}
+</SelectItem>
         ))}
       </SelectContent>
     </Select>

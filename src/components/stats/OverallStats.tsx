@@ -6,6 +6,7 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Award, Clapperboard, ListChecks, Clock3, Tv, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/i18n/I18nContext';
 import Image from 'next/image';
 
 interface StatCardProps {
@@ -47,6 +48,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, descripti
 
 export function OverallStats() {
   const { shelf } = useAnimeShelf();
+  const { t, locale } = useI18n();
 
   const stats = useMemo(() => {
     const completedAnime = shelf.filter(a => a.user_status === 'completed');
@@ -60,7 +62,7 @@ export function OverallStats() {
       }
       return sum;
     }, 0);
-    const totalWatchTimeHours = totalWatchTimeMinutes > 0 ? (totalWatchTimeMinutes / 60).toFixed(1) : 0;
+    const totalWatchTimeHours = totalWatchTimeMinutes / 60;
     
     const topRatedAnime = shelf
       .filter(a => a.user_rating !== null && a.user_rating >= 1)
@@ -70,7 +72,7 @@ export function OverallStats() {
     return {
       completedAnimeCount: completedAnime.length,
       totalEpisodesWatched,
-      totalWatchTimeHours: `${totalWatchTimeHours} hrs`,
+      totalWatchTimeHours,
       topRatedAnime,
     };
   }, [shelf]);
@@ -79,26 +81,26 @@ export function OverallStats() {
     <section>
         <h2 className="text-2xl font-semibold mb-4 text-primary flex items-center">
             <ListChecks className="mr-3 h-7 w-7" />
-            At a Glance
-        </h2>
+            {t('stats.overall.title')}
+</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <StatCard 
-                title="Anime Completed" 
+                title={t('stats.overall.completed')} 
                 value={stats.completedAnimeCount} 
                 icon={Clapperboard}
                 className="bg-linear-to-br from-[hsl(var(--chart-1))] to-[hsl(var(--chart-1)/0.7)] text-primary-foreground"
                 valueClassName="text-primary-foreground" // Explicitly keep value text primary-foreground
             />
             <StatCard 
-                title="Episodes Watched" 
-                value={stats.totalEpisodesWatched} 
+                title={t('stats.overall.episodes')} 
+                value={stats.totalEpisodesWatched.toLocaleString(locale)} 
                 icon={Tv}
                 className="bg-linear-to-br from-[hsl(var(--chart-2))] to-[hsl(var(--chart-2)/0.7)] text-primary-foreground"
                 valueClassName="text-primary-foreground"
             />
             <StatCard 
-                title="Total Watch Time" 
-                value={stats.totalWatchTimeHours} 
+                title={t('stats.overall.watchTime')} 
+                value={t('stats.hours', { value: stats.totalWatchTimeHours.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })} 
                 icon={Clock3}
                 className="bg-linear-to-br from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3)/0.7)] text-primary-foreground"
                 valueClassName="text-primary-foreground"
@@ -106,7 +108,7 @@ export function OverallStats() {
             {/* Specific card for Top Rated Anime, styled slightly differently for its list content */}
             <Card className="shadow-lg col-span-full md:col-span-2 lg:col-span-1 bg-linear-to-br from-[hsl(var(--chart-4))] to-[hsl(var(--chart-4)/0.7)] text-primary-foreground">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-primary-foreground/80">Top Rated Anime</CardTitle>
+                <CardTitle className="text-sm font-medium text-primary-foreground/80">{t('stats.overall.topRated')}</CardTitle>
                 <Award className="h-5 w-5 text-primary-foreground/70" />
                 </CardHeader>
                 <CardContent>
@@ -131,7 +133,7 @@ export function OverallStats() {
                     ))}
                     </ul>
                 ) : (
-                    <p className="text-sm text-primary-foreground/70 pt-1">No anime rated yet.</p>
+                    <p className="text-sm text-primary-foreground/70 pt-1">{t('stats.overall.noRated')}</p>
                 )}
                 </CardContent>
             </Card>

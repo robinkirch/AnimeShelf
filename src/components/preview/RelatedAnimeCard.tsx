@@ -10,19 +10,22 @@ import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime } from '@/types/anime';
 import type { RelatedEntry } from '@/types/preview';
 import { EyeOff, Info, Loader2, ImageOff } from 'lucide-react';
+import { useI18n, type TranslateFn } from '@/i18n/I18nContext';
+import { relationLabel, seasonLabel } from '@/i18n/labels';
+
+// Card buttons may wrap to two lines: longer translations (e.g. German) would overflow narrow cards otherwise.
+const WRAPPING_BUTTON = 'h-auto min-h-9 whitespace-normal py-2';
 
 interface RelatedAnimeCardProps {
   entry: RelatedEntry;
   onIgnorePreview: (mal_id: number, title: string) => void;
 }
 
-const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
-
-function getDateLabel(entry: RelatedEntry): string | null {
-  if (entry.airingStatus === 'airing') return 'Airing now';
-  const seasonLabel = entry.season && entry.year ? `${capitalize(entry.season)} ${entry.year}` : entry.year ? String(entry.year) : null;
-  if (entry.airingStatus === 'upcoming') return seasonLabel ?? 'TBA';
-  return seasonLabel;
+function getDateLabel(t: TranslateFn, entry: RelatedEntry): string | null {
+  if (entry.airingStatus === 'airing') return t('preview.card.airingNow');
+  const date = entry.season && entry.year ? `${seasonLabel(t, entry.season)} ${entry.year}` : entry.year ? String(entry.year) : null;
+  if (entry.airingStatus === 'upcoming') return date ?? t('preview.card.tba');
+  return date;
 }
 
 /**
@@ -33,12 +36,13 @@ export function RelatedAnimeCard({ entry, onIgnorePreview }: RelatedAnimeCardPro
   const [details, setDetails] = useState<JikanAnime | null>(entry.details ?? null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
+  const { t } = useI18n();
 
   if (details) {
     return <AnimeCard anime={details} onIgnorePreview={(id) => onIgnorePreview(id, details.title)} />;
   }
 
-  const dateLabel = getDateLabel(entry);
+  const dateLabel = getDateLabel(t, entry);
 
   const handleLoadDetails = async () => {
     setIsLoading(true);
@@ -65,18 +69,18 @@ export function RelatedAnimeCard({ entry, onIgnorePreview }: RelatedAnimeCardPro
         {dateLabel && <p className="text-sm text-muted-foreground">{dateLabel}</p>}
         <div className="flex flex-wrap gap-1">
           {entry.format && <Badge variant="secondary">{entry.format}</Badge>}
-          <Badge variant="outline">{entry.relationType}</Badge>
+          <Badge variant="outline">{relationLabel(t, entry.relationType)}</Badge>
         </div>
-        <p className="text-xs text-muted-foreground line-clamp-2">Related to: {entry.relatedTo}</p>
-        {loadFailed && <p className="text-xs text-destructive">Could not load details. Please try again.</p>}
+        <p className="text-xs text-muted-foreground line-clamp-2">{t('preview.card.relatedTo', { title: entry.relatedTo })}</p>
+        {loadFailed && <p className="text-xs text-destructive">{t('preview.card.loadFailed')}</p>}
       </CardContent>
       <CardFooter className="p-4 pt-0 flex flex-col gap-2">
-        <Button className="w-full" onClick={handleLoadDetails} disabled={isLoading}>
+        <Button className={`w-full ${WRAPPING_BUTTON}`} onClick={handleLoadDetails} disabled={isLoading}>
           {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Info className="mr-2 h-4 w-4" />}
-          Load details
-        </Button>
-        <Button variant="outline" className="w-full" onClick={() => onIgnorePreview(entry.mal_id, entry.title)}>
-          <EyeOff className="mr-2 h-4 w-4" /> Ignore in Preview
+          {t('preview.card.loadDetails')}
+</Button>
+        <Button variant="outline" className={`w-full ${WRAPPING_BUTTON}`} onClick={() => onIgnorePreview(entry.mal_id, entry.title)}>
+          <EyeOff className="mr-2 h-4 w-4" /> {t('preview.card.ignore')}
         </Button>
       </CardFooter>
     </Card>

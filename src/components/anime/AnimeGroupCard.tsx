@@ -11,6 +11,8 @@ import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
 import { ProgressBar } from './ProgressBar';
 import { Layers, Eye, CheckCircle, PauseCircle, XCircle, ListPlus, Star } from 'lucide-react';
 import { AnimeGroupModal } from './AnimeGroupModal';
+import { useI18n } from '@/i18n/I18nContext';
+import { statusLabel } from '@/i18n/labels';
 
 interface AnimeGroupCardProps {
   group: UserAnime[];
@@ -29,6 +31,7 @@ const statusIcons: Record<UserAnimeStatus, React.ElementType> = {
 
 export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { t } = useI18n();
 
   const representativeAnime = useMemo(() => {
     // Sort by MAL ID as a simple heuristic for "earliest" or "main" entry if no air dates
@@ -139,11 +142,11 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
           )}
         </CardHeader>
         <CardContent className="p-4 grow">
-          <CardTitle className="text-lg font-semibold mb-1 leading-tight truncate" title={representativeAnime.title + (group.length > 1 ? ` & ${group.length - 1} more` : '')}>
-            {representativeAnime.title}{group.length > 1 ? ` (Series)` : ''}
+          <CardTitle className="text-lg font-semibold mb-1 leading-tight truncate" title={group.length > 1 ? t('anime.group.moreTitle', { title: representativeAnime.title, count: group.length - 1 }) : representativeAnime.title}>
+            {representativeAnime.title}{group.length > 1 ? ` ${t('anime.group.seriesSuffix')}` : ''}
           </CardTitle>
           <div className="text-xs text-muted-foreground mb-2">
-            <span>{group.length} Animes in Series</span>
+            <span>{t('anime.group.count', { count: group.length })}</span>
           </div>
           <div className="text-xs text-muted-foreground mb-2">
             {representativeAnime.genres?.slice(0,2).join(', ')}{representativeAnime.genres?.length > 2 ? '...' : ''}
@@ -156,21 +159,21 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
                 status={aggregatedData.status}
             />
             <div className="text-sm text-muted-foreground">
-                Episodes: {aggregatedData.currentEpisodes} / {aggregatedData.maxEpisodes}
+                {t('anime.group.episodes', { current: aggregatedData.currentEpisodes, max: aggregatedData.maxEpisodes })}
             </div>
             {aggregatedData.rating !== null && (
               <div className="flex items-center text-sm text-muted-foreground">
-                <Star size={16} className="mr-1 text-yellow-500" /> Avg. Rating: {aggregatedData.rating}/10
+                <Star size={16} className="mr-1 text-yellow-500" /> {t('anime.group.avgRating', { rating: aggregatedData.rating })}
               </div>
             )}
              <div className="flex items-center text-sm text-muted-foreground">
-                <Layers size={16} className="mr-1 text-primary" /> Status: {USER_ANIME_STATUS_OPTIONS.find(opt => opt.value === aggregatedData.status)?.label || 'Unknown'}
+                <Layers size={16} className="mr-1 text-primary" /> {t('anime.group.status', { status: statusLabel(t, aggregatedData.status) })}
               </div>
           </div>
         </CardContent>
         <CardFooter className="p-4 pt-0">
-          <Button className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => setIsModalOpen(true)}>
-            <Layers size={16} className="mr-2" /> View Series Details
+          <Button className="w-full h-auto min-h-9 whitespace-normal py-2 bg-accent hover:bg-accent/90 text-accent-foreground" onClick={() => setIsModalOpen(true)}>
+            <Layers size={16} className="mr-2" /> {t('anime.group.viewDetails')}
           </Button>
         </CardFooter>
       </Card>

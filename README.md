@@ -57,6 +57,7 @@ The app works offline for your personal library data (stored locally), with onli
 
 ### Personalization
 - **Light/Dark Mode**: Toggle between light and dark themes for comfortable viewing.
+- **Languages**: English and German UI (Settings → Language); English is the fallback. Anime data from MyAnimeList is not translated.
 
 ### Statistics
 - **Visual Insights**: View charts and summaries of your watching habits, including:
