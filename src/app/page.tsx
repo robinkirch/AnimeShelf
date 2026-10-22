@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { searchAnimeWithAi, type AiSearchInput } from '@/ai/flows/anime-search-flow';
+import { readStoredAiSettings } from '@/ai/models';
 import { StatusDistributionBar } from '@/components/shelf/StatusDistributionBar';
 import { rendererLogger } from '@/lib/logger';
 
@@ -193,8 +194,8 @@ export default function MyShelfPage() {
     setIsLoadingAiSearch(true);
     setAiSearchError(null);
     try {
-      const storedApiKey = typeof window !== 'undefined' ? localStorage.getItem('geminiApiKey') : null;
-      const input: AiSearchInput = { query: aiSearchQuery, apiKey: storedApiKey || undefined };
+      const { model, apiKey } = readStoredAiSettings();
+      const input: AiSearchInput = { query: aiSearchQuery, modelId: model.id, apiKey: apiKey || undefined };
       const results = await searchAnimeWithAi(input);
       const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
       setAiSearchResults(uniqueResults);

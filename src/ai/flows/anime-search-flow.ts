@@ -12,6 +12,7 @@
 
 import { googleAI } from '@genkit-ai/google-genai';
 import { ai, GEMINI_FALLBACK_MODEL } from '@/ai/genkit';
+import { AI_PROVIDER_LABELS, DEFAULT_AI_MODEL_ID, getAiModel } from '@/ai/models';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime } from '@/types/anime';
 import { z } from 'genkit';
@@ -24,7 +25,9 @@ const AiSearchInputSchema = z.object({
   query: z.string().describe('The natural language description of the anime the user is looking for.'),
 });
 export type AiSearchInput = z.infer<typeof AiSearchInputSchema> & {
-  /** Gemini API key from the settings (localStorage); not part of the prompt input. */
+  /** Model ID from the settings (see AI_MODELS); falls back to the default model. */
+  modelId?: string;
+  /** API key of the selected model's provider from the settings (localStorage); not part of the prompt input. */
   apiKey?: string;
 };
 
@@ -89,6 +92,7 @@ Example: for "an elf mage who travels after the hero party defeated the demon ki
 });
 
 const AiSearchFlowInputSchema = AiSearchInputSchema.extend({
+  modelId: z.string().optional(),
   apiKey: z.string().optional(),
 });
 
@@ -98,14 +102,20 @@ const animeSearchFlow = ai.defineFlow(
     inputSchema: AiSearchFlowInputSchema,
     outputSchema: AiSearchResultSchema,
   },
-  async ({ query, apiKey }) => {
-    const config = apiKey ? { apiKey } : undefined;
+  async ({ query, modelId, apiKey }) => {
+    // Only models from the settings list are accepted.
+    const model = getAiModel(modelId) ?? getAiModel(DEFAULT_AI_MODEL_ID)!;
+    const config = model.provider === 'anthropic'
+      // A search with a few tool calls doesn't need deep reasoning; low effort keeps it fast and cheap.
+      ? { ...(apiKey && { apiKey }), output_config: { effort: 'low' } }
+      : { ...(apiKey && { apiKey }) };
     try {
-      const { output } = await animeSearchPrompt({ query }, { config });
+      const { output } = await animeSearchPrompt({ query }, { model: model.id, config });
       return output ?? { mal_ids: [] };
     } catch (error) {
-      if (!isModelOverloaded(error)) throw error;
-      const { output } = await animeSearchPrompt({ query }, { config, model: googleAI.model(GEMINI_FALLBACK_MODEL) });
+      const fallbackModelId = `googleai/${GEMINI_FALLBACK_MODEL}`;
+      if (model.provider !== 'gemini' || model.id === fallbackModelId || !isModelOverloaded(error)) throw error;
+      const { output } = await animeSearchPrompt({ query }, { model: googleAI.model(GEMINI_FALLBACK_MODEL), config });
       return output ?? { mal_ids: [] };
     }
   }
@@ -119,7 +129,7 @@ function isModelOverloaded(error: unknown): boolean {
 export async function searchAnimeWithAi(input: AiSearchInput): Promise<JikanAnime[]> {
   rendererLogger.info(`Initiating AI anime search.`, { category: 'ai-search', query: input.query });
   try {
-    const { mal_ids } = await animeSearchFlow({ query: input.query, apiKey: input.apiKey || undefined });
+    const { mal_ids } = await animeSearchFlow({ query: input.query, modelId: input.modelId, apiKey: input.apiKey || undefined });
     const uniqueIds = Array.from(new Set(mal_ids)).slice(0, MAX_RESULTS);
     const details = await Promise.all(uniqueIds.map(id => jikanApi.getAnimeById(id, { priority: 'high' })));
     const results = details.filter((anime): anime is JikanAnime => anime !== null);
@@ -128,10 +138,11 @@ export async function searchAnimeWithAi(input: AiSearchInput): Promise<JikanAnim
   } catch (error: any) {
     rendererLogger.error("Error executing searchAnimeWithAi flow.", { category: 'ai-search-error', query: input.query, error: error.message, stack: error.stack });
     // Rethrow a plain message: server action errors are serialized to the client.
-    throw new Error(/api.?key/i.test(error?.message ?? '')
-      ? 'No valid Gemini API key. Please set your key in the settings.'
+    const providerLabel = AI_PROVIDER_LABELS[(getAiModel(input.modelId) ?? getAiModel(DEFAULT_AI_MODEL_ID)!).provider];
+    throw new Error(/api.?key|authentication/i.test(error?.message ?? '')
+      ? `No valid ${providerLabel} API key. Please set your key in the settings.`
       : isModelOverloaded(error)
-        ? 'The Gemini AI service is currently overloaded. Please try again in a few minutes.'
+        ? `The ${providerLabel} AI service is currently overloaded. Please try again in a few minutes.`
         : 'AI search failed. Please try again later.');
   }
 }

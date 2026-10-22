@@ -79,7 +79,7 @@ The app works offline for your personal library data (stored locally), with onli
 - **Styling**: Tailwind CSS
 - **Language**: TypeScript
 - **State Management**: React Context API (for shelf and theme)
-- **AI Features**: Genkit with `@genkit-ai/google-genai` (Gemini, model configurable via `GEMINI_MODEL`)
+- **AI Features**: Genkit with `@genkit-ai/google-genai` (Gemini) and `@genkit-ai/anthropic` (Claude); model and API key are chosen in the app settings
 - **Desktop Packaging**: Electron
 - **Data Storage**: SQLite via `better-sqlite3` in the Electron main process (IPC bridge via preload)
 - **External Anime API**: [Tenrai](https://tenrai.org/) (Jikan-v4-compatible MyAnimeList API)
@@ -95,7 +95,7 @@ npm run package:electron    # Production build + installer in dist_electron/
 ```
 
 `better-sqlite3` (v13+) ships N-API prebuilds, so no native rebuild/Visual Studio is required.
-For AI search, set a Gemini API key in the app settings (or via `GEMINI_API_KEY`).
+For AI search, choose a Gemini or Claude model in the app settings and enter the provider's API key (or set `GEMINI_API_KEY` / `ANTHROPIC_API_KEY`).
 
 ### Project Structure
 
@@ -151,7 +151,7 @@ This project is licensed under the GNU General Public License v3.0 - see the Lic
 
 ## 📊 Privacy
 
-This app stores all your personal shelf data locally on your device in a SQLite database. The Gemini API key is stored in the app's `localStorage` and only sent to Google with AI search requests. No personal shelf data is transmitted to any external servers. API requests are made to the Tenrai API and the AniList API (only MyAnimeList IDs of your shelf entries, to find related anime) to fetch anime information and to Google AI services (via Genkit) for the AI search feature, as per their respective privacy policies.
+This app stores all your personal shelf data locally on your device in a SQLite database. The AI API keys (Gemini / Claude) are stored in the app's `localStorage` and only sent to the selected provider with AI search requests. No personal shelf data is transmitted to any external servers. API requests are made to the Tenrai API and the AniList API (only MyAnimeList IDs of your shelf entries, to find related anime) to fetch anime information and to the selected AI provider (Google Gemini or Anthropic Claude, via Genkit) for the AI search feature, as per their respective privacy policies.
 
 ---
 

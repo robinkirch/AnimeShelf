@@ -14,6 +14,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AI_MODELS, AI_PROVIDER_LABELS, AI_STORAGE_KEYS, DEFAULT_AI_MODEL_ID, getAiModel, type AiProvider } from '@/ai/models';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ImportExportModal } from '@/components/io/ImportExportModal';
 import { KeyRound, Palette, ArrowRightLeft, Save, Moon, Sun, User, Image as ImageIcon, Upload } from 'lucide-react'; 
@@ -29,14 +31,19 @@ interface SettingsModalProps {
   onOpenChange: (isOpen: boolean) => void;
 }
 
-const API_KEY_STORAGE_KEY = 'geminiApiKey';
+const AI_PROVIDERS = Object.keys(AI_PROVIDER_LABELS) as AiProvider[];
+const API_KEY_HINTS: Record<AiProvider, string> = {
+  gemini: 'Get a key at aistudio.google.com.',
+  anthropic: 'Get a key at platform.claude.com.',
+};
 
 export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
   const { theme, setTheme } = useTheme();
   const { userProfile, updateUserProfile: contextUpdateUserProfile, userProfileInitialized } = useAnimeShelf();
   const { toast } = useToast();
 
-  const [apiKey, setApiKey] = useState('');
+  const [aiModelId, setAiModelId] = useState(DEFAULT_AI_MODEL_ID);
+  const [apiKeys, setApiKeys] = useState<Record<AiProvider, string>>({ gemini: '', anthropic: '' });
   const [currentUsername, setCurrentUsername] = useState('');
   const [currentProfilePic, setCurrentProfilePic] = useState<string | null>(null);
   const [newProfilePicFile, setNewProfilePicFile] = useState<File | null>(null);
@@ -48,10 +55,11 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
   useEffect(() => {
     if (isOpen) {
       rendererLogger.info('SettingsModal opened.', { category: 'ui-event' });
-      const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-      if (storedApiKey) {
-        setApiKey(storedApiKey);
-      }
+      setAiModelId(getAiModel(localStorage.getItem(AI_STORAGE_KEYS.model))?.id ?? DEFAULT_AI_MODEL_ID);
+      setApiKeys({
+        gemini: localStorage.getItem(AI_STORAGE_KEYS.apiKey.gemini) ?? '',
+        anthropic: localStorage.getItem(AI_STORAGE_KEYS.apiKey.anthropic) ?? '',
+      });
       if (userProfileInitialized && userProfile) {
         setCurrentUsername(userProfile.username || '');
         setCurrentProfilePic(userProfile.profilePictureDataUri);
@@ -65,12 +73,16 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
     }
   }, [isOpen, userProfile, userProfileInitialized]);
 
-  const handleSaveApiKey = () => {
-    localStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-    rendererLogger.info('Gemini API key saved.', { category: 'user-setting-change', setting: 'api-key' });
+  const selectedAiModel = getAiModel(aiModelId) ?? getAiModel(DEFAULT_AI_MODEL_ID)!;
+  const selectedProvider = selectedAiModel.provider;
+
+  const handleSaveAiSettings = () => {
+    localStorage.setItem(AI_STORAGE_KEYS.model, selectedAiModel.id);
+    localStorage.setItem(AI_STORAGE_KEYS.apiKey[selectedProvider], apiKeys[selectedProvider].trim());
+    rendererLogger.info('AI search settings saved.', { category: 'user-setting-change', setting: 'ai-search', model: selectedAiModel.id });
     toast({
-      title: 'API Key Saved',
-      description: 'Your Gemini API key has been saved locally.',
+      title: 'AI Settings Saved',
+      description: `AI search now uses ${selectedAiModel.label}. Your ${AI_PROVIDER_LABELS[selectedProvider]} API key has been saved locally.`,
     });
   };
 
@@ -193,25 +205,46 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
 
                 <Separator />
 
-                {/* API Key Section */}
+                {/* AI Search Section */}
                 <div className="space-y-3 p-4 border rounded-lg shadow-xs">
-                <h3 className="text-lg font-medium flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" />API Key</h3>
+                <h3 className="text-lg font-medium flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" />AI Search</h3>
                 <p className="text-xs text-muted-foreground">
-                    Enter your Google AI (Gemini) API key for features like AI-powered search.
-                    The key is stored locally in your browser.
+                    Choose the AI model for the AI-powered search and enter the API key of its provider.
+                    Keys are stored locally on this device and only sent to the selected provider.
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="space-y-1">
+                    <Label htmlFor="ai-model">Model</Label>
+                    <Select value={selectedAiModel.id} onValueChange={setAiModelId}>
+                    <SelectTrigger id="ai-model"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        {AI_PROVIDERS.map(provider => (
+                        <SelectGroup key={provider}>
+                            <SelectLabel>{AI_PROVIDER_LABELS[provider]}</SelectLabel>
+                            {AI_MODELS.filter(model => model.provider === provider).map(model => (
+                            <SelectItem key={model.id} value={model.id}>{model.label}</SelectItem>
+                            ))}
+                        </SelectGroup>
+                        ))}
+                    </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">{selectedAiModel.description}</p>
+                </div>
+                <div className="space-y-1">
+                    <Label htmlFor="api-key">{AI_PROVIDER_LABELS[selectedProvider]} API Key</Label>
+                    <div className="flex items-center gap-2">
                     <Input
-                    id="api-key"
-                    type="password"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter your Gemini API Key"
-                    className="grow"
+                        id="api-key"
+                        type="password"
+                        value={apiKeys[selectedProvider]}
+                        onChange={(e) => setApiKeys(keys => ({ ...keys, [selectedProvider]: e.target.value }))}
+                        placeholder={`Enter your ${AI_PROVIDER_LABELS[selectedProvider]} API key`}
+                        className="grow"
                     />
-                    <Button onClick={handleSaveApiKey} size="sm">
-                    <Save className="mr-2 h-4 w-4" /> Save Key
+                    <Button onClick={handleSaveAiSettings} size="sm">
+                        <Save className="mr-2 h-4 w-4" /> Save
                     </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{API_KEY_HINTS[selectedProvider]}</p>
                 </div>
                 </div>
 
