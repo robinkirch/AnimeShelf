@@ -3,7 +3,6 @@
 
 import React, { useMemo } from 'react';
 import type { UserAnime, UserAnimeStatus } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
 import {
   Tooltip,
   TooltipContent,
@@ -16,15 +15,6 @@ import { statusLabel } from '@/i18n/labels';
 
 interface StatusDistributionBarProps {
   shelf: UserAnime[];
-}
-
-interface StatusInfo {
-  status: UserAnimeStatus;
-  label: string;
-  count: number;
-  percentage: number;
-  colorClass: string;
-  textColorClass?: string;
 }
 
 const statusOrder: UserAnimeStatus[] = ['completed', 'watching', 'plan_to_watch', 'on_hold', 'dropped'];

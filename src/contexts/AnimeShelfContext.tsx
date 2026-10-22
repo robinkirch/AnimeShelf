@@ -4,8 +4,8 @@
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent, UserProfile } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime'; 
 import { rendererLogger } from '@/lib/logger'; // Import renderer logger
+import { parseDurationToMinutes } from '@/lib/parsing';
 
 declare global {
   interface Window {
@@ -57,23 +57,6 @@ interface AnimeShelfContextType {
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
-
-export function parseDurationToMinutes(durationStr: string | null | undefined): number | null {
-  if (!durationStr) return null;
-  const perEpMatch = durationStr.match(/(\d+)\s*min(?:s|\.)?\s*(?:per\s*ep)?/i);
-  if (perEpMatch && perEpMatch[1]) {
-    return parseInt(perEpMatch[1], 10);
-  }
-  const hrMinMatch = durationStr.match(/(?:(\d+)\s*hr)?\s*(?:(\d+)\s*min)?/i);
-  if (hrMinMatch) {
-    const hours = hrMinMatch[1] ? parseInt(hrMinMatch[1], 10) : 0;
-    const minutes = hrMinMatch[2] ? parseInt(hrMinMatch[2], 10) : 0;
-    if (!durationStr.toLowerCase().includes("per ep") && (hours > 0 || minutes > 0) ) {
-        return (hours * 60) + minutes;
-    }
-  }
-  return null;
-}
 
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [shelf, setShelf] = useState<UserAnime[]>([]);

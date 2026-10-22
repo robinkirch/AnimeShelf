@@ -31,7 +31,7 @@ function lookup(messages: unknown, key: string): string | PluralForms | undefine
   return undefined;
 }
 
-function createTranslator(language: Language): TranslateFn {
+export function createTranslator(language: Language): TranslateFn {
   const pluralRules = new Intl.PluralRules(LANGUAGE_LOCALES[language]);
   return (key, params) => {
     // Missing texts fall back to English, and to the key itself as a last resort.

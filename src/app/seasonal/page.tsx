@@ -4,15 +4,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AnimeCard } from "@/components/anime/AnimeCard";
 import { jikanApi, isAbortError, JikanApiError } from '@/lib/jikanApi';
-import type { JikanAnime, JikanMALItem } from '@/types/anime';
+import type { JikanAnime } from '@/types/anime';
 import { ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
-import { Loader2, ListFilter, ChevronDown, X, ChevronRight, CalendarClock } from 'lucide-react';
+import { ListFilter, ChevronDown, X, ChevronRight, CalendarClock } from 'lucide-react';
 import { useI18n, type MessageKey } from '@/i18n/I18nContext';
 import { seasonLabel, typeLabel } from '@/i18n/labels';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,

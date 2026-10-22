@@ -13,7 +13,7 @@ import { RatingInput } from './RatingInput';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { AddToShelfDialog } from './AddToShelfDialog';
 import { AddAllToShelfDialog } from './AddAllToShelfDialog';
-import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff, Tv, RotateCcw } from 'lucide-react';
+import { PlusCircle, MinusCircle, Trash2, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,

@@ -7,7 +7,6 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { UserAnime, UserAnimeStatus, JikanAnimeRelation } from '@/types/anime';
-import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime';
 import { ProgressBar } from './ProgressBar';
 import { Layers, Eye, CheckCircle, PauseCircle, XCircle, ListPlus, Star } from 'lucide-react';
 import { AnimeGroupModal } from './AnimeGroupModal';

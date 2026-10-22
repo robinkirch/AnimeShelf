@@ -32,17 +32,6 @@ export function Header() {
       "hover:text-accent-foreground transition-colors px-3 py-2 rounded-md text-sm font-medium relative",
       pathname === path ? "bg-accent text-accent-foreground" : "text-primary-foreground hover:bg-primary/80"
     );
-  
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '';
-    const names = name.split(' ');
-    let initials = names[0].substring(0, 1).toUpperCase();
-    if (names.length > 1) {
-      initials += names[names.length - 1].substring(0, 1).toUpperCase();
-    }
-    return initials;
-  };
-
 
   if (!mounted || !userProfileInitialized) {
     // Render a placeholder or skeleton while waiting for client-side mount and profile initialization

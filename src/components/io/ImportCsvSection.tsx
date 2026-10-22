@@ -13,65 +13,10 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { jikanApi } from '@/lib/jikanApi'; // Import jikanApi
 import { useI18n } from '@/i18n/I18nContext';
+import { parseCsvLine, parseDurationToMinutes } from '@/lib/parsing';
 
 const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes'];
 const MINIMUM_REQUIRED_FOR_PROCESSING = ['user_status', 'current_episode'];
-
-
-// Helper function to parse Jikan duration string to minutes (can be moved to utils if needed elsewhere)
-function parseDurationToMinutes(durationStr: string | null | undefined): number | null {
-  if (!durationStr) return null;
-  
-  const perEpMatch = durationStr.match(/(\d+)\s*min(?:s|\.)?\s*(?:per\s*ep)?/i);
-  if (perEpMatch && perEpMatch[1]) {
-    return parseInt(perEpMatch[1], 10);
-  }
-
-  const hrMinMatch = durationStr.match(/(?:(\d+)\s*hr)?\s*(?:(\d+)\s*min)?/i);
-  if (hrMinMatch) {
-    const hours = hrMinMatch[1] ? parseInt(hrMinMatch[1], 10) : 0;
-    const minutes = hrMinMatch[2] ? parseInt(hrMinMatch[2], 10) : 0;
-    if (!durationStr.toLowerCase().includes("per ep") && (hours > 0 || minutes > 0)) {
-        return (hours * 60) + minutes;
-    }
-  }
-  return null;
-}
-
-/**
- * Parses a single line of CSV text into an array of strings.
- * Handles quoted fields containing delimiters and escaped quotes.
- * @param line - The CSV line to parse.
- * @param delimiter - The delimiter character (default is ',').
- * @returns An array of strings representing the fields in the CSV line.
- */
-function robustCsvLineParse(line: string, delimiter: string = ','): string[] {
-  const values: string[] = [];
-  let currentField = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-
-    if (char === '"') {
-      // Check for an escaped quote ("")
-      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
-        currentField += '"';
-        i++; // Skip the second quote of the pair
-      } else {
-        inQuotes = !inQuotes; // Toggle inQuotes state
-      }
-    } else if (char === delimiter && !inQuotes) {
-      values.push(currentField);
-      currentField = '';
-    } else {
-      currentField += char;
-    }
-  }
-  values.push(currentField); // Add the last field
-  return values;
-}
-
 
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   const { t } = useI18n();
@@ -125,7 +70,7 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
          return;
       }
 
-      const csvHeaders = robustCsvLineParse(lines[0]).map(h => h.trim().toLowerCase());
+      const csvHeaders = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
       
       const missingCoreRequirements = MINIMUM_REQUIRED_FOR_PROCESSING.filter(rh => !csvHeaders.includes(rh.toLowerCase()));
       const hasIdentifier = csvHeaders.includes('mal_id') || csvHeaders.includes('title');
@@ -155,7 +100,7 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
         const lineContent = lines[i];
         if (!lineContent.trim()) continue;
 
-        const values = robustCsvLineParse(lineContent);
+        const values = parseCsvLine(lineContent);
 
         if (values.length !== csvHeaders.length) {
             processingErrors.push({ animeTitle: t('io.import.row', { row: i + 1 }), error: t('io.import.errors.columnMismatch', { expected: csvHeaders.length, actual: values.length, line: lineContent.substring(0, 100) }) });

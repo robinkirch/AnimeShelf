@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Link from 'next/link';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { usePreview } from '@/contexts/PreviewContext';
 import { RelatedAnimeCard } from '@/components/preview/RelatedAnimeCard';
@@ -164,7 +165,7 @@ export default function PreviewPage() {
           {t('preview.emptyShelfDescription')}
         </p>
         <Button asChild size="lg">
-          <a href="/">{t('preview.goToShelf')}</a>
+          <Link href="/">{t('preview.goToShelf')}</Link>
         </Button>
       </div>
     );

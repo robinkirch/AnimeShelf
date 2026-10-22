@@ -25,6 +25,11 @@ next-env.d.ts
 # electron main/preload bundles (npm run electron:build-main)
 /electron/dist/
 
+# playwright (npm run test:e2e)
+/test-results/
+/playwright-report/
+/blob-report/
+
 # app logs (dev)
 /logs/
 

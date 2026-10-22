@@ -82,7 +82,7 @@ if (isDevelopment) {
               log += ` ${JSON.stringify(metadata, (key, value) => 
                 typeof value === 'bigint' ? value.toString() : value // BigInt serialization
               )}`;
-            } catch (e) { /* ignore serialization errors for console */ }
+            } catch { /* ignore serialization errors for console */ }
           }
           return log;
         })

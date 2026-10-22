@@ -8,6 +8,14 @@ import * as database from './database.js';
 import { mainLogger, logFromRenderer } from './logger.js'; // Import logger
 
 
+// End-to-end tests start the app with their own data folder (database, cookies, localStorage),
+// so the user's real data is never touched. Must run before the app is ready.
+const userDataOverride = process.env.ANIMESHELF_USER_DATA;
+if (userDataOverride) {
+  app.setPath('userData', path.resolve(userDataOverride));
+}
+const isE2E = process.env.ANIMESHELF_E2E === '1';
+
 // Bundled by esbuild into electron/dist/ (main.js as ESM, preload.cjs as CommonJS).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,7 +28,7 @@ const nextJsHost = '127.0.0.1';
 
 let mainWindow: BrowserWindow | null;
 
-mainLogger.info('Application starting...', { pid: process.pid });
+mainLogger.info('Application starting...', { pid: process.pid, userData: app.getPath('userData') });
 
 function createWindow() {
   mainLogger.info('Creating main window...');
@@ -48,8 +56,10 @@ function createWindow() {
   Menu.setApplicationMenu(null);
   mainLogger.info('Application menu removed.');
 
-  mainWindow.loadURL(`http://localhost:${nextJsPort}`);
-  mainLogger.info(`Main window loading URL: http://localhost:${nextJsPort}`);
+  // In tests the window starts empty: the test installs its network mocks first and then opens the app itself.
+  const startUrl = isE2E ? 'about:blank' : `http://localhost:${nextJsPort}`;
+  mainWindow.loadURL(startUrl);
+  mainLogger.info(`Main window loading URL: ${startUrl}`);
 
   mainWindow.on('closed', () => {
     mainLogger.info('Main window closed.');
@@ -150,7 +160,7 @@ app.on('ready', async () => {
   if (!app.isPackaged) {
     mainLogger.info('Development mode detected. Creating window and opening dev tools.');
     createWindow();
-    if (mainWindow) {
+    if (mainWindow && !isE2E) {
       mainWindow.webContents.openDevTools();
       mainLogger.info('Dev tools opened.');
     }

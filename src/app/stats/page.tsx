@@ -7,12 +7,11 @@ import { GenreDevelopmentChart } from '@/components/stats/GenreDevelopmentChart'
 import { StudioStatsChart } from '@/components/stats/StudioStatsChart';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { Loader2, Info } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { useI18n } from '@/i18n/I18nContext';
 
 export default function StatisticsPage() {
-  const { isInitialized: shelfInitialized, shelf, episodeWatchHistory } = useAnimeShelf();
+  const { isInitialized: shelfInitialized, shelf } = useAnimeShelf();
   const { t } = useI18n();
 
   if (!shelfInitialized) {

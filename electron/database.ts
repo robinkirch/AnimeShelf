@@ -4,7 +4,6 @@ import path from 'path';
 import { app } from 'electron';
 import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
 
-const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
 let db: Database.Database;
 
 export function initDb() {
@@ -12,6 +11,8 @@ export function initDb() {
         console.log("Database already initialized, skipping.");
         return;
     }
+    // Resolved here, not at import time, so main.ts can redirect userData first (ANIMESHELF_USER_DATA).
+    const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
     console.log("Attempting to initialize database at:", dbPath);
 
   db = new Database(dbPath);
@@ -92,7 +93,7 @@ function parseJsonArray(jsonString: string | null | undefined): string[] {
   try {
     const arr = JSON.parse(jsonString);
     return Array.isArray(arr) ? arr : [];
-  } catch (e) {
+  } catch {
     return [];
   }
 }

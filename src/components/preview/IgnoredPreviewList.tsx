@@ -6,7 +6,7 @@ import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime } from '@/types/anime';
 import { AnimeCard } from '@/components/anime/AnimeCard';
-import { Loader2, ListFilter, Eye } from 'lucide-react';
+import { ListFilter, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
