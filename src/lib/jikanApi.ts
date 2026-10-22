@@ -12,7 +12,7 @@ const MIN_REQUEST_INTERVAL_MS = 300;
 const MAX_REQUESTS_PER_MINUTE = 110;
 const MAX_RETRIES = 4;
 const REQUEST_TIMEOUT_MS = 20000;
-const MAX_SEASON_PAGES = 20;
+const MAX_SEASON_PAGES = 30; // /seasons/upcoming currently has ~17 pages
 const MAX_CACHE_ENTRIES = 2000;
 
 const TTL_SHORT = 15 * 60 * 1000;
@@ -274,6 +274,11 @@ export const jikanApi = {
   /** Fetches all pages of the currently airing season. Throws JikanApiError on failure. */
   getCurrentSeason: async (options: JikanRequestOptions = {}): Promise<JikanAnime[]> => {
     return fetchAllSeasonPages('/seasons/now', { priority: 'high', ...options });
+  },
+
+  /** Fetches all pages of announced, not yet aired anime. Throws JikanApiError on failure. */
+  getUpcomingSeason: async (options: JikanRequestOptions = {}): Promise<JikanAnime[]> => {
+    return fetchAllSeasonPages('/seasons/upcoming', { priority: 'high', ...options });
   },
 
   /** Fetches all pages of the given season. Throws JikanApiError on failure. */

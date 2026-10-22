@@ -168,6 +168,10 @@ export interface JikanAnimeRelationEntry {
   type: string; 
   name: string;
   url: string;
+  /** Tenrai extension (not in Jikan v4): e.g. 'TV', 'Movie', 'Music'. */
+  media_type?: string | null;
+  /** Tenrai extension (not in Jikan v4). */
+  images?: JikanImages;
 }
 
 export interface JikanAnimeRelation {

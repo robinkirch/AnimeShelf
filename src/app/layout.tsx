@@ -4,6 +4,7 @@ import { GeistSans } from 'geist/font/sans';
 import './globals.css';
 import { Header } from '@/components/layout/Header';
 import { AnimeShelfProvider } from '@/contexts/AnimeShelfContext';
+import { PreviewProvider } from '@/contexts/PreviewContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { FooterYear } from '@/components/layout/FooterYear';
 import { Toaster } from "@/components/ui/toaster";
@@ -26,17 +27,20 @@ export default function RootLayout({
         <GlobalErrorListeners />
         <ThemeProvider>
           <AnimeShelfProvider>
-            <ProfileSetupManager /> 
-            <div className="flex flex-col min-h-screen">
-              <Header />
-              <main className="grow container mx-auto p-4 md:p-6">
-                {children}
-              </main>
-              <footer className="py-6 text-center text-muted-foreground text-sm">
-                © <FooterYear /> AnimeShelf. All rights reserved.
-              </footer>
-            </div>
-            <Toaster />
+            {/* Runs the related-anime lookup globally in the background (preview page + header badge). */}
+            <PreviewProvider>
+              <ProfileSetupManager /> 
+              <div className="flex flex-col min-h-screen">
+                <Header />
+                <main className="grow container mx-auto p-4 md:p-6">
+                  {children}
+                </main>
+                <footer className="py-6 text-center text-muted-foreground text-sm">
+                  © <FooterYear /> AnimeShelf. All rights reserved.
+                </footer>
+              </div>
+              <Toaster />
+            </PreviewProvider>
           </AnimeShelfProvider>
         </ThemeProvider>
       </body>

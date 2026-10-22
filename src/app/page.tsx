@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AnimeCard } from "@/components/anime/AnimeCard";
@@ -92,6 +92,8 @@ export default function MyShelfPage() {
     relationsMapRef.current = relationsMap;
   }, [relationsMap]);
   const [relationsRetryToken, setRelationsRetryToken] = useState(0);
+  // mal_id -> position in the current shelf view, so relations for visible cards are fetched first.
+  const displayOrderRef = useRef(new Map<number, number>());
 
   // Loads relations (for series grouping) for every shelf entry that doesn't have them yet.
   // Runs at low priority so user-triggered Jikan requests go first, and is aborted on unmount
@@ -106,7 +108,10 @@ export default function MyShelfPage() {
       return;
     }
 
-    const missing = shelf.filter(anime => !relationsMapRef.current.has(anime.mal_id));
+    const order = displayOrderRef.current;
+    const missing = shelf
+      .filter(anime => !relationsMapRef.current.has(anime.mal_id))
+      .sort((a, b) => (order.get(a.mal_id) ?? Infinity) - (order.get(b.mal_id) ?? Infinity));
     if (missing.length === 0) {
       setIsLoadingRelations(false);
       return;
@@ -364,6 +369,20 @@ export default function MyShelfPage() {
     });
     return sortedFinalItems;
   }, [itemsPassingOtherFilters, statusFilter, relationsMap, shelfInitialized, sortOption, sortOrder]);
+
+  // Layout effect: runs before the relations effect above, so its first run already sees the display order.
+  useLayoutEffect(() => {
+    const order = new Map<number, number>();
+    groupedAndFilteredShelf.forEach(group => group.items.forEach(item => {
+      if (!order.has(item.mal_id)) order.set(item.mal_id, order.size);
+    }));
+    displayOrderRef.current = order;
+  }, [groupedAndFilteredShelf]);
+
+  const relationsLoadedCount = useMemo(
+    () => shelf.filter(anime => relationsMap.has(anime.mal_id)).length,
+    [shelf, relationsMap]
+  );
 
 
   useEffect(() => {
@@ -745,7 +764,7 @@ export default function MyShelfPage() {
             {isLoadingRelations && shelf.length > 0 && displayedShelfItems.length > 0 && ( 
                  <div className="text-center py-4 text-sm text-muted-foreground">
                     <Loader2 className="inline h-4 w-4 mr-2 animate-spin" />
-                    Updating series information...
+                    Updating series information... ({relationsLoadedCount} / {shelf.length})
                 </div>
             )}
           </>

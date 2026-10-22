@@ -83,6 +83,7 @@ The app works offline for your personal library data (stored locally), with onli
 - **Desktop Packaging**: Electron
 - **Data Storage**: SQLite via `better-sqlite3` in the Electron main process (IPC bridge via preload)
 - **External Anime API**: [Tenrai](https://tenrai.org/) (Jikan-v4-compatible MyAnimeList API)
+- **Related Anime Lookup**: [AniList GraphQL API](https://docs.anilist.co/) (relations of up to 50 anime per request, used by the Preview page)
 
 ### Getting Started
 
@@ -150,7 +151,7 @@ This project is licensed under the GNU General Public License v3.0 - see the Lic
 
 ## 📊 Privacy
 
-This app stores all your personal shelf data locally on your device in a SQLite database. The Gemini API key is stored in the app's `localStorage` and only sent to Google with AI search requests. No personal shelf data is transmitted to any external servers. API requests are made to the Tenrai API to fetch anime information and to Google AI services (via Genkit) for the AI search feature, as per their respective privacy policies.
+This app stores all your personal shelf data locally on your device in a SQLite database. The Gemini API key is stored in the app's `localStorage` and only sent to Google with AI search requests. No personal shelf data is transmitted to any external servers. API requests are made to the Tenrai API and the AniList API (only MyAnimeList IDs of your shelf entries, to find related anime) to fetch anime information and to Google AI services (via Genkit) for the AI search feature, as per their respective privacy policies.
 
 ---
 

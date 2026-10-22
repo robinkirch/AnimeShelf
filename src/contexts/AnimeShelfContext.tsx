@@ -41,9 +41,6 @@ interface AnimeShelfContextType {
   getAnimeFromShelf: (mal_id: number) => UserAnime | undefined;
   isInitialized: boolean;
   isElectronStoreReady: boolean;
-  upcomingSequels: JikanAnime[]; 
-  setUpcomingSequels: (animeList: JikanAnime[]) => void; 
-  getFilteredUpcomingSequelsCount: () => number; 
   ignoredPreviewAnimeMalIds: number[];
   addIgnoredPreviewAnime: (mal_id: number) => void;
   removeIgnoredPreviewAnime: (mal_id: number) => void; 
@@ -58,8 +55,6 @@ interface AnimeShelfContextType {
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
-
-const IGNORED_TYPES_CONTEXT = ['Music'];
 
 export function parseDurationToMinutes(durationStr: string | null | undefined): number | null {
   if (!durationStr) return null;
@@ -81,7 +76,6 @@ export function parseDurationToMinutes(durationStr: string | null | undefined): 
 export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [shelf, setShelf] = useState<UserAnime[]>([]);
   const [isInitialized, setIsInitialized] = useState(false); // For general shelf data
-  const [upcomingSequels, setUpcomingSequelsState] = useState<JikanAnime[]>([]);
   const [ignoredPreviewAnimeMalIds, setIgnoredPreviewAnimeMalIds] = useState<number[]>([]);
   const [ignoredPreviewAnimeMalIdsInitialized, setIgnoredPreviewAnimeMalIdsInitialized] = useState(false);
   const [episodeWatchHistory, setEpisodeWatchHistory] = useState<EpisodeWatchEvent[]>([]);
@@ -151,11 +145,6 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   }, [isElectronStoreReady, electronStore]);
 
 
-  const setUpcomingSequels = useCallback((animeList: JikanAnime[]) => {
-    rendererLogger.debug(`Setting upcoming sequels, count: ${animeList.length}`, { category: 'data-update' });
-    setUpcomingSequelsState(animeList);
-  }, []);
-
   const addAnimeToShelf = useCallback(async (anime: JikanAnime, initialDetails: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => {
     const newAnime: UserAnime = {
       mal_id: anime.mal_id,
@@ -183,7 +172,6 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
       if (prevShelf.some(item => item.mal_id === anime.mal_id)) return prevShelf;
       return [...prevShelf, newAnime];
     });
-    setUpcomingSequelsState(prevUpcoming => prevUpcoming.filter(seq => seq.mal_id !== anime.mal_id));
   }, [electronStore]);
 
   const updateAnimeOnShelf = useCallback(async (
@@ -328,15 +316,6 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     return ignoredPreviewAnimeMalIds.includes(mal_id);
   }, [ignoredPreviewAnimeMalIds]);
 
-  const getFilteredUpcomingSequelsCount = useCallback(() => {
-    if (!isInitialized || !ignoredPreviewAnimeMalIdsInitialized) return 0;
-    const shelfMalIds = new Set(shelf.map(a => a.mal_id));
-    return upcomingSequels.filter(seq => 
-      !shelfMalIds.has(seq.mal_id) && 
-      !ignoredPreviewAnimeMalIds.includes(seq.mal_id) && 
-      !(seq.type && IGNORED_TYPES_CONTEXT.includes(seq.type)) 
-    ).length;
-  }, [upcomingSequels, shelf, ignoredPreviewAnimeMalIds, isInitialized, ignoredPreviewAnimeMalIdsInitialized]);
   
   const importAnimeBatch = useCallback(async (importedAnimeList: UserAnime[]): Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => {
     rendererLogger.info(`Starting batch import of ${importedAnimeList.length} anime. electronStore is ${electronStore ? "available" : "undefined"}`, { category: 'user-action', action: 'import-batch'});
@@ -395,9 +374,6 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     getAnimeFromShelf,
     isInitialized,
     isElectronStoreReady,
-    upcomingSequels,
-    setUpcomingSequels,
-    getFilteredUpcomingSequelsCount,
     ignoredPreviewAnimeMalIds,
     addIgnoredPreviewAnime,
     removeIgnoredPreviewAnime,
@@ -410,7 +386,7 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     updateUserProfile,
     markProfileSetupComplete,
   }), [
-    shelf, addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf, getAnimeFromShelf, isInitialized, isElectronStoreReady, upcomingSequels, setUpcomingSequels, getFilteredUpcomingSequelsCount, ignoredPreviewAnimeMalIds, addIgnoredPreviewAnime, removeIgnoredPreviewAnime, isPreviewAnimeIgnored, ignoredPreviewAnimeMalIdsInitialized, importAnimeBatch, episodeWatchHistory, userProfile, userProfileInitialized, updateUserProfile, markProfileSetupComplete,
+    shelf, addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf, getAnimeFromShelf, isInitialized, isElectronStoreReady, ignoredPreviewAnimeMalIds, addIgnoredPreviewAnime, removeIgnoredPreviewAnime, isPreviewAnimeIgnored, ignoredPreviewAnimeMalIdsInitialized, importAnimeBatch, episodeWatchHistory, userProfile, userProfileInitialized, updateUserProfile, markProfileSetupComplete,
   ]);
 
   return (

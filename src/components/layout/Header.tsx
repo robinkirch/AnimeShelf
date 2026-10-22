@@ -5,6 +5,7 @@ import { Clapperboard, Settings, UserCircle2 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
+import { usePreview } from '@/contexts/PreviewContext';
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import React, { useEffect, useState } from 'react';
@@ -13,7 +14,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function Header() {
   const pathname = usePathname();
-  const { getFilteredUpcomingSequelsCount, userProfile, userProfileInitialized } = useAnimeShelf();
+  const { userProfile, userProfileInitialized } = useAnimeShelf();
+  const { currentUpcoming } = usePreview();
   const [mounted, setMounted] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
@@ -21,7 +23,7 @@ export function Header() {
     setMounted(true);
   }, []);
 
-  const upcomingCount = getFilteredUpcomingSequelsCount();
+  const upcomingCount = currentUpcoming.length;
 
   const navLinkClasses = (path: string) =>
     cn(
