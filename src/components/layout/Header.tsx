@@ -11,12 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import React, { useEffect, useState } from 'react';
 import { SettingsModal } from '@/components/settings/SettingsModal';
+import { useUpdateStatus } from '@/hooks/use-update-status';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function Header() {
   const pathname = usePathname();
   const { userProfile, userProfileInitialized } = useAnimeShelf();
   const { currentUpcoming } = usePreview();
+  const { status: updateStatus } = useUpdateStatus();
   const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -89,9 +91,14 @@ export function Header() {
               size="icon"
               onClick={() => setIsSettingsModalOpen(true)}
               aria-label={t('layout.openSettings')}
-              className="text-primary-foreground hover:bg-primary/80 hover:text-accent-foreground ml-2"
+              className="text-primary-foreground hover:bg-primary/80 hover:text-accent-foreground ml-2 relative"
             >
               <Settings size={20} />
+              {updateStatus.state === 'available' && (
+                <Badge variant="destructive" aria-label={t('updates.badgeLabel')} className="absolute -top-1 -right-1 h-5 min-w-5 p-0 flex items-center justify-center text-xs">
+                  1
+                </Badge>
+              )}
             </Button>
             <div className="flex items-center gap-2 pl-2 border-l border-primary-foreground/30 ml-2">
                 <Avatar className="h-8 w-8 cursor-pointer" onClick={() => setIsSettingsModalOpen(true)}>

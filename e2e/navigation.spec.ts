@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { completeProfileSetup, expect, test } from './fixtures';
 import { SEASON_ANIME } from './mockApis';
 import { en } from '../src/i18n/messages/en';
@@ -45,4 +46,16 @@ test('settings dialog opens and switches the language', async ({ launchApp }) =>
   await window.keyboard.press('Escape');
   await expect(settingsDe).toBeHidden();
   await expect(window.getByRole('link', { name: de.layout.nav.seasonal })).toBeVisible();
+});
+
+test('settings show the app version; updates are off outside the installed app', async ({ launchApp }) => {
+  const { window } = await launchApp();
+  await completeProfileSetup(window);
+  const { version } = createRequire(import.meta.url)('../package.json') as { version: string };
+
+  await window.getByRole('button', { name: en.layout.openSettings }).click();
+  const settings = window.getByRole('dialog', { name: en.settings.title });
+  await expect(settings.getByText(en.updates.currentVersion.replace('{version}', version))).toBeVisible();
+  await expect(settings.getByRole('status').filter({ hasText: en.updates.disabled })).toBeVisible();
+  await expect(settings.getByRole('button', { name: en.updates.check })).toBeDisabled();
 });

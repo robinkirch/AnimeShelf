@@ -1,4 +1,6 @@
 
+// Must stay the first import (see the file).
+import './userDataOverride';
 import { app, BrowserWindow, shell, Menu, ipcMain, dialog, session, safeStorage } from 'electron';
 import * as path from 'path';
 import { fileURLToPath, parse } from 'url';
@@ -6,15 +8,17 @@ import { createServer } from 'http';
 import nextServer from 'next';
 import * as database from './database.js';
 import { mainLogger, logFromRenderer } from './logger.js'; // Import logger
+import { setupAutoUpdater } from './updater';
+import { DatabaseTooNewError } from './migrations';
 
 
-// End-to-end tests start the app with their own data folder (database, cookies, localStorage),
-// so the user's real data is never touched. Must run before the app is ready.
-const userDataOverride = process.env.ANIMESHELF_USER_DATA;
-if (userDataOverride) {
-  app.setPath('userData', path.resolve(userDataOverride));
-}
 const isE2E = process.env.ANIMESHELF_E2E === '1';
+
+// Only one instance per data folder: a second start would fail on port 9002 and must not run while an update installs.
+// The second instance hands over to the first one (see 'second-instance') and exits.
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0);
+}
 
 // Bundled by esbuild into electron/dist/ (main.js as ESM, preload.cjs as CommonJS).
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +105,9 @@ app.on('ready', async () => {
     mainLogger.info('Database initialized successfully.');
   } catch (err: any) {
     mainLogger.error('Failed to initialize database:', { error: err.message, stack: err.stack });
+    dialog.showErrorBox('AnimeShelf', err instanceof DatabaseTooNewError
+      ? err.message
+      : `The database could not be opened: ${err.message}`);
     app.quit(); // Quit if DB fails to initialize
     return;
   }
@@ -154,6 +161,7 @@ app.on('ready', async () => {
   ipcMain.on('log-to-main', (event, level: string, category: string, message: string, metadata?: any) => {
     logFromRenderer(level, category, message, metadata);
   });
+  setupAutoUpdater(() => mainWindow, { enabled: app.isPackaged && !isE2E });
   mainLogger.info('IPC handlers registered.');
 
 
@@ -190,6 +198,14 @@ app.on('ready', async () => {
         mainLogger.error("Error preparing Next.js app:", { error: err.message, stack: err.stack });
         app.quit();
     }
+  }
+});
+
+app.on('second-instance', () => {
+  mainLogger.info('Second instance started; focusing the existing window.');
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
   }
 });
 

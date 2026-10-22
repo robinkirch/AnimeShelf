@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
+import type { UpdateStatus } from '../src/types/update';
 
 contextBridge.exposeInMainWorld('electronStore', {
   // Anime Shelf
@@ -54,6 +55,26 @@ contextBridge.exposeInMainWorld('electronStore', {
   },
   setSecret: (name: string, value: string): Promise<void> => {
     return ipcRenderer.invoke('secrets:set', name, value);
+  },
+
+  // App version and auto-update (electron/updater.ts)
+  getAppVersion: (): Promise<string> => {
+    return ipcRenderer.invoke('app:getVersion');
+  },
+  getUpdateStatus: (): Promise<UpdateStatus> => {
+    return ipcRenderer.invoke('update:getStatus');
+  },
+  checkForUpdates: (): Promise<UpdateStatus> => {
+    return ipcRenderer.invoke('update:check');
+  },
+  installUpdate: (): Promise<void> => {
+    return ipcRenderer.invoke('update:install');
+  },
+  /** Returns a function that stops listening. */
+  onUpdateStatus: (callback: (status: UpdateStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => callback(status);
+    ipcRenderer.on('update:status', listener);
+    return () => ipcRenderer.removeListener('update:status', listener);
   },
 
   logToMain: (level: string, category: string, message: string, metadata?: any): void => {

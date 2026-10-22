@@ -6,6 +6,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent, UserProfile } from '@/types/anime';
 import { rendererLogger } from '@/lib/logger'; // Import renderer logger
 import { parseDurationToMinutes } from '@/lib/parsing';
+import type { UpdateStatus } from '@/types/update';
 
 declare global {
   interface Window {
@@ -24,6 +25,11 @@ declare global {
       updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
       getSecret: (name: string) => Promise<string | null>;
       setSecret: (name: string, value: string) => Promise<void>;
+      getAppVersion: () => Promise<string>;
+      getUpdateStatus: () => Promise<UpdateStatus>;
+      checkForUpdates: () => Promise<UpdateStatus>;
+      installUpdate: () => Promise<void>;
+      onUpdateStatus: (callback: (status: UpdateStatus) => void) => () => void;
       logToMain: (level: string, category: string, message: string, metadata?: any) => void; // Added for logger
     };
   }

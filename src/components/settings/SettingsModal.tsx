@@ -21,6 +21,7 @@ import { getSecret, setSecret } from '@/lib/secrets';
 import { LANGUAGES, LANGUAGE_LABELS, type Language } from '@/i18n/config';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ImportExportModal } from '@/components/io/ImportExportModal';
+import { UpdateSection } from '@/components/settings/UpdateSection';
 import { KeyRound, Languages, Palette, ArrowRightLeft, Save, Moon, Sun, User, Upload } from 'lucide-react'; 
 import { Separator } from '../ui/separator';
 import { useToast } from '@/hooks/use-toast';
@@ -274,6 +275,10 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
                     </Select>
                 </div>
                 </div>
+
+                <Separator />
+
+                <UpdateSection />
 
                 <Separator />
 

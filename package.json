@@ -1,6 +1,6 @@
 {
   "name": "nextn",
-  "version": "0.8.5",
+  "version": "1.0.0",
   "description": "A desktop application, based on React und Next.js, to manage your anime library.",
   "author": "Robin Kirch",
   "type": "module",
@@ -20,7 +20,9 @@
     "check": "npm run typecheck && npm run lint && npm run test",
     "electron:build-main": "esbuild electron/main.ts --bundle --platform=node --format=esm --target=node22 --packages=external --sourcemap --outfile=electron/dist/main.js && esbuild electron/preload.ts --bundle --platform=node --format=cjs --target=node22 --external:electron --sourcemap --outfile=electron/dist/preload.cjs",
     "electron:dev": "concurrently -k \"npm run dev\" \"wait-on http://localhost:9002 && npm run electron:build-main && cross-env NODE_ENV=development electron .\"",
-    "package:electron": "npm run build && npm run electron:build-main && electron-builder"
+    "package:electron": "npm run build && npm run electron:build-main && electron-builder --win --publish never",
+    "release:build": "npm run check && npm run package:electron",
+    "release:publish": "npm run check && npm run build && npm run electron:build-main && electron-builder --win --publish always"
   },
   "dependencies": {
     "@genkit-ai/anthropic": "^0.6.0",
@@ -43,6 +45,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "electron-updater": "^6.8.9",
     "geist": "^1.8.2",
     "genkit": "^1.43.0",
     "lucide-react": "^1.61.0",
@@ -86,10 +89,14 @@
       "electron/dist/**",
       "package.json",
       "next.config.ts",
-      ".env*",
       {
         "from": ".next",
-        "to": ".next"
+        "to": ".next",
+        "filter": [
+          "**/*",
+          "!cache/**",
+          "!dev/**"
+        ]
       },
       {
         "from": "public",
@@ -103,11 +110,19 @@
       "target": "nsis",
       "icon": "public/AnimeShelf.ico"
     },
-    "linux": {
-      "target": "AppImage"
-    },
-    "mac": {
-      "target": "dmg"
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "robinkirch",
+        "repo": "AnimeShelf",
+        "releaseType": "draft"
+      }
+    ],
+    "nsis": {
+      "artifactName": "AnimeShelf-Setup-${version}.${ext}",
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
     }
   }
 }

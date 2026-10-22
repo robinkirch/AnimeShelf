@@ -11,6 +11,7 @@ import { Footer } from '@/components/layout/FooterYear';
 import { I18nProvider } from '@/i18n/I18nContext';
 import { LANGUAGE_COOKIE, normalizeLanguage } from '@/i18n/config';
 import { Toaster } from "@/components/ui/toaster";
+import { UpdateNotifier } from '@/components/layout/UpdateNotifier';
 import { ProfileSetupManager } from '@/components/profile/ProfileSetupModal'; 
 import { GlobalErrorListeners } from '@/components/layout/GlobalErrorListeners';
 
@@ -46,6 +47,7 @@ export default async function RootLayout({
                 <Footer />
               </div>
               <Toaster />
+              <UpdateNotifier />
             </PreviewProvider>
           </AnimeShelfProvider>
         </ThemeProvider>

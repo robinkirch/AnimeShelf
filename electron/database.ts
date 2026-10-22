@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
 import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
+import { migrate } from './migrations';
 
 let db: Database.Database;
 
@@ -21,52 +22,8 @@ export function initDb() {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
 
-    // Create tables if they don't exist
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS anime_shelf (
-        mal_id INTEGER PRIMARY KEY,
-        title TEXT NOT NULL,
-        cover_image TEXT,
-        total_episodes INTEGER,
-        user_status TEXT NOT NULL,
-        current_episode INTEGER NOT NULL DEFAULT 0,
-        user_rating INTEGER,
-        genres TEXT,
-        studios TEXT,
-        type TEXT,
-        year INTEGER,
-        season TEXT,
-        streaming_platforms TEXT,
-        broadcast_day TEXT,
-        duration_minutes INTEGER
-      );
-
-      CREATE TABLE IF NOT EXISTS episode_watch_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        mal_id INTEGER NOT NULL,
-        episode_number_watched INTEGER NOT NULL,
-        watched_at TEXT NOT NULL,
-        FOREIGN KEY (mal_id) REFERENCES anime_shelf(mal_id) ON DELETE CASCADE
-      );
-
-      CREATE TABLE IF NOT EXISTS ignored_preview_mal_ids (
-        mal_id INTEGER PRIMARY KEY
-      );
-
-      CREATE TABLE IF NOT EXISTS user_profile (
-        id INTEGER PRIMARY KEY DEFAULT 1, -- Ensures only one row for profile
-        username TEXT,
-        profile_picture_data_uri TEXT,
-        profile_setup_complete INTEGER DEFAULT 0 -- 0 for false, 1 for true
-      );
-
-      -- Values encrypted with Electron safeStorage (OS keychain / DPAPI), e.g. AI API keys.
-      CREATE TABLE IF NOT EXISTS secrets (
-        name TEXT PRIMARY KEY,
-        value BLOB NOT NULL
-      );
-    `);
-    console.log('Tables checked/created.');
+    const { from, to, backupPath } = migrate(db, dbPath);
+    if (from !== to) console.log(`Database migrated from schema version ${from} to ${to}.`, backupPath ? `Backup: ${backupPath}` : '');
 
     // Ensure a default profile row exists
     const profileRow = db.prepare('SELECT id FROM user_profile WHERE id = 1').get();
