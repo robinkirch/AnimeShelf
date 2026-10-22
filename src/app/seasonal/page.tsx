@@ -187,7 +187,7 @@ export default function SeasonalPage() {
 
   return (
     <div className="space-y-8">
-      <section className="bg-card p-6 rounded-lg shadow-sm">
+      <section className="bg-card p-6 rounded-lg shadow-xs">
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-primary">Seasonal Anime</h1>
@@ -227,11 +227,11 @@ export default function SeasonalPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="genre-filter-seasonal" className="w-full justify-between text-left font-normal">
-                  <span className="truncate flex-grow">{getGenreFilterDisplayValue()}</span>
-                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                  <span className="truncate grow">{getGenreFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+              <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                 {uniqueGenres.map((genre) => (
                   <DropdownMenuCheckboxItem
                     key={genre}
@@ -264,11 +264,11 @@ export default function SeasonalPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="type-filter-seasonal" className="w-full justify-between text-left font-normal">
-                  <span className="truncate flex-grow">{getTypeFilterDisplayValue()}</span>
-                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                  <span className="truncate grow">{getTypeFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+              <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                 {ANIME_TYPE_FILTER_OPTIONS.map((option) => (
                   <DropdownMenuCheckboxItem
                     key={option.value}

@@ -138,7 +138,7 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
             </div>
           )}
         </CardHeader>
-        <CardContent className="p-4 flex-grow">
+        <CardContent className="p-4 grow">
           <CardTitle className="text-lg font-semibold mb-1 leading-tight truncate" title={representativeAnime.title + (group.length > 1 ? ` & ${group.length - 1} more` : '')}>
             {representativeAnime.title}{group.length > 1 ? ` (Series)` : ''}
           </CardTitle>

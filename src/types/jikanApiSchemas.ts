@@ -1,4 +1,5 @@
-import { z } from 'zod';
+// Genkit 1.x converts schemas with zod-to-json-schema (Zod 3), so use its re-exported z instead of the zod package.
+import { z } from 'genkit';
 
 export const JikanMALItemSchema = z.object({
   mal_id: z.number().describe("The MyAnimeList ID of the item."),

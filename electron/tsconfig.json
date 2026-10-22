@@ -1,10 +1,9 @@
-
 {
   "compilerOptions": {
-    "moduleResolution": "node",
-    "module": "ESNext",
-    "target": "es2020",
-    "outDir": ".", 
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "es2022",
+    "outDir": ".",
     "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
@@ -12,13 +11,8 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "declaration": false,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["../src/*"] 
-    },
-    "typeRoots": ["../node_modules/@types"] 
+    "typeRoots": ["../node_modules/@types"]
   },
-  "include": ["*.ts"], 
-  "exclude": ["node_modules","preload.ts"]
+  "include": ["*.ts"],
+  "exclude": ["node_modules", "preload.ts"]
 }
-

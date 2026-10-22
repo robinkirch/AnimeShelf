@@ -83,7 +83,7 @@ export function Header() {
             <Link href="/preview" className={navLinkClasses("/preview")}>
               Preview
               {upcomingCount > 0 && (
-                <Badge variant="destructive" className="absolute -top-1 -right-2 h-5 min-w-[1.25rem] p-0 flex items-center justify-center text-xs">
+                <Badge variant="destructive" className="absolute -top-1 -right-2 h-5 min-w-5 p-0 flex items-center justify-center text-xs">
                   {upcomingCount > 99 ? '99+' : upcomingCount}
                 </Badge>
               )}

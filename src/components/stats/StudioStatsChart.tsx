@@ -81,7 +81,7 @@ export function StudioStatsChart() {
       </CardHeader>
       <CardContent className="h-[400px] pb-0">
         <ChartContainer config={chartConfig} className="aspect-auto w-full h-full">
-            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20, bottom: 20 }}> 
+            <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20, bottom: 30 }}> 
                 <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
                 <XAxis 
                     type="number" 
@@ -116,7 +116,7 @@ export function StudioStatsChart() {
                 />}
                 />
                 <Legend 
-                    wrapperStyle={{paddingTop: '10px'}}
+                    wrapperStyle={{paddingTop: '24px'}}
                     formatter={(value) => <span style={{color: 'hsl(var(--foreground))'}}>{value}</span>}
                 />
                 <Bar dataKey="count" name="Completed Anime" fill="hsl(var(--chart-5))" radius={[0, 4, 4, 0]} barSize={20}/>

@@ -218,7 +218,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
   };
 
   const renderSeasonForm = (entry: SeasonEntryState) => (
-    <div key={entry.mal_id} className="grid gap-4 p-4 border rounded-md shadow-sm">
+    <div key={entry.mal_id} className="grid gap-4 p-4 border rounded-md shadow-xs">
        <div className="flex items-start gap-4">
         <Image
           src={entry.cover_image}
@@ -311,10 +311,10 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
   
   const renderSkeletons = (count: number) => (
     Array.from({ length: count }).map((_, index) => (
-      <div key={index} className="space-y-3 p-4 border rounded-md shadow-sm">
+      <div key={index} className="space-y-3 p-4 border rounded-md shadow-xs">
         <div className="flex items-start gap-4">
             <Skeleton className="h-[90px] w-[60px] rounded-sm" />
-            <div className="space-y-2 flex-grow">
+            <div className="space-y-2 grow">
                 <Skeleton className="h-5 w-3/4" />
                 <Skeleton className="h-4 w-1/2" />
                 <Skeleton className="h-4 w-2/3" />
@@ -343,7 +343,7 @@ export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, chi
             Set initial progress for each season in the series. Related seasons are fetched and shown below.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-grow max-h-[calc(90vh-200px)] pr-3">
+        <ScrollArea className="grow max-h-[calc(90vh-200px)] pr-3">
             <div className="space-y-4 py-2">
             {isFetchingDetails && renderSkeletons(3)}
             {!isFetchingDetails && seasonEntries.length === 0 && (

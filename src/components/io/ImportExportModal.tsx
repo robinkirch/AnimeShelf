@@ -52,7 +52,7 @@ export function ImportExportModal({ isOpen, onOpenChange }: ImportExportModalPro
           </div>
         )}
         
-        <div className={`flex-grow overflow-y-auto ${view !== 'main' ? 'py-2' : ''}`}>
+        <div className={`grow overflow-y-auto ${view !== 'main' ? 'py-2' : ''}`}>
             {view === 'import' && <ImportCsvSection onImported={handleImportFinished} />}
             {view === 'export' && <ExportSection />}
         </div>

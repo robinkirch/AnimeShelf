@@ -103,7 +103,7 @@ export function MonthlyWatchTimeChart() {
       </CardHeader>
       <CardContent className="h-[350px] pb-0">
         <ChartContainer config={chartConfig} className="aspect-auto w-full h-full">
-            <BarChart data={chartData}>
+            <BarChart data={chartData} margin={{ left: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false}/>
                 <XAxis 
                 dataKey="name" 

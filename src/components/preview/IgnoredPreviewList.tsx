@@ -93,7 +93,7 @@ export function IgnoredPreviewList() {
   
   const renderSkeletons = (count: number) => (
     Array.from({ length: count }).map((_, index) => (
-      <div key={index} className="border rounded-lg p-4 space-y-3 bg-card shadow">
+      <div key={index} className="border rounded-lg p-4 space-y-3 bg-card shadow-sm">
         <Skeleton className="h-56 w-full" />
         <Skeleton className="h-7 w-3/4" />
         <Skeleton className="h-5 w-1/2" />
@@ -105,12 +105,12 @@ export function IgnoredPreviewList() {
 
   if (!hasBeenVisible && !ignoredPreviewAnimeMalIdsInitialized) {
     // If not visible and not initialized, render a minimal placeholder for the observer to attach.
-    return <div ref={observerRef} className="min-h-[1px]" aria-hidden="true"></div>;
+    return <div ref={observerRef} className="min-h-px" aria-hidden="true"></div>;
   }
   
   if (!hasBeenVisible && ignoredPreviewAnimeMalIdsInitialized) {
      // If initialized but not visible, still just the placeholder.
-    return <div ref={observerRef} className="min-h-[1px]" aria-hidden="true"></div>;
+    return <div ref={observerRef} className="min-h-px" aria-hidden="true"></div>;
   }
 
   // From here, hasBeenVisible is true or it's initializing
@@ -144,7 +144,7 @@ export function IgnoredPreviewList() {
 
   if (ignoredPreviewAnimeMalIds.length === 0 && ignoredPreviewAnimeMalIdsInitialized) {
      return (
-        <div ref={observerRef} className="text-center py-10 bg-card p-6 rounded-lg shadow-sm border border-dashed">
+        <div ref={observerRef} className="text-center py-10 bg-card p-6 rounded-lg shadow-xs border border-dashed">
           <Eye className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="mt-2 text-xl font-semibold text-muted-foreground">No Ignored Anime</h3>
           <p className="mt-1 text-sm text-muted-foreground">You haven't ignored any anime from the preview page yet.</p>
@@ -154,7 +154,7 @@ export function IgnoredPreviewList() {
   
   if (detailedIgnoredAnime.length === 0 && ignoredPreviewAnimeMalIds.length > 0 && !isLoading && ignoredPreviewAnimeMalIdsInitialized) {
      return (
-        <div ref={observerRef} className="text-center py-10 bg-card p-6 rounded-lg shadow-sm border border-dashed">
+        <div ref={observerRef} className="text-center py-10 bg-card p-6 rounded-lg shadow-xs border border-dashed">
           <ListFilter className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="mt-2 text-xl font-semibold text-muted-foreground">Loading Details...</h3>
           <p className="mt-1 text-sm text-muted-foreground">

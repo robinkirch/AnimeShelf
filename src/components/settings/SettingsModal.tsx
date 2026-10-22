@@ -148,10 +148,10 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="flex-grow pr-3 -mr-3 my-2">
+          <ScrollArea className="grow pr-3 -mr-3 my-2">
             <div className="space-y-6 py-2">
                 {/* Profile Section */}
-                <div className="space-y-3 p-4 border rounded-lg shadow-sm">
+                <div className="space-y-3 p-4 border rounded-lg shadow-xs">
                 <h3 className="text-lg font-medium flex items-center gap-2"><User className="h-5 w-5 text-primary" />Profile</h3>
                 <div className="flex items-center gap-4">
                     <Avatar className="h-20 w-20">
@@ -160,7 +160,7 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
                         {getInitials(currentUsername)}
                     </AvatarFallback>
                     </Avatar>
-                    <div className="space-y-1 flex-grow">
+                    <div className="space-y-1 grow">
                     <Label htmlFor="profile-pic-upload">Profile Picture</Label>
                     <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="w-full justify-start text-left">
                         <Upload className="mr-2 h-4 w-4" /> {newProfilePicFile ? newProfilePicFile.name : "Change Picture"}
@@ -194,7 +194,7 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
                 <Separator />
 
                 {/* API Key Section */}
-                <div className="space-y-3 p-4 border rounded-lg shadow-sm">
+                <div className="space-y-3 p-4 border rounded-lg shadow-xs">
                 <h3 className="text-lg font-medium flex items-center gap-2"><KeyRound className="h-5 w-5 text-primary" />API Key</h3>
                 <p className="text-xs text-muted-foreground">
                     Enter your Google AI (Gemini) API key for features like AI-powered search.
@@ -207,7 +207,7 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="Enter your Gemini API Key"
-                    className="flex-grow"
+                    className="grow"
                     />
                     <Button onClick={handleSaveApiKey} size="sm">
                     <Save className="mr-2 h-4 w-4" /> Save Key
@@ -218,7 +218,7 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
                 <Separator />
 
                 {/* Theme Section */}
-                <div className="space-y-3 p-4 border rounded-lg shadow-sm">
+                <div className="space-y-3 p-4 border rounded-lg shadow-xs">
                 <h3 className="text-lg font-medium flex items-center gap-2"><Palette className="h-5 w-5 text-primary" />Theme</h3>
                 <div className="flex items-center justify-between">
                     <Label htmlFor="theme-toggle" className="flex items-center gap-2">
@@ -237,7 +237,7 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
                 <Separator />
 
                 {/* Data Management Section */}
-                <div className="space-y-3 p-4 border rounded-lg shadow-sm">
+                <div className="space-y-3 p-4 border rounded-lg shadow-xs">
                 <h3 className="text-lg font-medium flex items-center gap-2"><ArrowRightLeft className="h-5 w-5 text-primary" />Data Management</h3>
                 <p className="text-xs text-muted-foreground">
                     Import or export your anime shelf data using CSV files.

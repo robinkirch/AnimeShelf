@@ -2,7 +2,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from './animeDB'; // Changed from '@/types/anime'
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from './animeDB.js'; // Copy of src/types/anime.ts (see CLAUDE.md)
 
 const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
 let db: Database.Database;
@@ -273,7 +273,7 @@ export function updateUserProfile(profile: Partial<UserProfile>): void {
     if (columnName) {
       // Use original JS field name for param binding placeholder in SQL (e.g., @profilePictureDataUri)
       // And use original JS field name for the key in the params object
-      setClauses.push(`${columnName} = @${field}`); 
+      setClauses.push(`${columnName} = @${String(field)}`);
       
       if (field === 'profileSetupComplete') {
         params[field] = profile[field] ? 1 : 0;

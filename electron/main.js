@@ -2,13 +2,16 @@ import { app, BrowserWindow, shell, Menu, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import { fileURLToPath, parse } from 'url';
 import { createServer } from 'http';
-import nextServer from 'next';
+import nextModule from 'next';
 import * as database from './database.js';
 import { mainLogger, logFromRenderer } from './logger.js'; // Import logger
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 // Determine the correct directory for the Next.js app
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+// next's CJS typings declare `export default`, which NodeNext maps to the module object;
+// at runtime the default import is the createServer function itself.
+const nextServer = nextModule;
 const nextJsPort = 9002;
 // Only bind to loopback so the embedded Next.js server (incl. server actions) isn't reachable from the network.
 const nextJsHost = '127.0.0.1';

@@ -344,7 +344,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   };
 
   return (
-    <div className="space-y-4 py-4 flex-grow">
+    <div className="space-y-4 py-4 grow">
       <div>
         <h4 className="font-medium mb-1 text-sm">Expected CSV Format:</h4>
         <p className="text-xs text-muted-foreground">
@@ -355,7 +355,7 @@ export function ImportCsvSection({ onImported }: { onImported: () => void }) {
           Supported columns (others will be ignored):
         </p>
         <ScrollArea className="h-auto max-h-20 whitespace-pre-wrap">
-          <code className="block bg-muted p-2 rounded-md text-xs mt-1 break-words">
+          <code className="block bg-muted p-2 rounded-md text-xs mt-1 wrap-break-word">
             {EXPECTED_HEADERS.join(', ')}
           </code>
         </ScrollArea>

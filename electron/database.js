@@ -248,7 +248,7 @@ export function updateUserProfile(profile) {
         if (columnName) {
             // Use original JS field name for param binding placeholder in SQL (e.g., @profilePictureDataUri)
             // And use original JS field name for the key in the params object
-            setClauses.push(`${columnName} = @${field}`);
+            setClauses.push(`${columnName} = @${String(field)}`);
             if (field === 'profileSetupComplete') {
                 params[field] = profile[field] ? 1 : 0;
             }

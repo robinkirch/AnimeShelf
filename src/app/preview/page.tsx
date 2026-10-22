@@ -223,7 +223,7 @@ export default function PreviewPage() {
           )}
         </div>
       ) : (
-        <div className="text-center py-10 bg-card p-6 rounded-lg shadow-sm border border-dashed">
+        <div className="text-center py-10 bg-card p-6 rounded-lg shadow-xs border border-dashed">
           <ListFilter className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="mt-2 text-xl font-semibold text-muted-foreground">No Anime Found</h3>
           <p className="mt-1 text-sm text-muted-foreground">{emptyMessage}</p>
@@ -234,7 +234,7 @@ export default function PreviewPage() {
   
   const renderSkeletons = (count: number) => (
     Array.from({ length: count }).map((_, index) => (
-      <div key={index} className="border rounded-lg p-4 space-y-3 bg-card shadow">
+      <div key={index} className="border rounded-lg p-4 space-y-3 bg-card shadow-sm">
         <Skeleton className="h-56 w-full" />
         <Skeleton className="h-7 w-3/4" />
         <Skeleton className="h-5 w-1/2" />
@@ -339,7 +339,7 @@ export default function PreviewPage() {
 
 
       {(futureAnimeToDisplay.length === 0 && otherContinuationsToDisplay.length === 0 && shelf.length > 0 && !isLoading) && (
-           <div className="text-center py-16 bg-card p-8 rounded-lg shadow-sm border border-dashed">
+           <div className="text-center py-16 bg-card p-8 rounded-lg shadow-xs border border-dashed">
                 <ListFilter className="mx-auto h-16 w-16 text-muted-foreground mb-6" />
                 <h3 className="mt-2 text-2xl font-semibold">No Previews Found</h3>
                 <p className="mt-2 text-md text-muted-foreground max-w-lg mx-auto">

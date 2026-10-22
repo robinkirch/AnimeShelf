@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/select";
 import { RatingInput } from './RatingInput';
 import { ProgressBar } from './ProgressBar';
-import { PlusCircle, MinusCircle, Tv, Youtube, Loader2 } from 'lucide-react'; // Added Loader2
+import { PlusCircle, MinusCircle, Tv, SquarePlay, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '../ui/badge';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
@@ -141,7 +141,7 @@ export function AnimeGroupModal({
                 <DialogTitle>Series: {representativeAnime.title}</DialogTitle>
                 <DialogDescription>Loading details for each season...</DialogDescription>
             </DialogHeader>
-            <div className="flex-grow flex items-center justify-center p-10">
+            <div className="grow flex items-center justify-center p-10">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
             </div>
              <DialogFooter className="mt-auto pt-4 border-t">
@@ -162,10 +162,10 @@ export function AnimeGroupModal({
             Manage individual anime within this series. Changes are saved automatically.
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-grow pr-3 -mr-3">
+        <ScrollArea className="grow pr-3 -mr-3">
           <div className="space-y-6 py-4">
             {editableItems.map((anime) => (
-              <div key={anime.mal_id} className="p-4 border rounded-lg shadow-sm bg-card">
+              <div key={anime.mal_id} className="p-4 border rounded-lg shadow-xs bg-card">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Image
                     src={anime.cover_image || "https://placehold.co/100x150.png"}
@@ -175,7 +175,7 @@ export function AnimeGroupModal({
                     className="rounded-md object-cover self-center sm:self-start"
                     data-ai-hint="anime cover art"
                   />
-                  <div className="flex-grow space-y-3">
+                  <div className="grow space-y-3">
                     <h3 className="text-lg font-semibold">{anime.title}</h3>
                     <p className="text-sm text-muted-foreground">
                       {anime.jikanData?.type || anime.type || 'Unknown Type'}
@@ -218,7 +218,7 @@ export function AnimeGroupModal({
                         >
                           <MinusCircle size={16} />
                         </Button>
-                        <div className="flex-grow">
+                        <div className="grow">
                             <Label htmlFor={`episode-modal-${anime.mal_id}`} className="text-xs text-center block mb-0.5">Episode</Label>
                             <Input
                                 id={`episode-modal-${anime.mal_id}`}
@@ -291,7 +291,7 @@ export function AnimeGroupModal({
                         <div className="flex flex-wrap gap-1 mt-1.5">
                             {anime.streaming_platforms.map(platform => (
                                 <Badge key={platform} variant="outline" className="text-xs bg-muted text-muted-foreground">
-                                   {platform.startsWith("http") ? <Youtube size={12} className="mr-1"/> : <Tv size={12} className="mr-1"/>}
+                                   {platform.startsWith("http") ? <SquarePlay size={12} className="mr-1"/> : <Tv size={12} className="mr-1"/>}
                                    {platform}
                                 </Badge>
                             ))}

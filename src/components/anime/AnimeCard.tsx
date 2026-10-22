@@ -13,7 +13,7 @@ import { RatingInput } from './RatingInput';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { AddToShelfDialog } from './AddToShelfDialog';
 import { AddAllToShelfDialog } from './AddAllToShelfDialog';
-import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff, Tv, Youtube, RotateCcw } from 'lucide-react';
+import { Star, PlusCircle, MinusCircle, Trash2, Edit3, CheckCircle, Eye, XCircle, PauseCircle, ListPlus, Layers, Loader2, EyeOff, Tv, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -204,7 +204,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
           </div>
         )}
       </CardHeader>
-      <CardContent className="p-4 flex-grow">
+      <CardContent className="p-4 grow">
         <CardTitle className="text-lg font-semibold mb-1 leading-tight truncate" title={anime.title}>
           {anime.title || "Unknown Title"}
         </CardTitle>

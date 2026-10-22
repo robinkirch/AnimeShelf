@@ -459,7 +459,7 @@ export default function MyShelfPage() {
 
   return (
     <div className="space-y-8">
-      <section className="bg-card p-6 rounded-lg shadow-sm">
+      <section className="bg-card p-6 rounded-lg shadow-xs">
         <h1 className="text-3xl font-bold mb-2 text-primary">Find Your Next Obsession</h1>
         <p className="text-muted-foreground mb-6">Search for anime by title or use AI to find anime based on description.</p>
 
@@ -474,7 +474,7 @@ export default function MyShelfPage() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                className="flex-grow"
+                className="grow"
               />
               <Button onClick={handleSearch} disabled={isLoadingSearch}>
                 {isLoadingSearch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
@@ -493,7 +493,7 @@ export default function MyShelfPage() {
                 value={aiSearchQuery}
                 onChange={(e) => setAiSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleAiSearch()}
-                className="flex-grow"
+                className="grow"
               />
               <Button onClick={handleAiSearch} disabled={isLoadingAiSearch} variant="outline">
                 {isLoadingAiSearch ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4 text-yellow-500" />}
@@ -570,7 +570,7 @@ export default function MyShelfPage() {
           <StatusDistributionBar shelf={shelf} />
         )}
 
-        <div className="mb-6 p-4 bg-card rounded-lg shadow-sm">
+        <div className="mb-6 p-4 bg-card rounded-lg shadow-xs">
             <Label htmlFor="local-shelf-search" className="text-sm font-medium mb-1 block">Search My Shelf</Label>
             <div className="relative">
                 <SearchCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -585,17 +585,17 @@ export default function MyShelfPage() {
             </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-card rounded-lg shadow-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-card rounded-lg shadow-xs">
           <div>
             <Label htmlFor="genre-filter-shelf" className="text-sm font-medium mb-1 block">Genre</Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="genre-filter-shelf" className="w-full justify-between text-left font-normal">
-                  <span className="truncate flex-grow">{getGenreFilterDisplayValue()}</span>
-                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                  <span className="truncate grow">{getGenreFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+              <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                 {uniqueGenres.map((genre) => (
                   <DropdownMenuCheckboxItem
                     key={genre}
@@ -643,11 +643,11 @@ export default function MyShelfPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" id="type-filter-shelf" className="w-full justify-between text-left font-normal">
-                  <span className="truncate flex-grow">{getTypeFilterDisplayValue()}</span>
-                  <ChevronDown className="ml-2 h-4 w-4 flex-shrink-0 opacity-50" />
+                  <span className="truncate grow">{getTypeFilterDisplayValue()}</span>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[--radix-dropdown-menu-trigger-width]">
+              <DropdownMenuContent className="w-(--radix-dropdown-menu-trigger-width)">
                 {ANIME_TYPE_FILTER_OPTIONS.map((option) => (
                   <DropdownMenuCheckboxItem
                     key={option.value}
@@ -668,8 +668,8 @@ export default function MyShelfPage() {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 mb-6 p-4 bg-card rounded-lg shadow-sm items-end">
-            <div className="flex-grow w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-4 mb-6 p-4 bg-card rounded-lg shadow-xs items-end">
+            <div className="grow w-full sm:w-auto">
                 <Label htmlFor="sort-option" className="text-sm font-medium mb-1 block">Sort By</Label>
                 <Select value={sortOption} onValueChange={(value) => { rendererLogger.debug(`Sort option changed: ${value}`, { category: 'ui-sort', sortOption: value }); setSortOption(value as SortOption)}}>
                     <SelectTrigger id="sort-option" className="w-full">
