@@ -2,6 +2,7 @@
 // the server only accepts IDs from this list. IDs use Genkit's "<plugin>/<model>" naming.
 
 import type { Messages } from '@/i18n/messages/en';
+import { getSecret } from '@/lib/secrets';
 
 export type AiProvider = 'gemini' | 'anthropic';
 
@@ -30,7 +31,8 @@ export const AI_MODELS: AiModelOption[] = [
 
 export const DEFAULT_AI_MODEL_ID = 'googleai/gemini-flash-latest';
 
-// localStorage keys. 'geminiApiKey' is kept from earlier versions so existing keys keep working.
+// The model choice is stored in localStorage; API keys are secrets encrypted via safeStorage (src/lib/secrets.ts).
+// 'geminiApiKey' is kept as name so keys from earlier versions are migrated automatically.
 export const AI_STORAGE_KEYS = {
   model: 'aiModel',
   apiKey: { gemini: 'geminiApiKey', anthropic: 'anthropicApiKey' } satisfies Record<AiProvider, string>,
@@ -40,8 +42,8 @@ export function getAiModel(id: string | null | undefined): AiModelOption | undef
   return AI_MODELS.find(model => model.id === id);
 }
 
-/** Selected model and its provider's API key from localStorage (client only). */
-export function readStoredAiSettings(): { model: AiModelOption; apiKey: string | null } {
+/** Selected model (localStorage) and its provider's decrypted API key (client only). */
+export async function readStoredAiSettings(): Promise<{ model: AiModelOption; apiKey: string | null }> {
   const model = getAiModel(localStorage.getItem(AI_STORAGE_KEYS.model)) ?? getAiModel(DEFAULT_AI_MODEL_ID)!;
-  return { model, apiKey: localStorage.getItem(AI_STORAGE_KEYS.apiKey[model.provider]) };
+  return { model, apiKey: await getSecret(AI_STORAGE_KEYS.apiKey[model.provider]) };
 }

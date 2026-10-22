@@ -22,6 +22,9 @@ next-env.d.ts
 .genkit/*
 .env*
 
+# electron main/preload bundles (npm run electron:build-main)
+/electron/dist/
+
 # app logs (dev)
 /logs/
 

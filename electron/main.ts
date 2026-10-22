@@ -1,21 +1,18 @@
 
-import { app, BrowserWindow, shell, Menu, ipcMain, dialog, session } from 'electron';
+import { app, BrowserWindow, shell, Menu, ipcMain, dialog, session, safeStorage } from 'electron';
 import * as path from 'path';
 import { fileURLToPath, parse } from 'url';
 import { createServer } from 'http';
-import nextModule from 'next';
+import nextServer from 'next';
 import * as database from './database.js';
 import { mainLogger, logFromRenderer } from './logger.js'; // Import logger
 
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Bundled by esbuild into electron/dist/ (main.js as ESM, preload.cjs as CommonJS).
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Determine the correct directory for the Next.js app
-const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-// next's CJS typings declare `export default`, which NodeNext maps to the module object;
-// at runtime the default import is the createServer function itself.
-const nextServer = nextModule as unknown as typeof nextModule.default;
+// Project root in development, resources/app in the packaged app (contains .next, public, package.json).
+const appDir = app.getAppPath();
 
 const nextJsPort = 9002;
 // Only bind to loopback so the embedded Next.js server (incl. server actions) isn't reachable from the network.
@@ -35,7 +32,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false, 
       contextIsolation: true, 
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
     },
     icon: path.join(appDir, 'public', 'AnimeShelf.ico')
   });
@@ -111,6 +108,37 @@ app.on('ready', async () => {
   ipcMain.handle('db:importAnimeBatch', async(event, animeList) => { mainLogger.debug('IPC: db:importAnimeBatch invoked', { animeListCount: animeList?.length }); return database.importAnimeBatch(animeList); });
   ipcMain.handle('db:getUserProfile', async () => { mainLogger.debug('IPC: db:getUserProfile invoked'); return database.getUserProfile(); });
   ipcMain.handle('db:updateUserProfile', async (event, profile) => { mainLogger.debug('IPC: db:updateUserProfile invoked for user', { username: profile?.username } ); return database.updateUserProfile(profile); });
+
+  // Secrets (AI API keys): encrypted with safeStorage before they are stored, never written in plain text.
+  // Values are never logged.
+  const SECRET_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+  ipcMain.handle('secrets:get', async (event, name: string) => {
+    if (!SECRET_NAME_PATTERN.test(name)) throw new Error('Invalid secret name');
+    const encrypted = database.getSecret(name);
+    if (!encrypted) return null;
+    if (!safeStorage.isEncryptionAvailable()) {
+      mainLogger.warn('safeStorage is not available; stored secret cannot be decrypted.', { name });
+      return null;
+    }
+    try {
+      return safeStorage.decryptString(encrypted);
+    } catch (err: any) {
+      mainLogger.error('Failed to decrypt secret.', { name, error: err.message });
+      return null;
+    }
+  });
+  ipcMain.handle('secrets:set', async (event, name: string, value: string) => {
+    if (!SECRET_NAME_PATTERN.test(name)) throw new Error('Invalid secret name');
+    if (!value) {
+      database.deleteSecret(name);
+      return;
+    }
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error('Encryption is not available on this system');
+    }
+    database.setSecret(name, safeStorage.encryptString(value));
+    mainLogger.info('Secret stored (encrypted).', { name });
+  });
   
   // IPC Handler for logs from renderer
   ipcMain.on('log-to-main', (event, level: string, category: string, message: string, metadata?: any) => {

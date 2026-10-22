@@ -2,7 +2,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from './animeDB.js'; // Copy of src/types/anime.ts (see CLAUDE.md)
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
 
 const dbPath = path.join(app.getPath('userData'), 'animeshelf.sqlite3');
 let db: Database.Database;
@@ -57,6 +57,12 @@ export function initDb() {
         username TEXT,
         profile_picture_data_uri TEXT,
         profile_setup_complete INTEGER DEFAULT 0 -- 0 for false, 1 for true
+      );
+
+      -- Values encrypted with Electron safeStorage (OS keychain / DPAPI), e.g. AI API keys.
+      CREATE TABLE IF NOT EXISTS secrets (
+        name TEXT PRIMARY KEY,
+        value BLOB NOT NULL
       );
     `);
     console.log('Tables checked/created.');
@@ -297,3 +303,16 @@ export function updateUserProfile(profile: Partial<UserProfile>): void {
   }
 }
 
+// Secrets (stored encrypted; encryption/decryption happens in main.ts via safeStorage)
+export function getSecret(name: string): Buffer | null {
+  const row = db.prepare('SELECT value FROM secrets WHERE name = ?').get(name) as { value: Buffer } | undefined;
+  return row?.value ?? null;
+}
+
+export function setSecret(name: string, encrypted: Buffer): void {
+  db.prepare('INSERT INTO secrets (name, value) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value').run(name, encrypted);
+}
+
+export function deleteSecret(name: string): void {
+  db.prepare('DELETE FROM secrets WHERE name = ?').run(name);
+}

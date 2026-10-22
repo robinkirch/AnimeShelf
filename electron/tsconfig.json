@@ -1,18 +1,15 @@
 {
+  // Type checking only; electron/*.ts is bundled by esbuild (see "electron:build-main" in package.json).
   "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "target": "es2022",
-    "outDir": ".",
-    "rootDir": ".",
+    "noEmit": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "sourceMap": true,
-    "declaration": false,
     "typeRoots": ["../node_modules/@types"]
   },
-  "include": ["*.ts"],
-  "exclude": ["node_modules", "preload.ts"]
+  "include": ["*.ts"]
 }

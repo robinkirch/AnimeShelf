@@ -92,14 +92,16 @@ export const en = {
     },
     ai: {
       title: 'AI Search',
-      description: 'Choose the AI model for the AI-powered search and enter the API key of its provider. Keys are stored locally on this device and only sent to the selected provider.',
+      description: 'Choose the AI model for the AI-powered search and enter the API key of its provider. Keys are stored encrypted on this device (protected by your operating system account) and only sent to the selected provider.',
       model: 'Model',
       apiKeyLabel: '{provider} API Key',
       apiKeyPlaceholder: 'Enter your {provider} API key',
       keyHintGemini: 'Get a key at aistudio.google.com.',
       keyHintAnthropic: 'Get a key at platform.claude.com.',
       savedTitle: 'AI Settings Saved',
-      savedDescription: 'AI search now uses {model}. Your {provider} API key has been saved locally.',
+      savedDescription: 'AI search now uses {model}. Your {provider} API key has been saved encrypted.',
+      saveFailedTitle: 'API Key Not Saved',
+      saveFailedDescription: 'The key could not be stored encrypted on this system. Nothing was saved.',
     },
     aiModelDescriptions: {
       geminiFlash: 'Fast, good default',

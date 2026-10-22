@@ -4,31 +4,8 @@ import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 
-// The main process is an ES module ("type": "module"), so __dirname has to be derived.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-// Read app version from package.json
-// Note: In a packaged app, package.json might not be easily accessible this way.
-// Consider alternative methods for packaged apps if this fails, e.g., embedding version during build.
-let appVersion = 'unknown';
-try {
-  const packageJsonPath = path.join(app.getAppPath(), 'package.json');
-  if (fs.existsSync(packageJsonPath)) {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    appVersion = packageJson.version || 'unknown';
-  } else {
-     // Fallback for development when app.getAppPath() might be different
-     const devPackageJsonPath = path.join(__dirname, '..', 'package.json');
-     if (fs.existsSync(devPackageJsonPath)) {
-        const packageJson = JSON.parse(fs.readFileSync(devPackageJsonPath, 'utf-8'));
-        appVersion = packageJson.version || 'unknown';
-     }
-  }
-} catch (error) {
-  console.error('Failed to read app version from package.json for logging:', error);
-}
+const appVersion = app.getVersion();
 
 
 const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;

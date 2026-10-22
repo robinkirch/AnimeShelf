@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AI_MODELS, AI_PROVIDER_LABELS, AI_STORAGE_KEYS, DEFAULT_AI_MODEL_ID, getAiModel, type AiProvider } from '@/ai/models';
 import { useI18n, type MessageKey } from '@/i18n/I18nContext';
+import { getSecret, setSecret } from '@/lib/secrets';
 import { LANGUAGES, LANGUAGE_LABELS, type Language } from '@/i18n/config';
 import { useTheme } from '@/contexts/ThemeContext';
 import { ImportExportModal } from '@/components/io/ImportExportModal';
@@ -59,10 +60,10 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
     if (isOpen) {
       rendererLogger.info('SettingsModal opened.', { category: 'ui-event' });
       setAiModelId(getAiModel(localStorage.getItem(AI_STORAGE_KEYS.model))?.id ?? DEFAULT_AI_MODEL_ID);
-      setApiKeys({
-        gemini: localStorage.getItem(AI_STORAGE_KEYS.apiKey.gemini) ?? '',
-        anthropic: localStorage.getItem(AI_STORAGE_KEYS.apiKey.anthropic) ?? '',
-      });
+      // API keys are decrypted in the main process (safeStorage) and loaded asynchronously.
+      Promise.all([getSecret(AI_STORAGE_KEYS.apiKey.gemini), getSecret(AI_STORAGE_KEYS.apiKey.anthropic)])
+        .then(([gemini, anthropic]) => setApiKeys({ gemini: gemini ?? '', anthropic: anthropic ?? '' }))
+        .catch(error => rendererLogger.error('Failed to load API keys.', { category: 'user-setting-error', error: String(error) }));
       if (userProfileInitialized && userProfile) {
         setCurrentUsername(userProfile.username || '');
         setCurrentProfilePic(userProfile.profilePictureDataUri);
@@ -79,9 +80,15 @@ export function SettingsModal({ isOpen, onOpenChange }: SettingsModalProps) {
   const selectedAiModel = getAiModel(aiModelId) ?? getAiModel(DEFAULT_AI_MODEL_ID)!;
   const selectedProvider = selectedAiModel.provider;
 
-  const handleSaveAiSettings = () => {
+  const handleSaveAiSettings = async () => {
+    try {
+      await setSecret(AI_STORAGE_KEYS.apiKey[selectedProvider], apiKeys[selectedProvider].trim());
+    } catch (error) {
+      rendererLogger.error('Failed to store API key encrypted.', { category: 'user-setting-error', error: String(error) });
+      toast({ variant: 'destructive', title: t('settings.ai.saveFailedTitle'), description: t('settings.ai.saveFailedDescription') });
+      return;
+    }
     localStorage.setItem(AI_STORAGE_KEYS.model, selectedAiModel.id);
-    localStorage.setItem(AI_STORAGE_KEYS.apiKey[selectedProvider], apiKeys[selectedProvider].trim());
     rendererLogger.info('AI search settings saved.', { category: 'user-setting-change', setting: 'ai-search', model: selectedAiModel.id });
     toast({
       title: t('settings.ai.savedTitle'),

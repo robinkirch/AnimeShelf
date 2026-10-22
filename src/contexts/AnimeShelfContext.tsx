@@ -22,6 +22,8 @@ declare global {
       importAnimeBatch: (animeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
       getUserProfile: () => Promise<UserProfile | null>;
       updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
+      getSecret: (name: string) => Promise<string | null>;
+      setSecret: (name: string, value: string) => Promise<void>;
       logToMain: (level: string, category: string, message: string, metadata?: any) => void; // Added for logger
     };
   }

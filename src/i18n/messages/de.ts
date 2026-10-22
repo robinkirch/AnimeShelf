@@ -92,14 +92,16 @@ export const de: Messages = {
     },
     ai: {
       title: 'KI-Suche',
-      description: 'Wähle das KI-Modell für die KI-Suche und gib den API-Schlüssel des Anbieters ein. Schlüssel werden nur auf diesem Gerät gespeichert und nur an den gewählten Anbieter gesendet.',
+      description: 'Wähle das KI-Modell für die KI-Suche und gib den API-Schlüssel des Anbieters ein. Schlüssel werden verschlüsselt auf diesem Gerät gespeichert (geschützt durch dein Benutzerkonto) und nur an den gewählten Anbieter gesendet.',
       model: 'Modell',
       apiKeyLabel: '{provider} API-Schlüssel',
       apiKeyPlaceholder: '{provider} API-Schlüssel eingeben',
       keyHintGemini: 'Einen Schlüssel erhältst du unter aistudio.google.com.',
       keyHintAnthropic: 'Einen Schlüssel erhältst du unter platform.claude.com.',
       savedTitle: 'KI-Einstellungen gespeichert',
-      savedDescription: 'Die KI-Suche nutzt jetzt {model}. Dein {provider} API-Schlüssel wurde lokal gespeichert.',
+      savedDescription: 'Die KI-Suche nutzt jetzt {model}. Dein {provider} API-Schlüssel wurde verschlüsselt gespeichert.',
+      saveFailedTitle: 'API-Schlüssel nicht gespeichert',
+      saveFailedDescription: 'Der Schlüssel konnte auf diesem System nicht verschlüsselt gespeichert werden. Es wurde nichts gespeichert.',
     },
     aiModelDescriptions: {
       geminiFlash: 'Schnell, guter Standard',

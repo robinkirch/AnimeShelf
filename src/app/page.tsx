@@ -205,7 +205,7 @@ export default function MyShelfPage() {
     setIsLoadingAiSearch(true);
     setAiSearchError(null);
     try {
-      const { model, apiKey } = readStoredAiSettings();
+      const { model, apiKey } = await readStoredAiSettings();
       const input: AiSearchInput = { query: aiSearchQuery, modelId: model.id, apiKey: apiKey || undefined };
       const response = await searchAnimeWithAi(input);
       if ('error' in response) {

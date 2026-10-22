@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from './animeDB';
+import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
 
 contextBridge.exposeInMainWorld('electronStore', {
   // Anime Shelf
@@ -46,6 +46,14 @@ contextBridge.exposeInMainWorld('electronStore', {
   },
   updateUserProfile: (profile: Partial<UserProfile>): Promise<void> => {
     return ipcRenderer.invoke('db:updateUserProfile', profile);
+  },
+
+  // Secrets (encrypted with safeStorage in the main process)
+  getSecret: (name: string): Promise<string | null> => {
+    return ipcRenderer.invoke('secrets:get', name);
+  },
+  setSecret: (name: string, value: string): Promise<void> => {
+    return ipcRenderer.invoke('secrets:set', name, value);
   },
 
   logToMain: (level: string, category: string, message: string, metadata?: any): void => {
