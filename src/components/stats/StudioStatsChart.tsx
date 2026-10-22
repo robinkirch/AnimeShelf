@@ -3,7 +3,7 @@
 
 import React, { useMemo } from 'react';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { Film, Info } from 'lucide-react';
@@ -80,8 +80,7 @@ export function StudioStatsChart() {
         <CardDescription>Number of completed anime per animation studio. Showing top {chartData.length} studios.</CardDescription>
       </CardHeader>
       <CardContent className="h-[400px] pb-0">
-        <ChartContainer config={chartConfig} className="w-full h-full">
-            <ResponsiveContainer width="100%" height="100%">
+        <ChartContainer config={chartConfig} className="aspect-auto w-full h-full">
             <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20, bottom: 20 }}> 
                 <CartesianGrid strokeDasharray="3 3" horizontal={false}/>
                 <XAxis 
@@ -122,7 +121,6 @@ export function StudioStatsChart() {
                 />
                 <Bar dataKey="count" name="Completed Anime" fill="hsl(var(--chart-5))" radius={[0, 4, 4, 0]} barSize={20}/>
             </BarChart>
-            </ResponsiveContainer>
         </ChartContainer>
       </CardContent>
     </Card>

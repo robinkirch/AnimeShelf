@@ -53,7 +53,7 @@ The app works offline for your personal library data (stored locally), with onli
 - **Import/Export**:
     - Export your entire shelf to a CSV file.
     - Import anime from a CSV file (fetches missing data from Jikan API if title or MAL ID is provided).
-- **Local Data Storage**: All user-specific shelf data is stored in browser `localStorage`.
+- **Local Data Storage**: All user-specific shelf data is stored in a local SQLite database (`animeshelf.sqlite3` in the app's user data folder).
 
 ### Personalization
 - **Light/Dark Mode**: Toggle between light and dark themes for comfortable viewing.
@@ -79,17 +79,29 @@ The app works offline for your personal library data (stored locally), with onli
 - **Styling**: Tailwind CSS
 - **Language**: TypeScript
 - **State Management**: React Context API (for shelf and theme)
-- **AI Features**: Genkit (Google AI for AI-powered search)
+- **AI Features**: Genkit with `@genkit-ai/google-genai` (Gemini, model configurable via `GEMINI_MODEL`)
 - **Desktop Packaging**: Electron
-- **Data Storage**: Browser `localStorage`
+- **Data Storage**: SQLite via `better-sqlite3` in the Electron main process (IPC bridge via preload)
 - **External Anime API**: Jikan API (v4)
+
+### Getting Started
+
+```bash
+npm install
+npm run electron:dev        # Next.js dev server (port 9002) + Electron
+npm run typecheck           # TypeScript check
+npm run package:electron    # Production build + installer in dist_electron/
+```
+
+`better-sqlite3` (v13+) ships N-API prebuilds, so no native rebuild/Visual Studio is required.
+For AI search, set a Gemini API key in the app settings (or via `GEMINI_API_KEY`).
 
 ### Project Structure
 
 ```
 animeshelf/
-├── electron/                 # Electron main process code (main.ts, tsconfig.json)
-├── public/                   # Static assets
+├── electron/                 # Electron main process: main.ts, preload.ts, database.ts (SQLite), logger.ts
+├── public/                   # Static assets (app icon)
 ├── src/
 │   ├── ai/                   # Genkit AI flows and configuration
 │   ├── app/                  # Next.js App Router (pages, layout, API routes)
@@ -120,7 +132,7 @@ animeshelf/
 
 ## 🔄 Data Sources
 
-This app uses the [Jikan API (v4)](https://jikan.moe/) (an unofficial MyAnimeList API) for anime data. The API is free to use and provides comprehensive information on thousands of anime series. Please be mindful of their rate limits (requests are delayed in-app to help with this).
+This app uses the [Jikan API (v4)](https://jikan.moe/) (an unofficial MyAnimeList API) for anime data. The API is free to use and provides comprehensive information on thousands of anime series. Please be mindful of their rate limits: the app sends all Jikan requests through a single rate-limited queue (max. 3/s and ~55/min), retries on HTTP 429/5xx and caches responses in memory.
 
 ## 🤝 Contributing
 
@@ -138,7 +150,7 @@ This project is licensed under the GNU General Public License v3.0 - see the Lic
 
 ## 📊 Privacy
 
-This app stores all your personal shelf data locally on your device using browser `localStorage`. No personal shelf data is transmitted to any external servers. API requests are made to the Jikan API to fetch anime information and to Google AI services (via Genkit) for the AI search feature, as per their respective privacy policies.
+This app stores all your personal shelf data locally on your device in a SQLite database. The Gemini API key is stored in the app's `localStorage` and only sent to Google with AI search requests. No personal shelf data is transmitted to any external servers. API requests are made to the Jikan API to fetch anime information and to Google AI services (via Genkit) for the AI search feature, as per their respective privacy policies.
 
 ---
 

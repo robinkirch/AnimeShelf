@@ -3,7 +3,7 @@
 
 import React, { useMemo } from 'react';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { CalendarClock, Info } from 'lucide-react';
@@ -102,8 +102,7 @@ export function MonthlyWatchTimeChart() {
         <CardDescription>Total hours watched per month over the last 12 months.</CardDescription>
       </CardHeader>
       <CardContent className="h-[350px] pb-0">
-        <ChartContainer config={chartConfig} className="w-full h-full">
-            <ResponsiveContainer width="100%" height="100%">
+        <ChartContainer config={chartConfig} className="aspect-auto w-full h-full">
             <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false}/>
                 <XAxis 
@@ -145,7 +144,6 @@ export function MonthlyWatchTimeChart() {
                 />
                 <Bar dataKey="totalHours" name="Watch Time" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
             </BarChart>
-            </ResponsiveContainer>
         </ChartContainer>
       </CardContent>
     </Card>

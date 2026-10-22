@@ -12,6 +12,8 @@ export function initDb() {
     db = new Database(dbPath);
     console.log(`Database opened at ${dbPath}`);
     try {
+        db.pragma('journal_mode = WAL');
+        db.pragma('foreign_keys = ON');
         // Create tables if they don't exist
         db.exec(`
       CREATE TABLE IF NOT EXISTS anime_shelf (
@@ -82,6 +84,22 @@ function parseJsonArray(jsonString) {
         return [];
     }
 }
+const ANIME_SHELF_COLUMNS = [
+    'mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode',
+    'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes',
+];
+const JSON_ARRAY_COLUMNS = new Set(['genres', 'studios', 'streaming_platforms']);
+const UPDATABLE_COLUMNS = new Set(ANIME_SHELF_COLUMNS.filter(column => column !== 'mal_id'));
+// better-sqlite3 throws on missing named parameters, so every column gets a value (null by default).
+function toAnimeRowParams(anime) {
+    const params = {};
+    for (const column of ANIME_SHELF_COLUMNS) {
+        const value = anime[column];
+        params[column] = JSON_ARRAY_COLUMNS.has(column) ? JSON.stringify(value || []) : (value ?? null);
+    }
+    params.current_episode = anime.current_episode ?? 0;
+    return params;
+}
 // Anime Shelf CRUD
 export function getShelf() {
     const stmt = db.prepare('SELECT * FROM anime_shelf');
@@ -103,12 +121,7 @@ export function addAnimeToShelf(anime) {
       @user_rating, @genres, @studios, @type, @year, @season, @streaming_platforms, @broadcast_day, @duration_minutes
     )
   `);
-    stmt.run({
-        ...anime,
-        genres: JSON.stringify(anime.genres || []),
-        studios: JSON.stringify(anime.studios || []),
-        streaming_platforms: JSON.stringify(anime.streaming_platforms || []),
-    });
+    stmt.run(toAnimeRowParams(anime));
 }
 export function updateAnimeOnShelf(mal_id, updates) {
     const existing = db.prepare('SELECT * FROM anime_shelf WHERE mal_id = ?').get(mal_id);
@@ -116,7 +129,8 @@ export function updateAnimeOnShelf(mal_id, updates) {
         console.warn(`Attempted to update non-existent anime with mal_id: ${mal_id}`);
         return;
     }
-    const fields = Object.keys(updates).filter(key => key !== 'mal_id');
+    // Column names are interpolated into the SQL, so only known columns are accepted.
+    const fields = Object.keys(updates).filter(key => UPDATABLE_COLUMNS.has(key));
     if (fields.length === 0)
         return;
     const setClause = fields.map(field => `${field} = @${field}`).join(', ');
@@ -187,19 +201,12 @@ export function importAnimeBatch(animeList) {
     db.transaction(() => {
         for (const anime of animeList) {
             try {
-                const params = {
-                    ...anime,
-                    genres: JSON.stringify(anime.genres || []),
-                    studios: JSON.stringify(anime.studios || []),
-                    streaming_platforms: JSON.stringify(anime.streaming_platforms || []),
-                };
+                const params = toAnimeRowParams(anime);
                 const exists = findStmt.get(anime.mal_id);
                 if (exists) {
-                    console.log(`Updated new anime: ${anime.title}`);
                     updateStmt.run(params);
                 }
                 else {
-                    console.log(`Inserted new anime: ${anime.title}`);
                     insertStmt.run(params);
                 }
                 successCount++;

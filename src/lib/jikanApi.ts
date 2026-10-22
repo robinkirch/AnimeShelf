@@ -1,76 +1,284 @@
-
-import axios, { type AxiosRequestConfig, type AxiosResponse, type AxiosError } from 'axios';
+import axios, { type AxiosError } from 'axios';
 import type { JikanAPISearchResponse, JikanAPIByIdResponse, JikanAPISeasonsResponse, JikanAnime, JikanAPIRelationsResponse, JikanAnimeRelation } from '@/types/anime';
-import { rendererLogger } from './logger'; // Import renderer logger
+import { rendererLogger } from './logger';
 
 const JIKAN_API_BASE = 'https://api.jikan.moe/v4';
 
-// Helper to delay execution, to respect API rate limits
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Jikan allows 3 requests/second and 60 requests/minute. All requests go through one
+// serialized queue so concurrent callers (cards, pages, background loops) can't burst past it.
+const MIN_REQUEST_INTERVAL_MS = 400;
+const MAX_REQUESTS_PER_MINUTE = 55;
+const MAX_RETRIES = 4;
+const REQUEST_TIMEOUT_MS = 20000;
+const MAX_SEASON_PAGES = 20;
+const MAX_CACHE_ENTRIES = 2000;
 
-const API_REQUEST_DELAY = 2000; // ms
+const TTL_SHORT = 15 * 60 * 1000;
+const TTL_LONG = 6 * 60 * 60 * 1000;
 
-// Wrapper for axios requests to include logging and consistent error handling
-async function makeJikanRequest<T>(url: string, params?: Record<string, any>, requestConfig?: AxiosRequestConfig): Promise<T | null> {
-  const startTime = Date.now();
-  const fullUrl = `${JIKAN_API_BASE}${url}`;
-  
-  rendererLogger.info(`Jikan API Request: ${fullUrl}`, { 
-    category: 'jikan-api', 
-    method: 'GET',
-    params: params ? JSON.stringify(params) : undefined 
-  });
+export type JikanPriority = 'high' | 'low';
 
-  try {
-    await delay(API_REQUEST_DELAY);
-    const response: AxiosResponse<T> = await axios.get(fullUrl, { ...requestConfig, params });
-    const duration = Date.now() - startTime;
-    rendererLogger.info(`Jikan API Response: ${fullUrl}`, {
-      category: 'jikan-api',
-      status: response.status,
-      durationMs: duration,
-    });
-    return response.data;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    const axiosError = error as AxiosError;
-    rendererLogger.error(`Jikan API Error: ${fullUrl}`, {
-      category: 'jikan-api',
-      status: axiosError.response?.status,
-      errorMessage: axiosError.message,
-      responseData: axiosError.response?.data,
-      durationMs: duration,
-    });
-    return null; // Return null or throw, depending on desired error handling strategy
+export interface JikanRequestOptions {
+  /** 'high' for things the user is waiting on (search, season list), 'low' for background enrichment. */
+  priority?: JikanPriority;
+  /** Aborting removes the request from the queue if it hasn't started yet. */
+  signal?: AbortSignal;
+}
+
+export class JikanApiError extends Error {
+  constructor(message: string, public status?: number) {
+    super(message);
+    this.name = 'JikanApiError';
   }
 }
 
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+const createAbortError = () => {
+  const error = new Error('Jikan request aborted');
+  error.name = 'AbortError';
+  return error;
+};
+
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+interface Waiter {
+  resolve: (value: any) => void;
+  reject: (error: unknown) => void;
+}
+
+interface Task {
+  key: string;
+  path: string;
+  params?: Record<string, string | number>;
+  ttl: number;
+  priority: JikanPriority;
+  waiters: Set<Waiter>;
+  started: boolean;
+}
+
+const queues: Record<JikanPriority, Task[]> = { high: [], low: [] };
+const pendingTasks = new Map<string, Task>();
+const cache = new Map<string, { data: unknown; expires: number }>();
+const recentRequestStarts: number[] = [];
+let lastRequestStart = 0;
+let isPumping = false;
+
+function buildKey(path: string, params?: Record<string, string | number>): string {
+  if (!params) return path;
+  const query = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
+  return `${path}?${query}`;
+}
+
+function readCache<T>(key: string): T | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (entry.expires < Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.data as T;
+}
+
+function writeCache(key: string, data: unknown, ttl: number) {
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) cache.delete(oldestKey);
+  }
+  cache.set(key, { data, expires: Date.now() + ttl });
+}
+
+async function waitForRateLimitSlot() {
+  const now = Date.now();
+  while (recentRequestStarts.length && now - recentRequestStarts[0] > 60000) recentRequestStarts.shift();
+
+  let wait = Math.max(0, lastRequestStart + MIN_REQUEST_INTERVAL_MS - now);
+  if (recentRequestStarts.length >= MAX_REQUESTS_PER_MINUTE) {
+    wait = Math.max(wait, recentRequestStarts[0] + 60000 - now);
+  }
+  if (wait > 0) await delay(wait);
+
+  lastRequestStart = Date.now();
+  recentRequestStarts.push(lastRequestStart);
+}
+
+function isRetryable(status: number | undefined): boolean {
+  // undefined = network error / timeout
+  return status === undefined || status === 429 || status >= 500;
+}
+
+async function executeTask(task: Task): Promise<unknown> {
+  const fullUrl = `${JIKAN_API_BASE}${task.path}`;
+
+  for (let attempt = 0; ; attempt++) {
+    await waitForRateLimitSlot();
+    const startTime = Date.now();
+    try {
+      const response = await axios.get(fullUrl, { params: task.params, timeout: REQUEST_TIMEOUT_MS });
+      rendererLogger.debug(`Jikan API Response: ${fullUrl}`, {
+        category: 'jikan-api',
+        status: response.status,
+        durationMs: Date.now() - startTime,
+        params: task.params ? JSON.stringify(task.params) : undefined,
+      });
+      return response.data;
+    } catch (error) {
+      const axiosError = error as AxiosError;
+      const status = axiosError.response?.status;
+
+      if (attempt < MAX_RETRIES && isRetryable(status)) {
+        // Retry-After is in seconds; otherwise exponential backoff (1s, 2s, 4s, 8s).
+        const retryAfterHeader = Number(axiosError.response?.headers?.['retry-after']);
+        const backoffMs = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? Math.min(retryAfterHeader * 1000, 30000)
+          : 1000 * 2 ** attempt;
+        rendererLogger.warn(`Jikan API ${status ?? 'network error'} for ${fullUrl}, retrying in ${backoffMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`, {
+          category: 'jikan-api',
+        });
+        // Holding the queue during backoff is intentional: a 429 means everyone should slow down.
+        await delay(backoffMs);
+        continue;
+      }
+
+      rendererLogger.error(`Jikan API Error: ${fullUrl}`, {
+        category: 'jikan-api',
+        status,
+        errorMessage: axiosError.message,
+        durationMs: Date.now() - startTime,
+      });
+      throw new JikanApiError(
+        status === 429
+          ? 'Jikan API rate limit reached. Please wait a moment and try again.'
+          : `Jikan API request failed${status ? ` (HTTP ${status})` : ''}: ${axiosError.message}`,
+        status,
+      );
+    }
+  }
+}
+
+function dequeue(): Task | undefined {
+  return queues.high.shift() ?? queues.low.shift();
+}
+
+async function pump() {
+  if (isPumping) return;
+  isPumping = true;
+  try {
+    let task: Task | undefined;
+    while ((task = dequeue())) {
+      if (task.waiters.size === 0) {
+        pendingTasks.delete(task.key);
+        continue;
+      }
+      task.started = true;
+      try {
+        const data = await executeTask(task);
+        writeCache(task.key, data, task.ttl);
+        task.waiters.forEach(w => w.resolve(data));
+      } catch (error) {
+        task.waiters.forEach(w => w.reject(error));
+      } finally {
+        pendingTasks.delete(task.key);
+      }
+    }
+  } finally {
+    isPumping = false;
+  }
+}
+
+function removeFromQueue(task: Task) {
+  const queue = queues[task.priority];
+  const index = queue.indexOf(task);
+  if (index !== -1) queue.splice(index, 1);
+}
+
+function jikanRequest<T>(path: string, params: Record<string, string | number> | undefined, ttl: number, options: JikanRequestOptions = {}): Promise<T> {
+  const { priority = 'low', signal } = options;
+  const key = buildKey(path, params);
+
+  const cached = readCache<T>(key);
+  if (cached !== undefined) return Promise.resolve(cached);
+  if (signal?.aborted) return Promise.reject(createAbortError());
+
+  let task = pendingTasks.get(key);
+  if (!task) {
+    task = { key, path, params, ttl, priority, waiters: new Set(), started: false };
+    pendingTasks.set(key, task);
+    queues[priority].push(task);
+  } else if (priority === 'high' && task.priority === 'low' && !task.started) {
+    removeFromQueue(task);
+    task.priority = 'high';
+    queues.high.push(task);
+  }
+
+  const currentTask = task;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      currentTask.waiters.delete(waiter);
+      if (currentTask.waiters.size === 0 && !currentTask.started) {
+        removeFromQueue(currentTask);
+        pendingTasks.delete(currentTask.key);
+      }
+      reject(createAbortError());
+    };
+    const waiter: Waiter = {
+      resolve: value => { signal?.removeEventListener('abort', onAbort); resolve(value); },
+      reject: error => { signal?.removeEventListener('abort', onAbort); reject(error); },
+    };
+    currentTask.waiters.add(waiter);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    void pump();
+  });
+}
+
+function dedupeByMalId(animeList: JikanAnime[]): JikanAnime[] {
+  // Jikan sometimes returns the same entry twice (also across pages), which breaks React keys.
+  return Array.from(new Map(animeList.map(anime => [anime.mal_id, anime])).values());
+}
+
+async function fetchAllSeasonPages(path: string, options: JikanRequestOptions): Promise<JikanAnime[]> {
+  const all: JikanAnime[] = [];
+  for (let page = 1; page <= MAX_SEASON_PAGES; page++) {
+    const response = await jikanRequest<JikanAPISeasonsResponse>(path, { page }, TTL_SHORT, options);
+    all.push(...(response?.data ?? []));
+    if (!response?.pagination?.has_next_page) break;
+  }
+  return dedupeByMalId(all);
+}
 
 export const jikanApi = {
-  searchAnime: async (query: string, limit: number = 20): Promise<JikanAnime[]> => {
-    const response = await makeJikanRequest<JikanAPISearchResponse>('/anime', { q: query, limit });
+  /** Throws JikanApiError on failure. */
+  searchAnime: async (query: string, limit: number = 20, options: JikanRequestOptions = {}): Promise<JikanAnime[]> => {
+    const response = await jikanRequest<JikanAPISearchResponse>('/anime', { q: query, limit }, TTL_SHORT, { priority: 'high', ...options });
     return response?.data || [];
   },
 
-  getAnimeById: async (id: number): Promise<JikanAnime | null> => {
-    const response = await makeJikanRequest<JikanAPIByIdResponse>(`/anime/${id}`);
-    return response?.data || null;
+  /** Returns null on failure (except abort, which rethrows). */
+  getAnimeById: async (id: number, options: JikanRequestOptions = {}): Promise<JikanAnime | null> => {
+    try {
+      const response = await jikanRequest<JikanAPIByIdResponse>(`/anime/${id}`, undefined, TTL_LONG, options);
+      return response?.data || null;
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      return null;
+    }
   },
 
-  getCurrentSeason: async (): Promise<JikanAnime[]> => {
-    const response = await makeJikanRequest<JikanAPISeasonsResponse>('/seasons/now');
-    return response?.data || [];
+  /** Fetches all pages of the currently airing season. Throws JikanApiError on failure. */
+  getCurrentSeason: async (options: JikanRequestOptions = {}): Promise<JikanAnime[]> => {
+    return fetchAllSeasonPages('/seasons/now', { priority: 'high', ...options });
   },
 
-  getSeason: async (year: number, season: string): Promise<JikanAnime[]> => {
-    const response = await makeJikanRequest<JikanAPISeasonsResponse>(`/seasons/${year}/${season}`);
-    // De-duplicate data based on mal_id to prevent React key errors, Jikan sometimes returns duplicates here
-    const uniqueData = Array.from(new Map( (response?.data || []).map(anime => [anime.mal_id, anime])).values());
-    return uniqueData;
+  /** Fetches all pages of the given season. Throws JikanApiError on failure. */
+  getSeason: async (year: number, season: string, options: JikanRequestOptions = {}): Promise<JikanAnime[]> => {
+    return fetchAllSeasonPages(`/seasons/${year}/${season}`, { priority: 'high', ...options });
   },
 
-  getAnimeRelations: async (id: number): Promise<JikanAnimeRelation[]> => {
-    const response = await makeJikanRequest<JikanAPIRelationsResponse>(`/anime/${id}/relations`);
+  /** Throws JikanApiError on failure, so callers don't mistake an API error for "no relations". */
+  getAnimeRelations: async (id: number, options: JikanRequestOptions = {}): Promise<JikanAnimeRelation[]> => {
+    const response = await jikanRequest<JikanAPIRelationsResponse>(`/anime/${id}/relations`, undefined, TTL_LONG, options);
     return response?.data || [];
   },
 };

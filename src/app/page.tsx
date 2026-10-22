@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { AnimeCard } from "@/components/anime/AnimeCard";
 import { AnimeGroupCard } from "@/components/anime/AnimeGroupCard";
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
-import { jikanApi } from '@/lib/jikanApi';
+import { jikanApi, isAbortError } from '@/lib/jikanApi';
 import type { JikanAnime, UserAnimeStatus, UserAnime, JikanAnimeRelation } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS, RATING_OPTIONS, ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
 import { Loader2, Search, ListFilter, X, ChevronDown, Info, ArrowUpAZ, ArrowDownAZ, Sparkles, SearchCheck } from 'lucide-react';
@@ -87,68 +87,75 @@ export default function MyShelfPage() {
   }, []);
 
 
-  const fetchRelationsForAllShelfItems = useCallback(async () => {
-    if (shelf.length === 0) {
-        setRelationsMap(new Map());
-        setIsLoadingRelations(false);
-        rendererLogger.debug("Shelf is empty, skipping relation fetching.", { category: 'data-fetch' });
-        return;
-    }
-    rendererLogger.info("Starting to fetch relations for all shelf items.", { category: 'data-fetch', shelfSize: shelf.length });
-    setIsLoadingRelations(true);
-    setApiError(null);
-    
-    const newRelationsFetchedThisCall = new Map<number, JikanAnimeRelation[]>();
-    let anyNewDataFetched = false;
-
-    const currentRelationsMap = relationsMap; 
-
-    try {
-      for (const anime of shelf) {
-        if (!currentRelationsMap.has(anime.mal_id)) { 
-          rendererLogger.debug(`Fetching relations for: ${anime.title} (ID: ${anime.mal_id})`, { category: 'data-fetch' });
-          const relations = await jikanApi.getAnimeRelations(anime.mal_id);
-          newRelationsFetchedThisCall.set(anime.mal_id, relations || []);
-          anyNewDataFetched = true;
-        }
-      }
-    } catch (e: any) {
-        rendererLogger.error("Error fetching relations for shelf items.", { category: 'data-fetch-error', error: e.message, stack: e.stack });
-        setApiError("Could not load all series details due to API issues. Some groupings may be incomplete.");
-    } finally {
-        if (anyNewDataFetched && newRelationsFetchedThisCall.size > 0) {
-          rendererLogger.info(`Fetched new relations for ${newRelationsFetchedThisCall.size} items. Updating relationsMap.`, { category: 'data-fetch' });
-          setRelationsMap(prev => {
-            const updatedMap = new Map(prev);
-            newRelationsFetchedThisCall.forEach((value, key) => {
-              updatedMap.set(key, value);
-            });
-            return updatedMap;
-          });
-        }
-        setIsLoadingRelations(false);
-        rendererLogger.info("Finished fetching relations for shelf items.", { category: 'data-fetch' });
-    }
-  }, [shelf, relationsMap]); 
-
-
+  const relationsMapRef = useRef(relationsMap);
   useEffect(() => {
-    if (shelfInitialized) {
-      setIsLoadingShelf(false); 
-      if (shelf.length > 0) {
-        if (relationsMap.size < shelf.length) { 
-            fetchRelationsForAllShelfItems();
-        } else {
-            setIsLoadingRelations(false);
-        }
-      } else {
-        setIsLoadingRelations(false);
-        if (relationsMap.size > 0) { 
-           setRelationsMap(new Map());
+    relationsMapRef.current = relationsMap;
+  }, [relationsMap]);
+  const [relationsRetryToken, setRelationsRetryToken] = useState(0);
+
+  // Loads relations (for series grouping) for every shelf entry that doesn't have them yet.
+  // Runs at low priority so user-triggered Jikan requests go first, and is aborted on unmount
+  // or when the shelf changes (already fetched relations are served from the Jikan cache).
+  useEffect(() => {
+    if (!shelfInitialized) return;
+    setIsLoadingShelf(false);
+
+    if (shelf.length === 0) {
+      setRelationsMap(prev => (prev.size > 0 ? new Map() : prev));
+      setIsLoadingRelations(false);
+      return;
+    }
+
+    const missing = shelf.filter(anime => !relationsMapRef.current.has(anime.mal_id));
+    if (missing.length === 0) {
+      setIsLoadingRelations(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const fetchMissingRelations = async () => {
+      rendererLogger.info("Fetching relations for shelf items.", { category: 'data-fetch', missingCount: missing.length });
+      setIsLoadingRelations(true);
+      setApiError(null);
+
+      let batch = new Map<number, JikanAnimeRelation[]>();
+      const flush = () => {
+        if (batch.size === 0) return;
+        const fetched = batch;
+        batch = new Map();
+        setRelationsMap(prev => {
+          const updatedMap = new Map(prev);
+          fetched.forEach((value, key) => updatedMap.set(key, value));
+          return updatedMap;
+        });
+      };
+
+      let failedCount = 0;
+      for (const anime of missing) {
+        try {
+          const relations = await jikanApi.getAnimeRelations(anime.mal_id, { signal: controller.signal });
+          batch.set(anime.mal_id, relations);
+          if (batch.size >= 10) flush();
+        } catch (e: any) {
+          if (isAbortError(e)) {
+            flush();
+            return;
+          }
+          failedCount++;
+          rendererLogger.warn(`Could not fetch relations for ${anime.title} (ID: ${anime.mal_id}).`, { category: 'data-fetch-error', error: e.message });
         }
       }
-    }
-  }, [shelfInitialized, shelf, fetchRelationsForAllShelfItems, relationsMap]);
+      flush();
+      if (failedCount > 0) {
+        setApiError(`Could not load series details for ${failedCount} anime due to API issues.`);
+      }
+      setIsLoadingRelations(false);
+      rendererLogger.info("Finished fetching relations for shelf items.", { category: 'data-fetch', failedCount });
+    };
+
+    fetchMissingRelations();
+    return () => controller.abort();
+  }, [shelfInitialized, shelf, relationsRetryToken]);
 
 
   const handleSearch = async () => {
@@ -181,14 +188,15 @@ export default function MyShelfPage() {
     setIsLoadingAiSearch(true);
     setAiSearchError(null);
     try {
-      const input: AiSearchInput = { query: aiSearchQuery };
+      const storedApiKey = typeof window !== 'undefined' ? localStorage.getItem('geminiApiKey') : null;
+      const input: AiSearchInput = { query: aiSearchQuery, apiKey: storedApiKey || undefined };
       const results = await searchAnimeWithAi(input);
       const uniqueResults = Array.from(new Map(results.map(item => [item.mal_id, item])).values());
       setAiSearchResults(uniqueResults);
       rendererLogger.info(`AI search for "${aiSearchQuery}" returned ${uniqueResults.length} results.`, { category: 'user-action', action: 'search-ai-result' });
     } catch (e: any) {
       rendererLogger.error("Error searching anime with AI.", { category: 'user-action-error', action: 'search-ai', query: aiSearchQuery, error: e.message });
-      setAiSearchError("Failed to perform AI search. Please try again later.");
+      setAiSearchError(e?.message || "Failed to perform AI search. Please try again later.");
       setAiSearchResults([]);
     }
     setIsLoadingAiSearch(false);
@@ -695,7 +703,7 @@ export default function MyShelfPage() {
             <AlertTitle>API Error Loading Relations</AlertTitle>
             <AlertDescription>
               {apiError} Some anime may not be grouped correctly.
-              <Button variant="link" size="sm" onClick={fetchRelationsForAllShelfItems} className="p-0 h-auto ml-2 text-destructive-foreground hover:underline">
+              <Button variant="link" size="sm" onClick={() => setRelationsRetryToken(t => t + 1)} className="p-0 h-auto ml-2 text-destructive-foreground hover:underline">
                 Retry fetching details
               </Button>
             </AlertDescription>

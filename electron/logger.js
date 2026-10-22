@@ -3,6 +3,9 @@ import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
 import { app } from 'electron';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+// The main process is an ES module ("type": "module"), so __dirname has to be derived.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Read app version from package.json
 // Note: In a packaged app, package.json might not be easily accessible this way.
 // Consider alternative methods for packaged apps if this fails, e.g., embedding version during build.
@@ -27,7 +30,7 @@ catch (error) {
 }
 const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const logDirectory = isDevelopment
-    ? path.join(app.getAppPath(), '..', 'logs') // Project root /logs in dev
+    ? path.join(app.getAppPath(), 'logs') // Project root /logs in dev (getAppPath() is the project root)
     : path.join(app.getPath('userData'), 'logs'); // App data logs in prod
 // Ensure log directory exists
 if (!fs.existsSync(logDirectory)) {

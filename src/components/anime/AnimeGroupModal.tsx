@@ -181,7 +181,10 @@ export function AnimeGroupModal({
                       {anime.jikanData?.type || anime.type || 'Unknown Type'}
                       {(anime.jikanData?.episodes ?? anime.total_episodes) !== null ? ` • ${(anime.jikanData?.episodes ?? anime.total_episodes)} episodes` : ' • Episodes unknown'}
                       {(anime.jikanData?.year ?? anime.year) && ` • ${(anime.jikanData?.year ?? anime.year)}`}
-                      {(anime.jikanData?.season ?? anime.season) && ` • ${(anime.jikanData?.season ?? anime.season).charAt(0).toUpperCase() + (anime.jikanData?.season ?? anime.season).slice(1)}`}
+                      {(() => {
+                        const seasonName = anime.jikanData?.season ?? anime.season;
+                        return seasonName ? ` • ${seasonName.charAt(0).toUpperCase() + seasonName.slice(1)}` : null;
+                      })()}
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                       <div>

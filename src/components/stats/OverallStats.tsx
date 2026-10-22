@@ -86,25 +86,25 @@ export function OverallStats() {
                 title="Anime Completed" 
                 value={stats.completedAnimeCount} 
                 icon={Clapperboard}
-                className="bg-gradient-to-br from-[hsl(var(--chart-1))] to-[hsl(var(--chart-1),0.7)] text-primary-foreground"
+                className="bg-gradient-to-br from-[hsl(var(--chart-1))] to-[hsl(var(--chart-1)/0.7)] text-primary-foreground"
                 valueClassName="text-primary-foreground" // Explicitly keep value text primary-foreground
             />
             <StatCard 
                 title="Episodes Watched" 
                 value={stats.totalEpisodesWatched} 
                 icon={Tv}
-                className="bg-gradient-to-br from-[hsl(var(--chart-2))] to-[hsl(var(--chart-2),0.7)] text-primary-foreground"
+                className="bg-gradient-to-br from-[hsl(var(--chart-2))] to-[hsl(var(--chart-2)/0.7)] text-primary-foreground"
                 valueClassName="text-primary-foreground"
             />
             <StatCard 
                 title="Total Watch Time" 
                 value={stats.totalWatchTimeHours} 
                 icon={Clock3}
-                className="bg-gradient-to-br from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3),0.7)] text-primary-foreground"
+                className="bg-gradient-to-br from-[hsl(var(--chart-3))] to-[hsl(var(--chart-3)/0.7)] text-primary-foreground"
                 valueClassName="text-primary-foreground"
             />
             {/* Specific card for Top Rated Anime, styled slightly differently for its list content */}
-            <Card className="shadow-lg col-span-full md:col-span-2 lg:col-span-1 bg-gradient-to-br from-[hsl(var(--chart-4))] to-[hsl(var(--chart-4),0.7)] text-primary-foreground">
+            <Card className="shadow-lg col-span-full md:col-span-2 lg:col-span-1 bg-gradient-to-br from-[hsl(var(--chart-4))] to-[hsl(var(--chart-4)/0.7)] text-primary-foreground">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-primary-foreground/80">Top Rated Anime</CardTitle>
                 <Award className="h-5 w-5 text-primary-foreground/70" />
@@ -114,14 +114,14 @@ export function OverallStats() {
                     <ul className="space-y-2">
                     {stats.topRatedAnime.map((anime, index) => (
                         <li key={anime.mal_id} className="flex items-center gap-3 text-sm">
-                           <Image 
+                           {anime.cover_image && <Image 
                              src={anime.cover_image} 
                              alt={anime.title} 
                              width={32} 
                              height={48} 
-                             className="rounded-sm object-cover"
+                             className="rounded-sm object-cover h-12 w-8 flex-shrink-0"
                              data-ai-hint="anime cover small"
-                            />
+                            />}
                            <span className="font-semibold flex-grow truncate" title={anime.title}>{index + 1}. {anime.title}</span>
                            <div className="flex items-center">
                              <Star className="h-4 w-4 text-yellow-300 mr-1" /> 

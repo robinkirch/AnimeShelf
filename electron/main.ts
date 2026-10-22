@@ -1,5 +1,5 @@
 
-import { app, BrowserWindow, shell, Menu, ipcMain } from 'electron';
+import { app, BrowserWindow, shell, Menu, ipcMain, dialog } from 'electron';
 import * as path from 'path';
 import { fileURLToPath, parse } from 'url';
 import { createServer } from 'http';
@@ -13,10 +13,9 @@ const __dirname = path.dirname(__filename);
 
 // Determine the correct directory for the Next.js app
 const appDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-// Determine if the app is in development or production mode
-const nextApp = nextServer({ dev: !app.isPackaged , dir: appDir });
-const handle = nextApp.getRequestHandler();
-const nextJsPort = 9002; 
+const nextJsPort = 9002;
+// Only bind to loopback so the embedded Next.js server (incl. server actions) isn't reachable from the network.
+const nextJsHost = '127.0.0.1';
 
 let mainWindow: BrowserWindow | null;
 
@@ -34,7 +33,7 @@ function createWindow() {
       contextIsolation: true, 
       preload: path.join(__dirname, 'preload.js'),
     },
-    icon: path.join(appDir, 'public', 'favicon.ico') 
+    icon: path.join(appDir, 'public', 'AnimeShelf.ico')
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -77,8 +76,6 @@ function createWindow() {
 
 app.on('ready', async () => {
   mainLogger.info('Electron app is ready.');
-  // Initialize database
-  console.log('App onReady triggered');
   try {
     mainLogger.info('Initializing database...');
     database.initDb();
@@ -120,22 +117,24 @@ app.on('ready', async () => {
   } else {
     mainLogger.info('Production mode detected. Preparing Next.js app.');
     try {
+      // In development `next dev` runs separately (see electron:dev), so the server is only created here.
+      const nextApp = nextServer({ dev: false, dir: appDir });
+      const handle = nextApp.getRequestHandler();
       await nextApp.prepare();
       const server = createServer((req, res) => {
         const parsedUrl = parse(req.url!, true);
         handle(req, res, parsedUrl);
       });
-      server.listen(nextJsPort, (err?: any) => {
-        if (err) {
-          mainLogger.error("Failed to start Next.js server:", { error: err.message, stack: err.stack });
-          app.quit(); 
-          return;
+      server.on('error', (err: NodeJS.ErrnoException) => {
+        mainLogger.error("HTTP Server error:", { error: err.message, code: err.code, stack: err.stack });
+        if (err.code === 'EADDRINUSE') {
+          dialog.showErrorBox('AnimeShelf', `Port ${nextJsPort} is already in use. Please close the other application (or another AnimeShelf instance) and try again.`);
+          app.quit();
         }
-        mainLogger.info(`Next.js server ready on http://localhost:${nextJsPort}`);
-        createWindow(); 
       });
-      server.on('error', (err) => {
-        mainLogger.error("HTTP Server error:", { error: err.message, stack: err.stack });
+      server.listen(nextJsPort, nextJsHost, () => {
+        mainLogger.info(`Next.js server ready on http://localhost:${nextJsPort}`);
+        createWindow();
       });
     } catch (err: any) {
         mainLogger.error("Error preparing Next.js app:", { error: err.message, stack: err.stack });

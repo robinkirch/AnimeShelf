@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { AnimeCard } from "@/components/anime/AnimeCard";
-import { jikanApi } from '@/lib/jikanApi';
+import { jikanApi, isAbortError, JikanApiError } from '@/lib/jikanApi';
 import type { JikanAnime, JikanMALItem } from '@/types/anime';
 import { ANIME_TYPE_FILTER_OPTIONS } from '@/types/anime';
 import { Loader2, ListFilter, ChevronDown, X, ChevronRight, CalendarClock } from 'lucide-react';
@@ -27,6 +27,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from '@/components/ui/badge'; // Added Badge import
 
 const ALL_FILTER_VALUE = "_all_"; // Still used by studio filter
+const seasons = ['winter', 'spring', 'summer', 'fall'];
+
+function getCurrentSeasonName(): string {
+  const month = new Date().getMonth();
+  if (month < 3) return 'winter';
+  if (month < 6) return 'spring';
+  if (month < 9) return 'summer';
+  return 'fall';
+}
 
 export default function SeasonalPage() {
   const [seasonalAnime, setSeasonalAnime] = useState<JikanAnime[]>([]);
@@ -39,15 +48,9 @@ export default function SeasonalPage() {
   const [genreFilter, setGenreFilter] = useState<string[]>([]);
   const [studioFilter, setStudioFilter] = useState<string>(ALL_FILTER_VALUE);
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
 
 
-  function getCurrentSeasonName(): string {
-    const month = new Date().getMonth();
-    if (month < 3) return 'winter'; 
-    if (month < 6) return 'spring'; 
-    if (month < 9) return 'summer'; 
-    return 'fall';   
-  }
   
   const availableYears = useMemo(() => {
     const currentYr = new Date().getFullYear();
@@ -57,7 +60,6 @@ export default function SeasonalPage() {
     }
     return years;
   }, []);
-  const seasons = ['winter', 'spring', 'summer', 'fall'];
 
   const isFutureSelectedSeason = useMemo(() => {
     const currentYr = new Date().getFullYear();
@@ -72,25 +74,31 @@ export default function SeasonalPage() {
       return true;
     }
     return false;
-  }, [year, season, seasons]);
+  }, [year, season]);
 
 
   useEffect(() => {
+    // Abort on season change/unmount so a slow, stale response can't overwrite the current season.
+    const controller = new AbortController();
     const fetchSeasonalData = async () => {
       setIsLoading(true);
       setError(null);
+      setSeasonalAnime([]);
       try {
-        const data = await jikanApi.getSeason(year, season);
+        const data = await jikanApi.getSeason(year, season, { signal: controller.signal });
         setSeasonalAnime(data);
+        setIsLoading(false);
       } catch (e) {
+        if (isAbortError(e)) return;
         console.error(e);
-        setError('Failed to fetch seasonal anime. Please try again later.');
+        setError(e instanceof JikanApiError ? e.message : 'Failed to fetch seasonal anime. Please try again later.');
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchSeasonalData();
-  }, [year, season]);
+    return () => controller.abort();
+  }, [year, season, reloadToken]);
 
   const uniqueGenres = useMemo(() => {
     const allGenres = new Set<string>();
@@ -133,7 +141,7 @@ export default function SeasonalPage() {
     } else {
       setSeason(seasons[currentSeasonIndex + 1]);
     }
-  }, [season, seasons]);
+  }, [season]);
 
   const getGenreFilterDisplayValue = () => {
     if (genreFilter.length === 0) {
@@ -293,7 +301,7 @@ export default function SeasonalPage() {
       {!isLoading && error && (
         <div className="text-center py-10 text-destructive">
           <p>{error}</p>
-          <Button onClick={() => window.location.reload()} className="mt-4">Try Again</Button>
+          <Button onClick={() => setReloadToken(t => t + 1)} className="mt-4">Try Again</Button>
         </div>
       )}
 

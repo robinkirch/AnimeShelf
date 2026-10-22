@@ -2,7 +2,7 @@
 "use client";
 
 import type { ReactNode } from 'react';
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent, UserProfile } from '@/types/anime';
 import { USER_ANIME_STATUS_OPTIONS } from '@/types/anime'; 
 import { rendererLogger } from '@/lib/logger'; // Import renderer logger
@@ -92,13 +92,18 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   const [isElectronStoreReady, setIsElectronStoreReady] = useState(false);
 
   useEffect(() => {
-    console.warn("starting first render.");
     if (typeof window !== 'undefined' && window.electronStore) {
       setElectronStore(window.electronStore);
       setIsElectronStoreReady(true);
       rendererLogger.info('AnimeShelfContext mounted, Electron store reference set.', { category: 'system-lifecycle'});
     } else {
-      rendererLogger.warn('window.electronStore is not available. Be sure preload.js is loaded correct', { category: 'system-lifecycle'});
+      // Without the preload bridge (plain browser via `npm run dev`, or a broken preload) there is no
+      // persistence. Still mark everything as initialized so pages render instead of spinning forever.
+      rendererLogger.warn('window.electronStore is not available. Be sure preload.js is loaded correct. Running without persistence.', { category: 'system-lifecycle'});
+      setUserProfile({ username: null, profilePictureDataUri: null, profileSetupComplete: true });
+      setIsInitialized(true);
+      setIgnoredPreviewAnimeMalIdsInitialized(true);
+      setUserProfileInitialized(true);
     }
   }, []);
 
@@ -381,31 +386,35 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     setUserProfile(prev => ({ ...(prev || { username: null, profilePictureDataUri: null, profileSetupComplete: false }), profileSetupComplete: true }));
   }, [electronStore]);
 
+  const contextValue = useMemo<AnimeShelfContextType>(() => ({
+    shelf,
+    addAnimeToShelf,
+    updateAnimeOnShelf,
+    removeAnimeFromShelf,
+    isAnimeOnShelf,
+    getAnimeFromShelf,
+    isInitialized,
+    isElectronStoreReady,
+    upcomingSequels,
+    setUpcomingSequels,
+    getFilteredUpcomingSequelsCount,
+    ignoredPreviewAnimeMalIds,
+    addIgnoredPreviewAnime,
+    removeIgnoredPreviewAnime,
+    isPreviewAnimeIgnored,
+    ignoredPreviewAnimeMalIdsInitialized,
+    importAnimeBatch,
+    episodeWatchHistory,
+    userProfile,
+    userProfileInitialized,
+    updateUserProfile,
+    markProfileSetupComplete,
+  }), [
+    shelf, addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf, getAnimeFromShelf, isInitialized, isElectronStoreReady, upcomingSequels, setUpcomingSequels, getFilteredUpcomingSequelsCount, ignoredPreviewAnimeMalIds, addIgnoredPreviewAnime, removeIgnoredPreviewAnime, isPreviewAnimeIgnored, ignoredPreviewAnimeMalIdsInitialized, importAnimeBatch, episodeWatchHistory, userProfile, userProfileInitialized, updateUserProfile, markProfileSetupComplete,
+  ]);
+
   return (
-    <AnimeShelfContext.Provider value={{ 
-        shelf, 
-        addAnimeToShelf, 
-        updateAnimeOnShelf, 
-        removeAnimeFromShelf, 
-        isAnimeOnShelf, 
-        getAnimeFromShelf, 
-        isInitialized,
-        isElectronStoreReady,
-        upcomingSequels,
-        setUpcomingSequels,
-        getFilteredUpcomingSequelsCount,
-        ignoredPreviewAnimeMalIds,
-        addIgnoredPreviewAnime,
-        removeIgnoredPreviewAnime,
-        isPreviewAnimeIgnored,
-        ignoredPreviewAnimeMalIdsInitialized,
-        importAnimeBatch,
-        episodeWatchHistory,
-        userProfile,
-        userProfileInitialized,
-        updateUserProfile,
-        markProfileSetupComplete
-      }}>
+    <AnimeShelfContext.Provider value={contextValue}>
       {children}
     </AnimeShelfContext.Provider>
   );

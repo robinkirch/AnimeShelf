@@ -1,28 +1,15 @@
-
 import {genkit} from 'genkit';
-import {googleAI} from '@genkit-ai/googleai';
+import {googleAI} from '@genkit-ai/google-genai';
 
-const getApiKey = (): string | undefined => {
-  // This function will be called by the googleAI plugin.
-  // It needs to run client-side to access localStorage.
-  // Genkit flows are 'use server', but the plugin initialization happens where genkit() is called.
-  // If genkit() is part of the client bundle or can access client environment, this works.
-  // For Next.js, plugin initialization typically occurs when the module is loaded.
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('geminiApiKey') || undefined;
-  }
-  // Fallback for server-side environments if needed, though primarily for client-set key
-  // The environment variables GOOGLE_API_KEY or GOOGLE_GENAI_API_KEY would be used by default
-  // by the plugin if apiKey function returns undefined or is not provided.
-  // So, returning undefined here if not in window context is fine.
-  return undefined;
-};
+// Flows run server-side ('use server'), where the user's key from localStorage is not reachable.
+// The client therefore passes the key with each request (see searchAnimeWithAi); the plugin falls
+// back to GEMINI_API_KEY / GOOGLE_API_KEY / GOOGLE_GENAI_API_KEY from the environment otherwise.
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+
+const hasEnvApiKey = Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GOOGLE_GENAI_API_KEY);
 
 export const ai = genkit({
-  plugins: [
-    googleAI({
-        apiKey: getApiKey, // Pass the function that retrieves the key
-    })
-  ],
-  model: 'googleai/gemini-2.0-flash', // Default model, can be overridden in specific prompts/flows
+  // apiKey: false = no key at plugin level; each request must pass config.apiKey.
+  plugins: [googleAI(hasEnvApiKey ? {} : { apiKey: false })],
+  model: googleAI.model(GEMINI_MODEL),
 });

@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
-import { jikanApi } from '@/lib/jikanApi';
+import { jikanApi, isAbortError } from '@/lib/jikanApi';
 import type { JikanAnime, JikanAnimeRelation, JikanAnimeRelationEntry } from '@/types/anime';
 import { AnimeCard } from '@/components/anime/AnimeCard';
 import { Loader2, CalendarDays, Tv, Film, History, HelpCircle, ListFilter, EyeOff, ArchiveRestore } from 'lucide-react';
@@ -35,6 +35,7 @@ export default function PreviewPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
   
   const [allFetchedFutureAnime, setAllFetchedFutureAnime] = useState<CategorizedAnime[]>([]);
   const [allFetchedOtherContinuations, setAllFetchedOtherContinuations] = useState<CategorizedAnime[]>([]);
@@ -76,7 +77,7 @@ export default function PreviewPage() {
   }, [currentYear, currentSeason, seasonOrder]);
 
 
-  const fetchAndCategorizeContinuations = useCallback(async () => {
+  const fetchAndCategorizeContinuations = useCallback(async (signal: AbortSignal) => {
     if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized || shelf.length === 0) {
       setAllFetchedFutureAnime([]);
       setAllFetchedOtherContinuations([]);
@@ -94,9 +95,17 @@ export default function PreviewPage() {
     const shelfMalIds = new Set(shelf.map(a => a.mal_id));
 
     try {
+      let failedCount = 0;
       for (const userAnime of shelf) {
-        const relations = await jikanApi.getAnimeRelations(userAnime.mal_id);
-        if (!relations || relations.length === 0) continue;
+        let relations: JikanAnimeRelation[];
+        try {
+          relations = await jikanApi.getAnimeRelations(userAnime.mal_id, { signal });
+        } catch (relationError) {
+          if (isAbortError(relationError)) throw relationError;
+          failedCount++;
+          continue;
+        }
+        if (relations.length === 0) continue;
 
         const potentialContinuations = relations
             .filter(rel => ['Sequel', 'Prequel', 'Alternative setting', 'Alternative version', "Other", "Side story", "Full story", "Parent story"].includes(rel.relation))
@@ -106,7 +115,7 @@ export default function PreviewPage() {
         for (const potentialContinuation of potentialContinuations) {
           if (processedRelatedAnimeMalIds.has(potentialContinuation.mal_id)) continue;
 
-          const animeDetails = await jikanApi.getAnimeById(potentialContinuation.mal_id);
+          const animeDetails = await jikanApi.getAnimeById(potentialContinuation.mal_id, { signal });
           processedRelatedAnimeMalIds.add(potentialContinuation.mal_id); 
 
           if (animeDetails) {
@@ -157,18 +166,27 @@ export default function PreviewPage() {
         .sort((a,b) => (b.year || 0) - (a.year || 0) || (a.title.localeCompare(b.title))));
       
       setUpcomingSequels(allUpcomingRaw); 
-      
+      if (failedCount > 0) {
+        toast({
+          title: "Previews may be incomplete",
+          description: `Could not check ${failedCount} anime due to Jikan API issues.`,
+          variant: "destructive",
+        });
+      }
+      setIsLoading(false);
     } catch (e) {
+      if (isAbortError(e)) return;
       console.error("Error fetching continuations:", e);
       setError("Failed to load upcoming anime. API might be temporarily unavailable or rate limits exceeded.");
-    } finally {
       setIsLoading(false);
     }
-  }, [shelf, shelfInitialized, ignoredPreviewAnimeMalIdsInitialized, isFutureSeasonOrAirDate, setUpcomingSequels, currentYear, currentSeason, seasonOrder]);
+  }, [shelf, shelfInitialized, ignoredPreviewAnimeMalIdsInitialized, isFutureSeasonOrAirDate, setUpcomingSequels, currentYear, currentSeason, seasonOrder, toast]);
 
   useEffect(() => {
-    fetchAndCategorizeContinuations();
-  }, [fetchAndCategorizeContinuations]);
+    const controller = new AbortController();
+    fetchAndCategorizeContinuations(controller.signal);
+    return () => controller.abort();
+  }, [fetchAndCategorizeContinuations, retryToken]);
 
   const futureAnimeToDisplay = useMemo(() => {
     if (!ignoredPreviewAnimeMalIdsInitialized) return [];
@@ -249,7 +267,7 @@ export default function PreviewPage() {
         <AlertTitle className="text-lg">Error Fetching Previews</AlertTitle>
         <AlertDescription>
           {error} 
-          <Button variant="link" onClick={fetchAndCategorizeContinuations} className="p-0 h-auto text-destructive-foreground hover:underline ml-1">
+          <Button variant="link" onClick={() => setRetryToken(t => t + 1)} className="p-0 h-auto text-destructive-foreground hover:underline ml-1">
             Try again?
           </Button>
         </AlertDescription>

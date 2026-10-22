@@ -2,7 +2,7 @@
 "use client";
 
 import Image from 'next/image';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { jikanApi } from '@/lib/jikanApi';
+import { jikanApi, isAbortError } from '@/lib/jikanApi';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 
 interface AnimeCardProps {
@@ -47,15 +47,35 @@ const IGNORED_TYPES_FOR_ADD_ALL = ['Music'];
 const NO_BROADCAST_DAY_VALUE = "_none_";
 
 export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePreviewButton, onRestorePreview }: AnimeCardProps) {
-  const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf } = useAnimeShelf();
+  const { addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf, getAnimeFromShelf } = useAnimeShelf();
   const { toast } = useToast();
 
   const isOnShelf = shelfItem !== undefined || isAnimeOnShelf(anime.mal_id!);
-  const currentShelfItem = shelfItem || useAnimeShelf().getAnimeFromShelf(anime.mal_id!);
+  const currentShelfItem = shelfItem || getAnimeFromShelf(anime.mal_id!);
 
   const [relations, setRelations] = useState<JikanAnimeRelation[]>([]);
   const [isLoadingRelations, setIsLoadingRelations] = useState(false);
   const [showAddAllButton, setShowAddAllButton] = useState(false);
+  // Relations are only fetched once the card scrolls into view, otherwise a season page with
+  // 100+ cards would flood the Jikan queue before the user even looks at them.
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [isInView, setIsInView] = useState(false);
+
+  useEffect(() => {
+    if (isInView || !cardRef.current) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsInView(true);
+      return;
+    }
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        setIsInView(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(cardRef.current);
+    return () => observer.disconnect();
+  }, [isInView]);
 
   const fullAnimeDataForDialog = anime as JikanAnime;
 
@@ -66,31 +86,35 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
 
 
   useEffect(() => {
-    const fetchRelations = async () => {
-      if (anime.mal_id && !isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '') && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && !showRestorePreviewButton) {
-        setIsLoadingRelations(true);
-        try {
-            const rels = await jikanApi.getAnimeRelations(anime.mal_id);
-            setRelations(rels);
+    const shouldFetch = isInView && anime.mal_id && !isOnShelf && ['TV', 'OVA', 'ONA', 'Movie', 'Special'].includes(anime.type ?? '') && !(anime.type && IGNORED_TYPES_FOR_ADD_ALL.includes(anime.type)) && !showRestorePreviewButton;
+    if (!shouldFetch) {
+      setRelations([]);
+      setShowAddAllButton(false);
+      setIsLoadingRelations(false);
+      return;
+    }
 
-            const hasSequelsOrPrequels = rels.some(relation =>
-              (relation.relation === 'Sequel' || relation.relation === 'Prequel') &&
-              relation.entry.some(e => e.type === 'anime')
-            );
-            setShowAddAllButton(hasSequelsOrPrequels);
-        } catch (error) {
-            console.error("Failed to fetch relations for anime ID:", anime.mal_id, error);
-            setShowAddAllButton(false);
-        } finally {
-            setIsLoadingRelations(false);
-        }
-      } else {
-        setRelations([]);
+    const controller = new AbortController();
+    const fetchRelations = async () => {
+      setIsLoadingRelations(true);
+      try {
+        const rels = await jikanApi.getAnimeRelations(anime.mal_id!, { signal: controller.signal });
+        setRelations(rels);
+        setShowAddAllButton(rels.some(relation =>
+          (relation.relation === 'Sequel' || relation.relation === 'Prequel') &&
+          relation.entry.some(e => e.type === 'anime')
+        ));
+        setIsLoadingRelations(false);
+      } catch (error) {
+        if (isAbortError(error)) return;
+        console.error("Failed to fetch relations for anime ID:", anime.mal_id, error);
         setShowAddAllButton(false);
+        setIsLoadingRelations(false);
       }
     };
     fetchRelations();
-  }, [anime.mal_id, anime.type, isOnShelf, showRestorePreviewButton]);
+    return () => controller.abort();
+  }, [isInView, anime.mal_id, anime.type, isOnShelf, showRestorePreviewButton]);
 
 
   const handleAddToShelf = (details: { user_status: UserAnimeStatus; current_episode: number; user_rating: number | null; streaming_platforms: string[]; broadcast_day: string | null; }) => {
@@ -163,7 +187,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
 
 
   return (
-    <Card className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 h-full">
+    <Card ref={cardRef} className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 h-full">
       <CardHeader className="p-0 relative">
         <Image
           src={anime.images?.webp?.large_image_url || anime.images?.webp?.image_url || anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || "https://placehold.co/400x300.png"}

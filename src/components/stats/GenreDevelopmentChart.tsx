@@ -3,7 +3,7 @@
 
 import React, { useMemo } from 'react';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Legend } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis, Legend } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { TrendingUp, Info } from 'lucide-react';
@@ -59,7 +59,7 @@ export function GenreDevelopmentChart() {
     const last12Seasons = getPreviousNSeasons(currentSeasonInfo.year, currentSeasonInfo.name, 12);
     
     const genreCountsBySeason: Record<string, Record<string, number>> = {};
-    const uniqueGenres = new Set<string>();
+    const genreTotals: Record<string, number> = {};
 
     last12Seasons.forEach(s => {
         genreCountsBySeason[s.key] = {};
@@ -70,15 +70,17 @@ export function GenreDevelopmentChart() {
         const animeSeasonKey = `${anime.year}-${anime.season.toLowerCase()}`;
         if (genreCountsBySeason[animeSeasonKey]) {
           anime.genres.forEach(genre => {
-            uniqueGenres.add(genre);
+            genreTotals[genre] = (genreTotals[genre] || 0) + 1;
             genreCountsBySeason[animeSeasonKey][genre] = (genreCountsBySeason[animeSeasonKey][genre] || 0) + 1;
           });
         }
       }
     });
     
-    const sortedGenres = Array.from(uniqueGenres).sort();
-    const topGenres = sortedGenres.slice(0, 5); // Limit to top 5 genres
+    const topGenres = Object.entries(genreTotals)
+      .sort(([genreA, countA], [genreB, countB]) => countB - countA || genreA.localeCompare(genreB))
+      .slice(0, 5)
+      .map(([genre]) => genre);
 
     const formattedChartData = last12Seasons.map(s => {
       const seasonData: { name: string; [key: string]: string | number } = { name: s.label };
@@ -141,8 +143,7 @@ export function GenreDevelopmentChart() {
         <CardDescription>Count of your watched/completed anime by genre for the last 12 airing seasons. Shows top {allGenres.length} genres.</CardDescription>
       </CardHeader>
       <CardContent className="h-[400px] pb-0">
-        <ChartContainer config={chartConfig} className="w-full h-full">
-            <ResponsiveContainer width="100%" height="100%">
+        <ChartContainer config={chartConfig} className="aspect-auto w-full h-full">
             <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false}/>
                 <XAxis 
@@ -175,7 +176,6 @@ export function GenreDevelopmentChart() {
                 <Bar key={genre} dataKey={genre} stackId="a" fill={genreColors[index % genreColors.length]} radius={[4, 4, 0, 0]} />
                 ))}
             </BarChart>
-            </ResponsiveContainer>
         </ChartContainer>
       </CardContent>
     </Card>

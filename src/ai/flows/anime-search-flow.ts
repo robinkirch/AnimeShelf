@@ -21,7 +21,10 @@ import { rendererLogger } from '@/lib/logger'; // Import renderer logger if cont
 const AiSearchInputSchema = z.object({
   query: z.string().describe('The natural language description of the anime the user is looking for.'),
 });
-export type AiSearchInput = z.infer<typeof AiSearchInputSchema>;
+export type AiSearchInput = z.infer<typeof AiSearchInputSchema> & {
+  /** Gemini API key from the settings (localStorage); not part of the prompt input. */
+  apiKey?: string;
+};
 
 // Output is an array of JikanAnime objects, matching the structure from Jikan API.
 const AiSearchOutputSchema = z.array(JikanAnimeSchema);
@@ -87,20 +90,24 @@ Your final output must be an array of JikanAnime objects.
 });
 
 
+const AiSearchFlowInputSchema = AiSearchInputSchema.extend({
+  apiKey: z.string().optional(),
+});
+
 const animeSearchFlow = ai.defineFlow(
   {
     name: 'animeSearchFlow',
-    inputSchema: AiSearchInputSchema,
+    inputSchema: AiSearchFlowInputSchema,
     outputSchema: AiSearchOutputSchema, 
   },
-  async (input: AiSearchInput): Promise<JikanAnime[]> => {
+  async ({ query, apiKey }): Promise<AiSearchOutput> => {
     // Server-side flow: cannot use rendererLogger here directly.
     // Logging the start and end of this flow, and its inputs/outputs,
     // would typically be done using a server-side logger if Genkit is run in a Node.js env
     // OR by the calling client-side function.
     // For example: console.log(`[AI Flow: animeSearchFlow] Input: ${input.query}`);
 
-    const { output } = await animeSearchPrompt(input);
+    const { output } = await animeSearchPrompt({ query }, apiKey ? { config: { apiKey } } : undefined);
     
     if (!output) {
       // console.warn("[AI Flow: animeSearchFlow] Prompt returned undefined output. Returning empty array.");
@@ -116,11 +123,15 @@ export async function searchAnimeWithAi(input: AiSearchInput): Promise<JikanAnim
   // So, we can use rendererLogger here.
   rendererLogger.info(`Initiating AI anime search.`, { category: 'ai-search', query: input.query });
   try {
-    const results: AiSearchOutput = await animeSearchFlow(input);
+    const results: AiSearchOutput = await animeSearchFlow({ query: input.query, apiKey: input.apiKey || undefined });
     rendererLogger.info(`AI anime search completed. Found ${results.length} results.`, { category: 'ai-search', query: input.query, resultsCount: results.length });
-    return Array.isArray(results) ? results : [];
+    // The Zod schema is more lenient (nullable fields) than JikanAnime; the data originates from Jikan.
+    return Array.isArray(results) ? (results as JikanAnime[]) : [];
   } catch (error: any) {
     rendererLogger.error("Error executing searchAnimeWithAi flow.", { category: 'ai-search-error', query: input.query, error: error.message, stack: error.stack });
-    return []; 
+    // Rethrow a plain message: server action errors are serialized to the client.
+    throw new Error(/api.?key/i.test(error?.message ?? '')
+      ? 'No valid Gemini API key. Please set your key in the settings.'
+      : 'AI search failed. Please try again later.');
   }
 }
