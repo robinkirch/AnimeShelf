@@ -2,12 +2,14 @@ import axios, { type AxiosError } from 'axios';
 import type { JikanAPISearchResponse, JikanAPIByIdResponse, JikanAPISeasonsResponse, JikanAnime, JikanAPIRelationsResponse, JikanAnimeRelation } from '@/types/anime';
 import { rendererLogger } from './logger';
 
-const JIKAN_API_BASE = 'https://api.jikan.moe/v4';
+// The public Jikan API (api.jikan.moe/v4) was shut down on 2026-10-01. Tenrai serves the same
+// Jikan v4 paths and response schema, so only the base URL changes. Override via NEXT_PUBLIC_ANIME_API_BASE.
+const JIKAN_API_BASE = process.env.NEXT_PUBLIC_ANIME_API_BASE || 'https://api.tenrai.org/v1';
 
-// Jikan allows 3 requests/second and 60 requests/minute. All requests go through one
+// Tenrai allows 4 requests/second and 120 requests/minute per IP. All requests go through one
 // serialized queue so concurrent callers (cards, pages, background loops) can't burst past it.
-const MIN_REQUEST_INTERVAL_MS = 400;
-const MAX_REQUESTS_PER_MINUTE = 55;
+const MIN_REQUEST_INTERVAL_MS = 300;
+const MAX_REQUESTS_PER_MINUTE = 110;
 const MAX_RETRIES = 4;
 const REQUEST_TIMEOUT_MS = 20000;
 const MAX_SEASON_PAGES = 20;
@@ -150,8 +152,11 @@ async function executeTask(task: Task): Promise<unknown> {
       });
       throw new JikanApiError(
         status === 429
-          ? 'Jikan API rate limit reached. Please wait a moment and try again.'
-          : `Jikan API request failed${status ? ` (HTTP ${status})` : ''}: ${axiosError.message}`,
+          ? 'Anime API rate limit reached. Please wait a moment and try again.'
+          : status === 403
+            // Tenrai's anti-abuse system blocks the IP (usually clears within 24 hours).
+            ? 'Access to the anime API is temporarily blocked (HTTP 403). This usually clears within 24 hours.'
+            : `Anime API request failed${status ? ` (HTTP ${status})` : ''}: ${axiosError.message}`,
         status,
       );
     }

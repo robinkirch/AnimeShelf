@@ -10,7 +10,7 @@ A desktop application for discovering, managing, and tracking your anime series,
 
 AnimeShelf allows you to:
 - Catalog your watched anime and track progress.
-- Discover new anime through seasonal overviews and Jikan API search.
+- Discover new anime through seasonal overviews and anime search (MyAnimeList data).
 - Utilize AI-powered search to find anime based on descriptions.
 - Get previews of upcoming seasons and related series based on your shelf.
 - View statistics about your watching habits.
@@ -24,7 +24,7 @@ The app works offline for your personal library data (stored locally), with onli
 ### Anime Management & Tracking
 - **Add Anime**:
     - Manually input anime details.
-    - Search Jikan API by title to auto-populate fields.
+    - Search MyAnimeList data by title to auto-populate fields.
     - Add entire series (including prequels/sequels) in one go.
 - **View Anime Details**: Display title, cover image, episode count, user rating, status, genres, studios, and more.
 - **Track Progress**:
@@ -37,7 +37,7 @@ The app works offline for your personal library data (stored locally), with onli
 - **Series Grouping**: Automatically groups related anime (seasons, prequels, sequels) on your shelf for a consolidated view. Click to manage individual entries in a series.
 - **Advanced Search & Filtering**:
     - Search your local shelf by title.
-    - Global Jikan API search by title.
+    - Global anime search by title.
     - **AI-Powered Search**: Find anime using natural language descriptions.
     - Filter shelf by genre (multi-select), status, rating, and type (multi-select).
 - **Customizable Sorting**: Sort your shelf by title, rating, release year, or completion ratio.
@@ -52,7 +52,7 @@ The app works offline for your personal library data (stored locally), with onli
 ### Data Management
 - **Import/Export**:
     - Export your entire shelf to a CSV file.
-    - Import anime from a CSV file (fetches missing data from Jikan API if title or MAL ID is provided).
+    - Import anime from a CSV file (fetches missing data from the anime API if title or MAL ID is provided).
 - **Local Data Storage**: All user-specific shelf data is stored in a local SQLite database (`animeshelf.sqlite3` in the app's user data folder).
 
 ### Personalization
@@ -82,7 +82,7 @@ The app works offline for your personal library data (stored locally), with onli
 - **AI Features**: Genkit with `@genkit-ai/google-genai` (Gemini, model configurable via `GEMINI_MODEL`)
 - **Desktop Packaging**: Electron
 - **Data Storage**: SQLite via `better-sqlite3` in the Electron main process (IPC bridge via preload)
-- **External Anime API**: Jikan API (v4)
+- **External Anime API**: [Tenrai](https://tenrai.org/) (Jikan-v4-compatible MyAnimeList API)
 
 ### Getting Started
 
@@ -132,7 +132,7 @@ animeshelf/
 
 ## 🔄 Data Sources
 
-This app uses the [Jikan API (v4)](https://jikan.moe/) (an unofficial MyAnimeList API) for anime data. The API is free to use and provides comprehensive information on thousands of anime series. Please be mindful of their rate limits: the app sends all Jikan requests through a single rate-limited queue (max. 3/s and ~55/min), retries on HTTP 429/5xx and caches responses in memory.
+This app uses the [Tenrai API](https://tenrai.org/) (`https://api.tenrai.org/v1`), a free, unofficial MyAnimeList API with the same schema as Jikan v4. The public Jikan API (`api.jikan.moe`) was shut down on October 1, 2026. The base URL can be overridden with `NEXT_PUBLIC_ANIME_API_BASE` (e.g. a self-hosted Jikan instance). All requests go through a single rate-limited queue (max. 4/s and ~110/min, below Tenrai's public limit of 120/min), retry on HTTP 429/5xx and are cached in memory.
 
 ## 🤝 Contributing
 
@@ -150,7 +150,7 @@ This project is licensed under the GNU General Public License v3.0 - see the Lic
 
 ## 📊 Privacy
 
-This app stores all your personal shelf data locally on your device in a SQLite database. The Gemini API key is stored in the app's `localStorage` and only sent to Google with AI search requests. No personal shelf data is transmitted to any external servers. API requests are made to the Jikan API to fetch anime information and to Google AI services (via Genkit) for the AI search feature, as per their respective privacy policies.
+This app stores all your personal shelf data locally on your device in a SQLite database. The Gemini API key is stored in the app's `localStorage` and only sent to Google with AI search requests. No personal shelf data is transmitted to any external servers. API requests are made to the Tenrai API to fetch anime information and to Google AI services (via Genkit) for the AI search feature, as per their respective privacy policies.
 
 ---
 

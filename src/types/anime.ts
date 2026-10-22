@@ -45,7 +45,7 @@ export interface JikanAnime {
   episodes: number | null;
   status: string; 
   airing: boolean;
-  aired?: { from: string | null; to: string | null; prop: { from: { day: number | null; month: number | null; year: number | null; }; to: { day: number | null; month: number | null; year: number | null; }; string: string; }; };
+  aired?: { from: string | null; to: string | null; prop: { from: { day: number | null; month: number | null; year: number | null; }; to: { day: number | null; month: number | null; year: number | null; }; }; string?: string; };
   duration?: string;
   rating?: string | null; 
   score: number | null;

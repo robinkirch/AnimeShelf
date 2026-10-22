@@ -1,22 +1,24 @@
-
 'use server';
 /**
  * @fileOverview AI-powered anime search flow.
  *
  * - searchAnimeWithAi - A function that takes a natural language query and returns matching anime.
  * - AiSearchInput - The input type for the searchAnimeWithAi function.
- * - AiSearchOutput - The output type for the searchAnimeWithAi function (which is JikanAnime[]).
+ *
+ * The model only picks MAL IDs from compact tool results; the full anime objects are loaded
+ * afterwards via jikanApi. Letting the model echo complete API objects was slow (30k+ characters
+ * per entry), brittle (schema drift) and allowed it to alter the data.
  */
 
-import { ai } from '@/ai/genkit';
+import { googleAI } from '@genkit-ai/google-genai';
+import { ai, GEMINI_FALLBACK_MODEL } from '@/ai/genkit';
 import { jikanApi } from '@/lib/jikanApi';
 import type { JikanAnime } from '@/types/anime';
-import { JikanAnimeSchema } from '@/types/jikanApiSchemas';
 import { z } from 'genkit';
-import { rendererLogger } from '@/lib/logger'; // Import renderer logger if contextually appropriate (for client-side calls)
-// Note: If this flow is ONLY called server-side, rendererLogger won't work.
-// For now, assuming calls might originate from client actions that can then log.
+import { rendererLogger } from '@/lib/logger';
 
+const MAX_RESULTS = 5;
+const SYNOPSIS_MAX_LENGTH = 400;
 
 const AiSearchInputSchema = z.object({
   query: z.string().describe('The natural language description of the anime the user is looking for.'),
@@ -26,31 +28,43 @@ export type AiSearchInput = z.infer<typeof AiSearchInputSchema> & {
   apiKey?: string;
 };
 
-// Output is an array of JikanAnime objects, matching the structure from Jikan API.
-const AiSearchOutputSchema = z.array(JikanAnimeSchema);
-export type AiSearchOutput = z.infer<typeof AiSearchOutputSchema>;
+const AnimeCandidateSchema = z.object({
+  mal_id: z.number().describe('The MyAnimeList ID. Use this value in your answer.'),
+  title: z.string(),
+  title_english: z.string().nullable(),
+  type: z.string().nullable(),
+  year: z.number().nullable(),
+  genres: z.array(z.string()),
+  synopsis: z.string().nullable(),
+});
 
+const AiSearchResultSchema = z.object({
+  mal_ids: z.array(z.number()).describe(`MyAnimeList IDs of the most relevant anime (at most ${MAX_RESULTS}), best match first.`),
+});
 
-const searchAnimeOnJikanTool = ai.defineTool(
+const searchAnimeTool = ai.defineTool(
   {
-    name: 'searchAnimeOnJikanTool',
-    description: 'Searches for anime on MyAnimeList (via Jikan API) based on a search term. Use this tool to find anime based on keywords, titles, or specific characteristics mentioned by the user. Returns an array of anime objects.',
+    name: 'searchAnimeTool',
+    description: 'Searches MyAnimeList data by title or keywords. Use it to find anime matching characteristics the user describes. Returns compact candidates with their MAL ID.',
     inputSchema: z.object({
       searchTerm: z.string().describe('A concise search term, anime title, or keywords to search for.'),
     }),
-    outputSchema: z.array(JikanAnimeSchema).describe("An array of anime found, or an empty array if no results or an error occurred. Each anime object contains details like title, synopsis, MAL ID, etc."),
+    outputSchema: z.array(AnimeCandidateSchema),
   },
-  async (input) => {
-    // This tool is part of a server-side flow, so rendererLogger cannot be used directly here.
-    // Logging related to this tool's execution would typically be done in the main Genkit flow or the calling Jikan API.
-    // console.log(`[AI Tool: searchAnimeOnJikanTool] Searching for: ${input.searchTerm}`); // Basic console log for server
+  async ({ searchTerm }) => {
     try {
-      const results: JikanAnime[] = await jikanApi.searchAnime(input.searchTerm, 5);
-      // console.log(`[AI Tool: searchAnimeOnJikanTool] Found ${results.length} results for: ${input.searchTerm}`);
-      return results;
-    } catch (error: any) {
-      // console.error(`[AI Tool: searchAnimeOnJikanTool] Error for term "${input.searchTerm}":`, error.message);
-      return []; // Return empty array on error as per description
+      const results = await jikanApi.searchAnime(searchTerm, 8);
+      return results.map(anime => ({
+        mal_id: anime.mal_id,
+        title: anime.title,
+        title_english: anime.title_english ?? null,
+        type: anime.type ?? null,
+        year: anime.year ?? null,
+        genres: anime.genres?.map(g => g.name) ?? [],
+        synopsis: anime.synopsis ? anime.synopsis.slice(0, SYNOPSIS_MAX_LENGTH) : null,
+      }));
+    } catch {
+      return [];
     }
   }
 );
@@ -58,37 +72,21 @@ const searchAnimeOnJikanTool = ai.defineTool(
 const animeSearchPrompt = ai.definePrompt({
   name: 'animeSearchPrompt',
   input: { schema: AiSearchInputSchema },
-  output: { schema: AiSearchOutputSchema }, 
-  tools: [searchAnimeOnJikanTool],
+  output: { schema: AiSearchResultSchema },
+  tools: [searchAnimeTool],
   system: `You are an expert AI assistant specializing in anime. Your goal is to help users find anime based on their natural language descriptions.
-You have access to a tool called 'searchAnimeOnJikanTool' that can search MyAnimeList.
+You have access to a tool called 'searchAnimeTool' that searches MyAnimeList data and returns candidates with their MAL ID, titles, genres and a short synopsis.
 
 Instructions:
-1.  Carefully analyze the user's query: \`{{{query}}}\`
-2.  Extract key characteristics, themes, genres, character descriptions, or potential titles from the user's query.
-3.  Use the 'searchAnimeOnJikanTool' to search for anime. You can make multiple calls to the tool with different refined search terms if the initial search is not specific enough or if the user's query is broad. For instance, if the user asks for "an anime about a detective who solves supernatural cases", you might first search for "detective supernatural cases anime".
-4.  Critically evaluate the search results obtained from the tool. Ensure they genuinely match the user's original description.
-5.  Filter and select the most relevant anime (up to a maximum of 5) that directly and strongly match the user's query. Prioritize anime that are well-known and highly relevant to the description.
-6.  If you find multiple highly relevant anime, include them in your response.
-7.  If, after using the tool, you cannot find any relevant anime, you MUST return an empty list.
-8.  Do not invent anime. Only return anime found through the tool that you assess as relevant to the user's query.
-9.  Your final response MUST be an array of anime objects. Each object in the array must conform to the JikanAnimeSchema structure. If no anime are found, return an empty array ([]).
+1.  Analyze the user's query and extract key characteristics, themes, genres, character descriptions, or potential titles.
+2.  Use 'searchAnimeTool' to search. Make several calls with different, refined search terms (likely titles, keywords) if the query is broad or the first results don't fit.
+3.  Critically compare the candidates (especially the synopsis) with the user's description.
+4.  Answer with the MAL IDs of the most relevant anime (at most ${MAX_RESULTS}), best match first.
+5.  Only use MAL IDs that were returned by the tool. Never invent IDs. If nothing fits, return an empty list.
 
-Example user query: "A black swordsman fighting in an online vrmmorpg"
-You might use the tool with search terms like "black swordsman vrmmorpg", "kirito sao", or "Sword Art Online".
-Then, from the tool's results, you would select "Sword Art Online" and any other highly relevant entries, format them according to JikanAnimeSchema, and return them as an array.
-
-Other Example user query: "An anime about a group of heroes trying to save the world from a demon lord."
-You might use the tool with search terms like "fantasy demon lord heroes", "isekai save world", or "adventure fantasy".
-Then, from the tool's results, you would select highly relevant entries that match the description (e.g., "Maoyu", "The Devil is a Part-Timer!", "Overlord"), format them according to JikanAnimeSchema, and return them as an array.
-`,
-  prompt: `User query: {{{query}}}
-
-Based on this query, identify and return the most relevant anime using the available tools.
-Your final output must be an array of JikanAnime objects.
-`,
+Example: for "an elf mage who travels after the hero party defeated the demon king" you might search "Frieren", "elf mage journey after demon king" and return the MAL ID of "Sousou no Frieren".`,
+  prompt: `User query: {{{query}}}`,
 });
-
 
 const AiSearchFlowInputSchema = AiSearchInputSchema.extend({
   apiKey: z.string().optional(),
@@ -98,40 +96,42 @@ const animeSearchFlow = ai.defineFlow(
   {
     name: 'animeSearchFlow',
     inputSchema: AiSearchFlowInputSchema,
-    outputSchema: AiSearchOutputSchema, 
+    outputSchema: AiSearchResultSchema,
   },
-  async ({ query, apiKey }): Promise<AiSearchOutput> => {
-    // Server-side flow: cannot use rendererLogger here directly.
-    // Logging the start and end of this flow, and its inputs/outputs,
-    // would typically be done using a server-side logger if Genkit is run in a Node.js env
-    // OR by the calling client-side function.
-    // For example: console.log(`[AI Flow: animeSearchFlow] Input: ${input.query}`);
-
-    const { output } = await animeSearchPrompt({ query }, apiKey ? { config: { apiKey } } : undefined);
-    
-    if (!output) {
-      // console.warn("[AI Flow: animeSearchFlow] Prompt returned undefined output. Returning empty array.");
-      return [];
+  async ({ query, apiKey }) => {
+    const config = apiKey ? { apiKey } : undefined;
+    try {
+      const { output } = await animeSearchPrompt({ query }, { config });
+      return output ?? { mal_ids: [] };
+    } catch (error) {
+      if (!isModelOverloaded(error)) throw error;
+      const { output } = await animeSearchPrompt({ query }, { config, model: googleAI.model(GEMINI_FALLBACK_MODEL) });
+      return output ?? { mal_ids: [] };
     }
-    // console.log(`[AI Flow: animeSearchFlow] Output: ${output.length} anime found.`);
-    return output;
   }
 );
 
+function isModelOverloaded(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /UNAVAILABLE|\b503\b|high demand|overloaded/i.test(message);
+}
+
 export async function searchAnimeWithAi(input: AiSearchInput): Promise<JikanAnime[]> {
-  // This function is exported and might be called from the client-side.
-  // So, we can use rendererLogger here.
   rendererLogger.info(`Initiating AI anime search.`, { category: 'ai-search', query: input.query });
   try {
-    const results: AiSearchOutput = await animeSearchFlow({ query: input.query, apiKey: input.apiKey || undefined });
+    const { mal_ids } = await animeSearchFlow({ query: input.query, apiKey: input.apiKey || undefined });
+    const uniqueIds = Array.from(new Set(mal_ids)).slice(0, MAX_RESULTS);
+    const details = await Promise.all(uniqueIds.map(id => jikanApi.getAnimeById(id, { priority: 'high' })));
+    const results = details.filter((anime): anime is JikanAnime => anime !== null);
     rendererLogger.info(`AI anime search completed. Found ${results.length} results.`, { category: 'ai-search', query: input.query, resultsCount: results.length });
-    // The Zod schema is more lenient (nullable fields) than JikanAnime; the data originates from Jikan.
-    return Array.isArray(results) ? (results as JikanAnime[]) : [];
+    return results;
   } catch (error: any) {
     rendererLogger.error("Error executing searchAnimeWithAi flow.", { category: 'ai-search-error', query: input.query, error: error.message, stack: error.stack });
     // Rethrow a plain message: server action errors are serialized to the client.
     throw new Error(/api.?key/i.test(error?.message ?? '')
       ? 'No valid Gemini API key. Please set your key in the settings.'
-      : 'AI search failed. Please try again later.');
+      : isModelOverloaded(error)
+        ? 'The Gemini AI service is currently overloaded. Please try again in a few minutes.'
+        : 'AI search failed. Please try again later.');
   }
 }

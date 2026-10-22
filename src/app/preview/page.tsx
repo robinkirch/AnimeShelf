@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 import { jikanApi, isAbortError } from '@/lib/jikanApi';
 import type { JikanAnime, JikanAnimeRelation, JikanAnimeRelationEntry } from '@/types/anime';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { IgnoredPreviewList } from '@/components/preview/IgnoredPreviewList';
 
@@ -21,6 +22,14 @@ type CategorizedAnime = JikanAnime & {
 };
 
 const IGNORED_TYPES_PREVIEW = ['Music'];
+// How often found entries are pushed to the UI while the shelf is still being checked.
+const PUBLISH_INTERVAL_MS = 1000;
+const LOADING_SKELETON_COUNT = 4;
+
+const sortUpcoming = (list: CategorizedAnime[]) =>
+  [...list].sort((a, b) => (a.year || Infinity) - (b.year || Infinity) || a.title.localeCompare(b.title));
+const sortOther = (list: CategorizedAnime[]) =>
+  [...list].sort((a, b) => (b.year || 0) - (a.year || 0) || a.title.localeCompare(b.title));
 
 export default function PreviewPage() {
   const { 
@@ -36,7 +45,11 @@ export default function PreviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
-  
+  const [progress, setProgress] = useState({ checked: 0, total: 0 });
+  // After the first complete run, re-runs (e.g. after adding an anime to the shelf) keep the current
+  // results visible and only swap them at the end instead of rebuilding the page progressively.
+  const hasCompleteResultsRef = useRef(false);
+
   const [allFetchedFutureAnime, setAllFetchedFutureAnime] = useState<CategorizedAnime[]>([]);
   const [allFetchedOtherContinuations, setAllFetchedOtherContinuations] = useState<CategorizedAnime[]>([]);
   
@@ -86,17 +99,40 @@ export default function PreviewPage() {
       return;
     }
 
+    const progressive = !hasCompleteResultsRef.current;
     setIsLoading(true);
     setError(null);
+    if (progressive) {
+      setAllFetchedFutureAnime([]);
+      setAllFetchedOtherContinuations([]);
+    }
+    setProgress({ checked: 0, total: shelf.length });
 
     const foundFutureAnimeMap = new Map<number, CategorizedAnime>();
     const foundOtherContinuationsMap = new Map<number, CategorizedAnime>();
     const processedRelatedAnimeMalIds = new Set<number>(); 
     const shelfMalIds = new Set(shelf.map(a => a.mal_id));
 
+    // Results are published progressively (throttled) so the page fills up while the shelf is checked.
+    let checked = 0;
+    let lastPublish = 0;
+    let hasUnpublishedChanges = false;
+    const publish = (force = false) => {
+      setProgress({ checked, total: shelf.length });
+      if (!hasUnpublishedChanges || (!force && (!progressive || Date.now() - lastPublish < PUBLISH_INTERVAL_MS))) return;
+      const upcoming = sortUpcoming(Array.from(foundFutureAnimeMap.values()));
+      setAllFetchedFutureAnime(upcoming);
+      setAllFetchedOtherContinuations(sortOther(Array.from(foundOtherContinuationsMap.values())));
+      setUpcomingSequels(upcoming);
+      lastPublish = Date.now();
+      hasUnpublishedChanges = false;
+    };
+
     try {
       let failedCount = 0;
       for (const userAnime of shelf) {
+        publish();
+        checked++;
         let relations: JikanAnimeRelation[];
         try {
           relations = await jikanApi.getAnimeRelations(userAnime.mal_id, { signal });
@@ -119,10 +155,7 @@ export default function PreviewPage() {
           processedRelatedAnimeMalIds.add(potentialContinuation.mal_id); 
 
           if (animeDetails) {
-            if (animeDetails.type && IGNORED_TYPES_PREVIEW.includes(animeDetails.type)) {
-                console.log(`Ignoring ${animeDetails.title} (ID: ${animeDetails.mal_id}) from preview due to type: ${animeDetails.type}`);
-                continue;
-            }
+            if (animeDetails.type && IGNORED_TYPES_PREVIEW.includes(animeDetails.type)) continue;
 
             const categorizedEntry: CategorizedAnime = { 
               ...animeDetails, 
@@ -133,6 +166,7 @@ export default function PreviewPage() {
             if (isFutureSeasonOrAirDate(animeDetails)) {
               if (!foundFutureAnimeMap.has(animeDetails.mal_id)) {
                 foundFutureAnimeMap.set(animeDetails.mal_id, categorizedEntry);
+                hasUnpublishedChanges = true;
               }
             } else {
                const animeYear = animeDetails.year || (animeDetails.aired?.from ? new Date(animeDetails.aired.from).getFullYear() : 0);
@@ -149,27 +183,20 @@ export default function PreviewPage() {
               if (isCurrentOrPast) { 
                 if (!foundOtherContinuationsMap.has(animeDetails.mal_id)) {
                   foundOtherContinuationsMap.set(animeDetails.mal_id, categorizedEntry);
+                  hasUnpublishedChanges = true;
                 }
               }
             }
           }
         }
       }
-      const allUpcomingRaw = Array.from(foundFutureAnimeMap.values())
-        .filter(anime => !(anime.type && IGNORED_TYPES_PREVIEW.includes(anime.type)))
-        .sort((a,b) => (a.year || Infinity) - (b.year || Infinity) || (a.title.localeCompare(b.title)));
-        
-      setAllFetchedFutureAnime(allUpcomingRaw);
-
-      setAllFetchedOtherContinuations(Array.from(foundOtherContinuationsMap.values())
-        .filter(anime => !(anime.type && IGNORED_TYPES_PREVIEW.includes(anime.type)))
-        .sort((a,b) => (b.year || 0) - (a.year || 0) || (a.title.localeCompare(b.title))));
-      
-      setUpcomingSequels(allUpcomingRaw); 
+      hasUnpublishedChanges = true;
+      publish(true);
+      hasCompleteResultsRef.current = true;
       if (failedCount > 0) {
         toast({
           title: "Previews may be incomplete",
-          description: `Could not check ${failedCount} anime due to Jikan API issues.`,
+          description: `Could not check ${failedCount} anime due to anime API issues.`,
           variant: "destructive",
         });
       }
@@ -177,6 +204,9 @@ export default function PreviewPage() {
     } catch (e) {
       if (isAbortError(e)) return;
       console.error("Error fetching continuations:", e);
+      // Keep what was found so far; the full-page error is only shown if nothing could be loaded.
+      hasUnpublishedChanges = true;
+      publish(true);
       setError("Failed to load upcoming anime. API might be temporarily unavailable or rate limits exceeded.");
       setIsLoading(false);
     }
@@ -210,17 +240,21 @@ export default function PreviewPage() {
     <section>
       <div className="flex items-center gap-3 mb-6">
         <IconComponent className="h-8 w-8 text-primary" />
-        <h2 className="text-2xl font-semibold text-primary">{listTitle} ({animeList.length})</h2>
+        <h2 className="text-2xl font-semibold text-primary">
+          {listTitle} ({animeList.length}{isLoading ? '+' : ''})
+        </h2>
+        {isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
       </div>
-      {animeList.length > 0 ? (
+      {animeList.length > 0 || isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {animeList.map(anime => 
-            <AnimeCard 
-              key={`${anime.mal_id}-${listTitle}`} 
-              anime={anime} 
+          {animeList.map(anime =>
+            <AnimeCard
+              key={`${anime.mal_id}-${listTitle}`}
+              anime={anime}
               onIgnorePreview={(id) => handleIgnorePreview(id, anime.title)}
             />
           )}
+          {isLoading && renderSkeletons(LOADING_SKELETON_COUNT)}
         </div>
       ) : (
         <div className="text-center py-10 bg-card p-6 rounded-lg shadow-xs border border-dashed">
@@ -244,7 +278,7 @@ export default function PreviewPage() {
     ))
   );
 
-  if (isLoading || !shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) {
+  if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) {
     return (
       <div className="space-y-10">
         <div>
@@ -260,7 +294,7 @@ export default function PreviewPage() {
     );
   }
 
-  if (error) {
+  if (error && allFetchedFutureAnime.length === 0 && allFetchedOtherContinuations.length === 0) {
     return (
       <Alert variant="destructive" className="max-w-2xl mx-auto my-10">
         <HelpCircle className="h-5 w-5" />
@@ -275,16 +309,7 @@ export default function PreviewPage() {
     );
   }
   
-  if (!shelfInitialized || !ignoredPreviewAnimeMalIdsInitialized) { 
-     return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center">
-        <Loader2 className="h-16 w-16 animate-spin text-primary mb-6" />
-        <p className="text-xl text-muted-foreground">Initializing your data...</p>
-      </div>
-    );
-  }
-
-  if (shelf.length === 0 && shelfInitialized) { 
+if (shelf.length === 0 && shelfInitialized) { 
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-200px)] text-center p-8 bg-card rounded-xl shadow-lg">
         <History className="h-20 w-20 text-primary mb-8" />
@@ -307,7 +332,33 @@ export default function PreviewPage() {
           Discover future seasons and other continuations for anime you're tracking. Add them to your plan-to-watch list or hide them from this view.
         </p>
       </header>
-      
+
+      {isLoading && progress.total > 0 && (
+        <div className="space-y-2" aria-live="polite">
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking your shelf for related anime...
+            </span>
+            <span>{progress.checked} / {progress.total}</span>
+          </div>
+          <Progress value={(progress.checked / progress.total) * 100} className="h-2" />
+        </div>
+      )}
+
+      {error && (allFetchedFutureAnime.length > 0 || allFetchedOtherContinuations.length > 0) && (
+        <Alert variant="destructive">
+          <HelpCircle className="h-5 w-5" />
+          <AlertTitle>Previews may be incomplete</AlertTitle>
+          <AlertDescription>
+            {error}
+            <Button variant="link" onClick={() => setRetryToken(t => t + 1)} className="p-0 h-auto text-destructive-foreground hover:underline ml-1">
+              Try again?
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {renderAnimeList(
         futureAnimeToDisplay, 
         "Upcoming Future Seasons", 
