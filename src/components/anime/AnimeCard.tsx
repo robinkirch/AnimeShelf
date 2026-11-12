@@ -28,6 +28,7 @@ import { jikanApi, isAbortError } from '@/lib/jikanApi';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 import { useI18n } from '@/i18n/I18nContext';
 import { broadcastDayLabel, seasonLabel, statusLabel } from '@/i18n/labels';
+import { COVER_PLACEHOLDER } from '@/lib/utils';
 
 interface AnimeCardProps {
   anime: JikanAnime | Partial<JikanAnime>;
@@ -195,7 +196,7 @@ export function AnimeCard({ anime, shelfItem, onIgnorePreview, showRestorePrevie
     <Card ref={cardRef} className="flex flex-col overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 h-full">
       <CardHeader className="p-0 relative">
         <Image
-          src={anime.images?.webp?.large_image_url || anime.images?.webp?.image_url || anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || "https://placehold.co/400x300.png"}
+          src={anime.images?.webp?.large_image_url || anime.images?.webp?.image_url || anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || COVER_PLACEHOLDER}
           alt={t('anime.coverAlt', { title: anime.title ?? '' })}
           width={400}
           height={300}

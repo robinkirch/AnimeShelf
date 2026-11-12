@@ -27,6 +27,7 @@ import Image from 'next/image';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 import { useI18n } from '@/i18n/I18nContext';
 import { broadcastDayLabel, statusLabel } from '@/i18n/labels';
+import { COVER_PLACEHOLDER } from '@/lib/utils';
 
 interface AddToShelfDialogProps {
   anime: JikanAnime;
@@ -110,7 +111,7 @@ const [isOpen, setIsOpen] = useState(false);
         <div className="grid gap-6 py-4">
           <div className="flex items-center gap-4">
             <Image
-              src={anime.images.webp?.image_url || anime.images.jpg.image_url || "https://picsum.photos/100/150"}
+              src={anime.images.webp?.image_url || anime.images.jpg.image_url || COVER_PLACEHOLDER}
               alt={anime.title}
               width={80}
               height={120}

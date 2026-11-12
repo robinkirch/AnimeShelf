@@ -408,6 +408,7 @@ export const de: Messages = {
     addAllDialog: {
       title: 'Serie „{title}“ zum Regal hinzufügen',
       description: 'Lege den Fortschritt für jede Staffel der Serie fest. Verwandte Staffeln werden geladen und unten angezeigt.',
+      alreadyOnShelf: 'Bereits im Regal (wird nicht geändert)',
       noSeasons: 'Keine verwandten Staffeln gefunden oder alle wurden ignoriert (z. B. Musik).',
       submit: 'Serie zum Regal hinzufügen',
     },

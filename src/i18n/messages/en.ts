@@ -409,6 +409,7 @@ export const en = {
       title: 'Add "{title}" Series to Shelf',
       description: 'Set initial progress for each season in the series. Related seasons are fetched and shown below.',
       noSeasons: 'No related seasons found or all were ignored (e.g. Music type).',
+      alreadyOnShelf: 'Already on your shelf (not changed)',
       submit: 'Add Series to Shelf',
     },
   },

@@ -12,6 +12,7 @@ import { Layers, Eye, CheckCircle, PauseCircle, XCircle, ListPlus, Star } from '
 import { AnimeGroupModal } from './AnimeGroupModal';
 import { useI18n } from '@/i18n/I18nContext';
 import { statusLabel } from '@/i18n/labels';
+import { COVER_PLACEHOLDER } from '@/lib/utils';
 
 interface AnimeGroupCardProps {
   group: UserAnime[];
@@ -109,7 +110,7 @@ export function AnimeGroupCard({ group, relationsMap }: AnimeGroupCardProps) {
           {imagesToDisplay.map((img, index) => (
             <Image
               key={index}
-              src={img.src || "https://placehold.co/400x300.png"} // Fallback image
+              src={img.src || COVER_PLACEHOLDER}
               alt={img.alt}
               width={400}
               height={300}

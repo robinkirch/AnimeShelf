@@ -27,6 +27,8 @@ interface StreamingPlatformsInputProps {
   onChange: (newValue: string[]) => void; // Callback to update parent state
   apiSuggestions?: string[]; // Suggestions from API for the current anime
   placeholder?: string;
+  /** Read-only: shows the platforms without allowing changes. */
+  disabled?: boolean;
 }
 
 export function StreamingPlatformsInput({
@@ -34,6 +36,7 @@ export function StreamingPlatformsInput({
   onChange,
   apiSuggestions = [],
   placeholder,
+  disabled = false,
 }: StreamingPlatformsInputProps) {
   const { t } = useI18n();
 const [open, setOpen] = React.useState(false);
@@ -75,12 +78,13 @@ const [open, setOpen] = React.useState(false);
 
   return (
     <div className="space-y-2 w-full">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open && !disabled} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             role="combobox"
-            aria-expanded={open}
+            aria-expanded={open && !disabled}
+            disabled={disabled}
             className="w-full justify-between h-auto min-h-10 py-2 text-left font-normal whitespace-normal"
           >
             <span className="flex flex-wrap gap-1 items-center min-w-0">
@@ -91,12 +95,12 @@ const [open, setOpen] = React.useState(false);
                       variant="secondary"
                       className="px-2 py-0.5"
                       onClick={(e) => { // Make badges clickable to remove
-                        e.stopPropagation(); 
-                        togglePlatform(platform);
+                        e.stopPropagation();
+                        if (!disabled) togglePlatform(platform);
                       }}
                     >
                       {platform}
-                      <X className="ml-1.5 h-3 w-3 cursor-pointer hover:text-destructive" />
+                      {!disabled && <X className="ml-1.5 h-3 w-3 cursor-pointer hover:text-destructive" />}
                     </Badge>
                   ))
                 : <span className="text-muted-foreground">{placeholder ?? t('anime.platforms.select')}</span>}

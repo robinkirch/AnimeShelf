@@ -30,6 +30,9 @@ import { Loader2 } from 'lucide-react';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
 import { useI18n } from '@/i18n/I18nContext';
 import { broadcastDayLabel, statusLabel } from '@/i18n/labels';
+import { COVER_PLACEHOLDER } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
 
 interface SeasonEntryState {
   mal_id: number;
@@ -45,6 +48,8 @@ interface SeasonEntryState {
   streaming_platforms: string[]; // Changed from streaming_platforms_input
   broadcast_day: string | null;
   apiStreamingSuggestions: string[]; // To store API suggestions for the input component
+  /** Already on the shelf: shown read-only with the shelf values and not submitted again. */
+  onShelf: boolean;
 }
 
 interface AddAllToShelfDialogProps {
@@ -70,6 +75,7 @@ const NO_BROADCAST_DAY_VALUE = "_none_";
 
 export function AddAllToShelfDialog({ mainAnime, relations, onAddAllToShelf, children }: AddAllToShelfDialogProps) {
   const { t } = useI18n();
+  const { getAnimeFromShelf } = useAnimeShelf();
 const [isOpen, setIsOpen] = useState(false);
   const [seasonEntries, setSeasonEntries] = useState<SeasonEntryState[]>([]);
   const [isFetchingDetails, setIsFetchingDetails] = useState(false);
@@ -110,7 +116,7 @@ const [isOpen, setIsOpen] = useState(false);
             fetchedSeasonStates.push({
                 mal_id: entry.mal_id,
                 title: entry.name,
-                cover_image: "https://picsum.photos/100/150", 
+                cover_image: COVER_PLACEHOLDER,
                 total_episodes: null,
                 user_status: 'plan_to_watch' as UserAnimeStatus,
                 current_episode: 0,
@@ -121,6 +127,7 @@ const [isOpen, setIsOpen] = useState(false);
                 streaming_platforms: [],
                 broadcast_day: null,
                 apiStreamingSuggestions: [],
+                onShelf: false,
             });
             continue;
         }
@@ -130,10 +137,32 @@ const [isOpen, setIsOpen] = useState(false);
             continue;
         }
 
+        // Seasons already on the shelf show the user's own values (read-only) instead of defaults.
+        const shelfItem = getAnimeFromShelf(animeDetails.mal_id);
+        if (shelfItem) {
+            fetchedSeasonStates.push({
+                mal_id: animeDetails.mal_id,
+                title: animeDetails.title,
+                cover_image: animeDetails.images.webp?.image_url || animeDetails.images.jpg.image_url || shelfItem.cover_image || COVER_PLACEHOLDER,
+                total_episodes: shelfItem.total_episodes ?? animeDetails.episodes,
+                user_status: shelfItem.user_status,
+                current_episode: shelfItem.current_episode,
+                user_rating: shelfItem.user_rating,
+                genres: animeDetails.genres?.map(g => g.name) || shelfItem.genres,
+                studios: animeDetails.studios?.map(s => s.name) || shelfItem.studios,
+                animeData: animeDetails,
+                streaming_platforms: shelfItem.streaming_platforms,
+                broadcast_day: shelfItem.broadcast_day,
+                apiStreamingSuggestions: apiStreaming,
+                onShelf: true,
+            });
+            continue;
+        }
+
         fetchedSeasonStates.push({
             mal_id: animeDetails.mal_id,
             title: animeDetails.title,
-            cover_image: animeDetails.images.webp?.image_url || animeDetails.images.jpg.image_url || "https://picsum.photos/100/150",
+            cover_image: animeDetails.images.webp?.image_url || animeDetails.images.jpg.image_url || COVER_PLACEHOLDER,
             total_episodes: animeDetails.episodes,
             user_status: 'plan_to_watch' as UserAnimeStatus,
             current_episode: 0,
@@ -144,6 +173,7 @@ const [isOpen, setIsOpen] = useState(false);
             streaming_platforms: apiStreaming, // Initialize with API suggestions
             broadcast_day: animeDetails.broadcast?.day || null,
             apiStreamingSuggestions: apiStreaming,
+            onShelf: false,
         });
     }
     
@@ -180,7 +210,7 @@ const [isOpen, setIsOpen] = useState(false);
     setSeasonEntries(fetchedSeasonStates);
     setIsFetchingDetails(false);
 
-  }, [mainAnime, relations, isOpen]);
+  }, [mainAnime, relations, isOpen, getAnimeFromShelf]);
 
 
   useEffect(() => {
@@ -204,7 +234,7 @@ const [isOpen, setIsOpen] = useState(false);
 
   const handleSubmit = () => {
     const detailsToSubmit = seasonEntries
-      .filter(entry => entry.animeData) 
+      .filter(entry => entry.animeData && !entry.onShelf)
       .map(entry => ({
         animeData: entry.animeData!, 
         userProgress: {
@@ -232,6 +262,9 @@ const [isOpen, setIsOpen] = useState(false);
         />
         <div>
           <h4 className="font-semibold text-md">{entry.title}</h4>
+          {entry.onShelf && (
+            <Badge variant="secondary" className="mt-1 text-xs">{t('anime.addAllDialog.alreadyOnShelf')}</Badge>
+          )}
           <p className="text-xs text-muted-foreground">
             {entry.total_episodes ? t('common.episodes', { count: entry.total_episodes }) : t('common.episodesUnknown')}
           </p>
@@ -249,6 +282,7 @@ const [isOpen, setIsOpen] = useState(false);
             <Select
             value={entry.user_status}
             onValueChange={(value) => handleSeasonChange(entry.mal_id, 'user_status', value as UserAnimeStatus)}
+            disabled={entry.onShelf}
             >
             <SelectTrigger id={`status-${entry.mal_id}`} className="h-9 text-xs">
                 <SelectValue placeholder={t('anime.selectStatus')} />
@@ -267,6 +301,8 @@ const [isOpen, setIsOpen] = useState(false);
             type="number"
             value={entry.current_episode}
             onChange={(e) => handleSeasonChange(entry.mal_id, 'current_episode', e.target.value)}
+            readOnly={entry.onShelf}
+            disabled={entry.onShelf}
             className="h-9 text-xs"
             max={entry.total_episodes ?? undefined}
             min={0}
@@ -279,6 +315,7 @@ const [isOpen, setIsOpen] = useState(false);
             <Select
                 value={entry.broadcast_day || NO_BROADCAST_DAY_VALUE}
                 onValueChange={(value) => handleSeasonChange(entry.mal_id, 'broadcast_day', value === NO_BROADCAST_DAY_VALUE ? null : value)}
+                disabled={entry.onShelf}
             >
             <SelectTrigger id={`broadcast-day-${entry.mal_id}`} className="h-9 text-xs mt-0.5">
                 <SelectValue placeholder={t('anime.selectBroadcastDay')} />
@@ -298,6 +335,7 @@ const [isOpen, setIsOpen] = useState(false);
                 onChange={(newPlatforms) => handleSeasonChange(entry.mal_id, 'streaming_platforms', newPlatforms)}
                 apiSuggestions={entry.apiStreamingSuggestions}
                 placeholder={t('anime.addPlatforms')}
+                disabled={entry.onShelf}
             />
         </div>
       </div>
@@ -306,6 +344,7 @@ const [isOpen, setIsOpen] = useState(false);
         <RatingInput
           value={entry.user_rating}
           onChange={(value) => handleSeasonChange(entry.mal_id, 'user_rating', value)}
+          disabled={entry.onShelf}
         />
       </div>
     </div>
@@ -360,7 +399,7 @@ const [isOpen, setIsOpen] = useState(false);
           <Button 
             type="submit" 
             onClick={handleSubmit} 
-            disabled={isFetchingDetails || seasonEntries.filter(e => e.animeData).length === 0}
+            disabled={isFetchingDetails || seasonEntries.filter(e => e.animeData && !e.onShelf).length === 0}
           >
             {isFetchingDetails && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {t('anime.addAllDialog.submit')}

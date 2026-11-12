@@ -34,6 +34,7 @@ import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import t
 import { useI18n } from '@/i18n/I18nContext';
 import { broadcastDayLabel, seasonLabel, statusLabel } from '@/i18n/labels';
 import { jikanApi } from '@/lib/jikanApi';
+import { COVER_PLACEHOLDER } from '@/lib/utils';
 
 const NO_BROADCAST_DAY_VALUE = "_none_";
 
@@ -171,7 +172,7 @@ export function AnimeGroupModal({
               <div key={anime.mal_id} className="p-4 border rounded-lg shadow-xs bg-card">
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Image
-                    src={anime.cover_image || "https://placehold.co/100x150.png"}
+                    src={anime.cover_image || COVER_PLACEHOLDER}
                     alt={t('anime.coverAlt', { title: anime.title })}
                     width={100}
                     height={150}
