@@ -12,6 +12,7 @@ import { I18nProvider } from '@/i18n/I18nContext';
 import { LANGUAGE_COOKIE, normalizeLanguage } from '@/i18n/config';
 import { Toaster } from "@/components/ui/toaster";
 import { UpdateNotifier } from '@/components/layout/UpdateNotifier';
+import { BackToTopButton } from '@/components/layout/BackToTopButton';
 import { ProfileSetupManager } from '@/components/profile/ProfileSetupModal'; 
 import { GlobalErrorListeners } from '@/components/layout/GlobalErrorListeners';
 
@@ -48,6 +49,7 @@ export default async function RootLayout({
               </div>
               <Toaster />
               <UpdateNotifier />
+              <BackToTopButton />
             </PreviewProvider>
           </AnimeShelfProvider>
         </ThemeProvider>

@@ -59,3 +59,19 @@ test('settings show the app version; updates are off outside the installed app',
   await expect(settings.getByRole('status').filter({ hasText: en.updates.disabled })).toBeVisible();
   await expect(settings.getByRole('button', { name: en.updates.check })).toBeDisabled();
 });
+
+test('back-to-top button appears after scrolling and scrolls up', async ({ launchApp }) => {
+  const { window } = await launchApp();
+  await completeProfileSetup(window);
+  const button = window.getByRole('button', { name: en.layout.backToTop });
+
+  // The empty shelf is shorter than the window, so make the page scrollable.
+  await window.evaluate(() => { document.querySelector('main')!.style.minHeight = '4000px'; });
+  await expect(button).toBeHidden();
+
+  await window.mouse.wheel(0, 1500);
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect.poll(() => window.evaluate(() => window.scrollY)).toBe(0);
+  await expect(button).toBeHidden();
+});

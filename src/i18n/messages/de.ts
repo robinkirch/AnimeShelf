@@ -72,6 +72,7 @@ export const de: Messages = {
       stats: 'Statistik',
     },
     openSettings: 'Einstellungen öffnen',
+    backToTop: 'Nach oben',
     userFallback: 'Nutzer',
   },
   settings: {

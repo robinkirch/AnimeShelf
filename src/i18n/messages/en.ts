@@ -72,6 +72,7 @@ export const en = {
       stats: 'Stats',
     },
     openSettings: 'Open Settings',
+    backToTop: 'Back to top',
     userFallback: 'User',
   },
   settings: {
