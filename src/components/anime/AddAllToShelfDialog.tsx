@@ -25,7 +25,6 @@ import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime'
 import { RatingInput } from './RatingInput';
 import Image from 'next/image';
 import { jikanApi } from '@/lib/jikanApi';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2 } from 'lucide-react';
 import { StreamingPlatformsInput } from './StreamingPlatformsInput'; // Import the new component
@@ -346,7 +345,8 @@ const [isOpen, setIsOpen] = useState(false);
             {t('anime.addAllDialog.description')}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="grow max-h-[calc(90vh-200px)] pr-3">
+        {/* Native scrolling: a Radix ScrollArea with only a max-height never scrolls, it just cuts the list off. */}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-3">
             <div className="space-y-4 py-2">
             {isFetchingDetails && renderSkeletons(3)}
             {!isFetchingDetails && seasonEntries.length === 0 && (
@@ -354,7 +354,7 @@ const [isOpen, setIsOpen] = useState(false);
             )}
             {!isFetchingDetails && seasonEntries.map(entry => renderSeasonForm(entry))}
             </div>
-        </ScrollArea>
+        </div>
         <DialogFooter className="mt-auto pt-4 border-t">
           <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>{t('common.cancel')}</Button>
           <Button 

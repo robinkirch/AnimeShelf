@@ -72,6 +72,21 @@ test('back-to-top button appears after scrolling and scrolls up', async ({ launc
   await window.mouse.wheel(0, 1500);
   await expect(button).toBeVisible();
   await button.click();
-  await expect.poll(() => window.evaluate(() => window.scrollY)).toBe(0);
+  await expect.poll(() => window.evaluate(() => globalThis.scrollY)).toBe(0);
   await expect(button).toBeHidden();
+});
+
+test('settings dialog scrolls down to the last section', async ({ launchApp }) => {
+  const { window } = await launchApp();
+  await completeProfileSetup(window);
+
+  await window.getByRole('button', { name: en.layout.openSettings }).click();
+  const settings = window.getByRole('dialog', { name: en.settings.title });
+  const lastButton = settings.getByRole('button', { name: en.settings.data.open });
+  await expect(lastButton).toBeAttached();
+  await expect(lastButton).not.toBeInViewport();
+
+  await settings.getByRole('heading', { name: en.settings.profile.title, exact: true }).hover();
+  await window.mouse.wheel(0, 5000);
+  await expect(lastButton).toBeInViewport();
 });

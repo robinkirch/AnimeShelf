@@ -34,7 +34,16 @@ export const FRIEREN = fixtureAnime(52991, 'Sousou no Frieren', { episodes: 28 }
 export const SEASON_ANIME = fixtureAnime(60001, 'E2E Airing Show', { status: 'Currently Airing', airing: true, year: 2026, season: 'fall' });
 export const UPCOMING_ANIME = fixtureAnime(60002, 'E2E Upcoming Show', { status: 'Not yet aired', episodes: null, year: 2027, season: 'winter' });
 
-const ANIME_BY_ID = new Map([FRIEREN, SEASON_ANIME, UPCOMING_ANIME].map(anime => [anime.mal_id, anime]));
+// A franchise with six seasons, so "Add entire series" has a long list. The dialog only lists direct
+// prequels/sequels, so season 1 links to all later seasons.
+export const SERIES = Array.from({ length: 6 }, (_, i) => fixtureAnime(70001 + i, `E2E Series Season ${i + 1}`, { year: 2015 + i }));
+const relationEntry = (anime: JikanAnime) => ({ mal_id: anime.mal_id, type: 'anime', name: anime.title, url: '' });
+const SERIES_RELATIONS = new Map(SERIES.map((anime, i) => [anime.mal_id, i === 0
+  ? [{ relation: 'Sequel', entry: SERIES.slice(1).map(relationEntry) }]
+  : [{ relation: 'Prequel', entry: [relationEntry(SERIES[0])] }],
+]));
+
+const ANIME_BY_ID = new Map([FRIEREN, SEASON_ANIME, UPCOMING_ANIME, ...SERIES].map(anime => [anime.mal_id, anime]));
 const singlePage = (data: unknown[]) => ({ data, pagination: { last_visible_page: 1, has_next_page: false } });
 
 /** Requests to external hosts that reached the mocks, e.g. to assert which API calls the app made. */
@@ -66,7 +75,7 @@ export async function mockExternalApis(context: BrowserContext): Promise<ApiLog>
       if (path.startsWith('/seasons/')) return json(route, singlePage([SEASON_ANIME]));
 
       const relations = path.match(/^\/anime\/(\d+)\/relations$/);
-      if (relations) return json(route, { data: [] });
+      if (relations) return json(route, { data: SERIES_RELATIONS.get(Number(relations[1])) ?? [] });
 
       const byId = path.match(/^\/anime\/(\d+)$/);
       const anime = byId && ANIME_BY_ID.get(Number(byId[1]));

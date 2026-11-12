@@ -1,5 +1,5 @@
 import { completeProfileSetup, expect, test } from './fixtures';
-import { FRIEREN } from './mockApis';
+import { FRIEREN, SERIES } from './mockApis';
 import { en } from '../src/i18n/messages/en';
 
 const fill = (template: string, values: Record<string, string>) => template.replace(/\{(\w+)\}/g, (_, name) => values[name]);
@@ -48,4 +48,23 @@ test('search, add to shelf, track progress and remove, persisted in the test dat
 
   const fourth = await launchApp();
   await expect(fourth.window.getByRole('heading', { name: en.shelf.emptyTitle })).toBeVisible();
+});
+
+test('"Add entire series" dialog scrolls through a long series', async ({ launchApp }) => {
+  const { window } = await launchApp();
+  await completeProfileSetup(window);
+  await window.getByPlaceholder(en.search.standardPlaceholder).fill('series season 1');
+  await window.getByRole('button', { name: en.search.searchButton, exact: true }).click();
+  await window.getByRole('button', { name: en.anime.addEntireSeries }).click();
+
+  const dialog = window.getByRole('dialog', { name: fill(en.anime.addAllDialog.title, { title: SERIES[0].title }) });
+  const lastSeason = dialog.getByRole('heading', { name: SERIES.at(-1)!.title });
+  await expect(lastSeason).toBeAttached();
+  await expect(lastSeason).not.toBeInViewport();
+
+  // Scroll with the mouse wheel inside the list, as a user would.
+  await dialog.getByRole('heading', { name: SERIES[0].title, exact: true }).hover();
+  await window.mouse.wheel(0, 5000);
+  await expect(lastSeason).toBeInViewport();
+  await expect(dialog.getByRole('button', { name: en.anime.addAllDialog.submit })).toBeInViewport();
 });
