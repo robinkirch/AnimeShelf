@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
+import type { UserAnime, EpisodeWatchEvent, UserProfile, ImportMode, AnimeImportResult } from '../src/types/anime';
 import type { UpdateStatus } from '../src/types/update';
 
 contextBridge.exposeInMainWorld('electronStore', {
@@ -37,8 +37,16 @@ contextBridge.exposeInMainWorld('electronStore', {
   },
 
   // Batch Import
-  importAnimeBatch: (animeList: UserAnime[]): Promise<{ successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => {
-    return ipcRenderer.invoke('db:importAnimeBatch', animeList);
+  importAnimeBatch: (animeList: UserAnime[], mode: ImportMode): Promise<AnimeImportResult> => {
+    return ipcRenderer.invoke('db:importAnimeBatch', animeList, mode);
+  },
+
+  // Backup import (adds entries, never deletes)
+  importWatchHistory: (events: EpisodeWatchEvent[]): Promise<{ added: number; skipped: number }> => {
+    return ipcRenderer.invoke('db:importWatchHistory', events);
+  },
+  importIgnoredPreviewMalIds: (malIds: number[]): Promise<number> => {
+    return ipcRenderer.invoke('db:importIgnoredPreviewMalIds', malIds);
   },
 
   // User Profile

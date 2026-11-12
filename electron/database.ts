@@ -2,7 +2,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { app } from 'electron';
-import type { UserAnime, EpisodeWatchEvent, UserProfile } from '../src/types/anime';
+import type { UserAnime, EpisodeWatchEvent, UserProfile, ImportMode, AnimeImportResult } from '../src/types/anime';
 import { migrate } from './migrations';
 
 let db: Database.Database;
@@ -157,10 +157,40 @@ export function removeIgnoredPreviewMalId(mal_id: number): void {
   db.prepare('DELETE FROM ignored_preview_mal_ids WHERE mal_id = ?').run(mal_id);
 }
 
+// Backup import (JSON backup): adds entries, never deletes. Returns how many rows were actually added.
+/** Skips events of anime that are not on the shelf and events that already exist (same anime, episode and time). */
+export function importWatchHistory(events: EpisodeWatchEvent[]): { added: number; skipped: number } {
+  const stmt = db.prepare(`
+    INSERT INTO episode_watch_history (mal_id, episode_number_watched, watched_at)
+    SELECT @mal_id, @episode_number_watched, @watched_at
+    WHERE EXISTS (SELECT 1 FROM anime_shelf WHERE mal_id = @mal_id)
+      AND NOT EXISTS (
+        SELECT 1 FROM episode_watch_history
+        WHERE mal_id = @mal_id AND episode_number_watched = @episode_number_watched AND watched_at = @watched_at
+      )
+  `);
+  let added = 0;
+  db.transaction((evts: EpisodeWatchEvent[]) => {
+    for (const event of evts) added += stmt.run(event).changes;
+  })(events);
+  return { added, skipped: events.length - added };
+}
+
+export function importIgnoredPreviewMalIds(malIds: number[]): number {
+  const stmt = db.prepare('INSERT OR IGNORE INTO ignored_preview_mal_ids (mal_id) VALUES (?)');
+  let added = 0;
+  db.transaction((ids: number[]) => {
+    for (const id of ids) added += stmt.run(id).changes;
+  })(malIds);
+  return added;
+}
+
 // Batch Import
-export function importAnimeBatch(animeList: UserAnime[]): { successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> } {
+/** Adds the imported anime; existing ones are overwritten only in 'overwrite' mode. Never deletes. */
+export function importAnimeBatch(animeList: UserAnime[], mode: ImportMode = 'overwrite'): AnimeImportResult {
      console.log("ImportAnimeBatch called with:", animeList.length, "items.");
     let successCount = 0;
+    let skippedCount = 0;
     const errors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
 
     const insertStmt = db.prepare(`
@@ -189,6 +219,10 @@ export function importAnimeBatch(animeList: UserAnime[]): { successCount: number
             try {
                 const params = toAnimeRowParams(anime);
                 const exists = findStmt.get(anime.mal_id);
+                if (exists && mode === 'extend') {
+                    skippedCount++;
+                    continue;
+                }
                 if (exists) {
                     updateStmt.run(params);
                 } else {
@@ -202,8 +236,8 @@ export function importAnimeBatch(animeList: UserAnime[]): { successCount: number
         }
     })();
 
-    console.log(`Import finished. Success: ${successCount}, Errors: ${errors.length}`);
-    return { successCount, errors };
+    console.log(`Import finished (${mode}). Success: ${successCount}, Skipped: ${skippedCount}, Errors: ${errors.length}`);
+    return { successCount, skippedCount, errors };
 }
 
 // User Profile

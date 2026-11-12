@@ -3,10 +3,11 @@
 
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent, UserProfile } from '@/types/anime';
+import type { JikanAnime, UserAnime, UserAnimeStatus, EpisodeWatchEvent, UserProfile, ImportMode, AnimeImportResult } from '@/types/anime';
 import { rendererLogger } from '@/lib/logger'; // Import renderer logger
 import { parseDurationToMinutes } from '@/lib/parsing';
 import type { UpdateStatus } from '@/types/update';
+import type { AnimeShelfBackup } from '@/lib/backup';
 
 declare global {
   interface Window {
@@ -20,7 +21,9 @@ declare global {
       getIgnoredPreviewMalIds: () => Promise<number[]>;
       addIgnoredPreviewMalId: (mal_id: number) => Promise<void>;
       removeIgnoredPreviewMalId: (mal_id: number) => Promise<void>;
-      importAnimeBatch: (animeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
+      importAnimeBatch: (animeList: UserAnime[], mode: ImportMode) => Promise<AnimeImportResult>;
+      importWatchHistory: (events: EpisodeWatchEvent[]) => Promise<{ added: number; skipped: number }>;
+      importIgnoredPreviewMalIds: (malIds: number[]) => Promise<number>;
       getUserProfile: () => Promise<UserProfile | null>;
       updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
       getSecret: (name: string) => Promise<string | null>;
@@ -54,12 +57,19 @@ interface AnimeShelfContextType {
   removeIgnoredPreviewAnime: (mal_id: number) => void; 
   isPreviewAnimeIgnored: (mal_id: number) => boolean;
   ignoredPreviewAnimeMalIdsInitialized: boolean;
-  importAnimeBatch: (importedAnimeList: UserAnime[]) => Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }>;
+  importAnimeBatch: (importedAnimeList: UserAnime[], mode: ImportMode) => Promise<AnimeImportResult>;
+  importBackup: (backup: AnimeShelfBackup, mode: ImportMode) => Promise<BackupImportResult>;
   episodeWatchHistory: EpisodeWatchEvent[];
   userProfile: UserProfile | null;
   userProfileInitialized: boolean;
   updateUserProfile: (profileUpdates: Partial<Omit<UserProfile, 'profileSetupComplete'>>) => Promise<void>;
   markProfileSetupComplete: () => Promise<void>;
+}
+
+export interface BackupImportResult {
+  shelf: AnimeImportResult;
+  watchHistory: { added: number; skipped: number };
+  ignoredPreviewAdded: number;
 }
 
 const AnimeShelfContext = createContext<AnimeShelfContextType | undefined>(undefined);
@@ -308,32 +318,58 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
   }, [ignoredPreviewAnimeMalIds]);
 
   
-  const importAnimeBatch = useCallback(async (importedAnimeList: UserAnime[]): Promise<{ successCount: number, errors: Array<{ animeTitle?: string; malId?: number; error: string }> }> => {
+  const importAnimeBatch = useCallback(async (importedAnimeList: UserAnime[], mode: ImportMode): Promise<AnimeImportResult> => {
     rendererLogger.info(`Starting batch import of ${importedAnimeList.length} anime. electronStore is ${electronStore ? "available" : "undefined"}`, { category: 'user-action', action: 'import-batch'});
     if (electronStore) {
-      const result = await electronStore.importAnimeBatch(importedAnimeList);
+      const result = await electronStore.importAnimeBatch(importedAnimeList, mode);
       const dbShelf = await electronStore.getShelf();
       setShelf(dbShelf || []);
       return result;
     }
     // Fallback if no electronStore - This part is mostly for type consistency, real imports need DB.
     let successCount = 0;
+    let skippedCount = 0;
     const errors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
-    setShelf(prevShelf => {
-        const newShelf = [...prevShelf];
-        importedAnimeList.forEach(importedAnime => {
-             const existingIndex = newShelf.findIndex(item => item.mal_id === importedAnime.mal_id);
-              if (existingIndex !== -1) {
-                newShelf[existingIndex] = { ...newShelf[existingIndex], ...importedAnime }; 
-              } else {
-                newShelf.push(importedAnime);
-              }
-              successCount++;
-        });
-        return newShelf;
+    const newShelf = [...shelf];
+    importedAnimeList.forEach(importedAnime => {
+      const existingIndex = newShelf.findIndex(item => item.mal_id === importedAnime.mal_id);
+      if (existingIndex !== -1 && mode === 'extend') {
+        skippedCount++;
+        return;
+      }
+      if (existingIndex !== -1) {
+        newShelf[existingIndex] = { ...newShelf[existingIndex], ...importedAnime };
+      } else {
+        newShelf.push(importedAnime);
+      }
+      successCount++;
     });
+    setShelf(newShelf);
     rendererLogger.warn('Batch import processed without Electron store (simulated).', { category: 'user-action-error', action: 'import-batch-no-store'});
-    return { successCount, errors };
+    return { successCount, skippedCount, errors };
+  }, [electronStore, shelf]);
+
+  /** Imports a JSON backup: shelf first (watch history needs the anime), then history and ignored IDs. Never deletes;
+   *  `mode` only decides whether existing anime are overwritten. History and ignored IDs are always merged. */
+  const importBackup = useCallback(async (backup: AnimeShelfBackup, mode: ImportMode): Promise<BackupImportResult> => {
+    if (!electronStore) throw new Error('Backup import needs the Electron store.');
+    rendererLogger.info('Importing backup.', {
+      category: 'user-action', action: 'import-backup', mode,
+      shelf: backup.shelf.length, watchHistory: backup.watchHistory.length, ignoredPreview: backup.ignoredPreview.length,
+    });
+    const shelfResult = backup.shelf.length > 0 ? await electronStore.importAnimeBatch(backup.shelf, mode) : { successCount: 0, skippedCount: 0, errors: [] };
+    const watchHistory = backup.watchHistory.length > 0 ? await electronStore.importWatchHistory(backup.watchHistory) : { added: 0, skipped: 0 };
+    const ignoredPreviewAdded = backup.ignoredPreview.length > 0
+      ? await electronStore.importIgnoredPreviewMalIds(backup.ignoredPreview.map(entry => entry.mal_id))
+      : 0;
+
+    const [dbShelf, dbHistory, dbIgnored] = await Promise.all([
+      electronStore.getShelf(), electronStore.getEpisodeWatchHistory(), electronStore.getIgnoredPreviewMalIds(),
+    ]);
+    setShelf(dbShelf || []);
+    setEpisodeWatchHistory(dbHistory || []);
+    setIgnoredPreviewAnimeMalIds(dbIgnored || []);
+    return { shelf: shelfResult, watchHistory, ignoredPreviewAdded };
   }, [electronStore]);
 
   const updateUserProfile = useCallback(async (profileUpdates: Partial<Omit<UserProfile, 'profileSetupComplete'>>) => {
@@ -371,13 +407,14 @@ export const AnimeShelfProvider = ({ children }: { children: ReactNode }) => {
     isPreviewAnimeIgnored,
     ignoredPreviewAnimeMalIdsInitialized,
     importAnimeBatch,
+    importBackup,
     episodeWatchHistory,
     userProfile,
     userProfileInitialized,
     updateUserProfile,
     markProfileSetupComplete,
   }), [
-    shelf, addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf, getAnimeFromShelf, isInitialized, isElectronStoreReady, ignoredPreviewAnimeMalIds, addIgnoredPreviewAnime, removeIgnoredPreviewAnime, isPreviewAnimeIgnored, ignoredPreviewAnimeMalIdsInitialized, importAnimeBatch, episodeWatchHistory, userProfile, userProfileInitialized, updateUserProfile, markProfileSetupComplete,
+    shelf, addAnimeToShelf, updateAnimeOnShelf, removeAnimeFromShelf, isAnimeOnShelf, getAnimeFromShelf, isInitialized, isElectronStoreReady, ignoredPreviewAnimeMalIds, addIgnoredPreviewAnime, removeIgnoredPreviewAnime, isPreviewAnimeIgnored, ignoredPreviewAnimeMalIdsInitialized, importAnimeBatch, importBackup, episodeWatchHistory, userProfile, userProfileInitialized, updateUserProfile, markProfileSetupComplete,
   ]);
 
   return (

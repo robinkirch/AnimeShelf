@@ -10,7 +10,7 @@
     "dev": "next dev -p 9002",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit && tsc -p electron/tsconfig.json",
+    "typecheck": "tsc --noEmit --incremental false && tsc -p electron/tsconfig.json",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test": "vitest run",

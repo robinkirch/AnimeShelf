@@ -92,10 +92,24 @@ describe('importAnimeBatch', () => {
   it('inserts new and updates existing entries', () => {
     db.addAnimeToShelf(anime({ current_episode: 1 }));
     const result = db.importAnimeBatch([anime({ current_episode: 28, user_status: 'completed' }), anime({ mal_id: 2, title: 'New' })]);
-    expect(result).toEqual({ successCount: 2, errors: [] });
+    expect(result).toEqual({ successCount: 2, skippedCount: 0, errors: [] });
     const shelf = db.getShelf();
     expect(shelf.find(a => a.mal_id === 52991)).toMatchObject({ current_episode: 28, user_status: 'completed' });
     expect(shelf.find(a => a.mal_id === 2)?.title).toBe('New');
+  });
+
+  it('extend mode adds only new anime and leaves existing ones unchanged', () => {
+    db.addAnimeToShelf(anime({ current_episode: 1 }));
+    const result = db.importAnimeBatch([anime({ current_episode: 28 }), anime({ mal_id: 2, title: 'New' })], 'extend');
+    expect(result).toEqual({ successCount: 1, skippedCount: 1, errors: [] });
+    expect(db.getShelf().map(a => [a.mal_id, a.current_episode]).sort()).toEqual([[2, 3], [52991, 1]]);
+  });
+
+  it('never deletes anime that are not in the import', () => {
+    db.addAnimeToShelf(anime({ mal_id: 1, title: 'Only local' }));
+    db.importAnimeBatch([anime({ mal_id: 2, title: 'Imported' })], 'overwrite');
+    db.importAnimeBatch([anime({ mal_id: 3, title: 'Imported too' })], 'extend');
+    expect(db.getShelf().map(a => a.mal_id).sort()).toEqual([1, 2, 3]);
   });
 
   it('reports invalid rows and keeps the valid ones', () => {
@@ -103,6 +117,29 @@ describe('importAnimeBatch', () => {
     expect(result.successCount).toBe(1);
     expect(result.errors).toEqual([expect.objectContaining({ malId: 4 })]);
     expect(db.getShelf().map(a => a.mal_id)).toEqual([3]);
+  });
+});
+
+describe('backup import', () => {
+  const event = (episode: number, watched_at = '2026-10-01T20:00:00.000Z') => ({ mal_id: 52991, episode_number_watched: episode, watched_at });
+
+  it('adds watch events once and skips duplicates and anime that are not on the shelf', () => {
+    db.addAnimeToShelf(anime());
+    db.addEpisodeWatchEvents([event(1)]);
+    const result = db.importWatchHistory([event(1), event(2), { ...event(3), mal_id: 999 }, event(2)]);
+    expect(result).toEqual({ added: 1, skipped: 3 });
+    expect(db.getEpisodeWatchHistory().map(e => e.episode_number_watched).sort()).toEqual([1, 2]);
+  });
+
+  it('keeps the same episode watched at different times (rewatch)', () => {
+    db.addAnimeToShelf(anime());
+    expect(db.importWatchHistory([event(1), event(1, '2026-11-01T20:00:00.000Z')])).toEqual({ added: 2, skipped: 0 });
+  });
+
+  it('adds ignored preview IDs and counts only new ones', () => {
+    db.addIgnoredPreviewMalId(5);
+    expect(db.importIgnoredPreviewMalIds([5, 6, 7, 6])).toBe(2);
+    expect(db.getIgnoredPreviewMalIds().sort()).toEqual([5, 6, 7]);
   });
 });
 

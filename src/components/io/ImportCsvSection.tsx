@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAnimeShelf } from '@/contexts/AnimeShelfContext';
-import type { UserAnime, UserAnimeStatus, JikanAnime } from '@/types/anime';
+import type { UserAnime, UserAnimeStatus, JikanAnime, ImportMode } from '@/types/anime';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { USER_ANIME_STATUS_OPTIONS, BROADCAST_DAY_OPTIONS } from '@/types/anime';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { CheckCircle, XCircle, UploadCloud, Loader2, Info } from 'lucide-react';
@@ -14,26 +15,43 @@ import { useToast } from '@/hooks/use-toast';
 import { jikanApi } from '@/lib/jikanApi'; // Import jikanApi
 import { useI18n } from '@/i18n/I18nContext';
 import { parseCsvLine, parseDurationToMinutes } from '@/lib/parsing';
+import { parseBackup, type BackupParseError } from '@/lib/backup';
+import { rendererLogger } from '@/lib/logger';
+import type { BackupImportResult } from '@/contexts/AnimeShelfContext';
+import type { MessageKey } from '@/i18n/I18nContext';
 
 const EXPECTED_HEADERS = ['mal_id', 'title', 'cover_image', 'total_episodes', 'user_status', 'current_episode', 'user_rating', 'genres', 'studios', 'type', 'year', 'season', 'streaming_platforms', 'broadcast_day', 'duration_minutes'];
 const MINIMUM_REQUIRED_FOR_PROCESSING = ['user_status', 'current_episode'];
 
+const BACKUP_ERROR_KEYS: Record<BackupParseError, MessageKey> = {
+  invalidJson: 'io.import.toast.backupInvalidJson',
+  notABackup: 'io.import.toast.backupNotABackup',
+  unsupportedVersion: 'io.import.toast.backupUnsupportedVersion',
+};
+
+const isBackupFile = (file: File) => file.name.toLowerCase().endsWith('.json');
+
 export function ImportCsvSection({ onImported }: { onImported: () => void }) {
   const { t } = useI18n();
-const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
+const { importAnimeBatch, importBackup, isAnimeOnShelf, isElectronStoreReady } = useAnimeShelf();
   const [file, setFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResults, setImportResults] = useState<{ successCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> } | null>(null);
+  const [importResults, setImportResults] = useState<{ successCount: number; skippedCount: number; errors: Array<{ animeTitle?: string; malId?: number; error: string }> } | null>(null);
+  // Asked before every import: extend (keep existing anime) or overwrite existing anime. Nothing is ever deleted.
+  const [isModeDialogOpen, setIsModeDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [totalLines, setTotalLines] = useState(0);
   const [processedLines, setProcessedLines] = useState(0);
+  const [backupSummary, setBackupSummary] = useState<{ result: BackupImportResult; invalid: number } | null>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
-      if (event.target.files[0].type === "text/csv" || event.target.files[0].name.endsWith(".csv")) {
-        setFile(event.target.files[0]);
-        setImportResults(null); 
+      const selected = event.target.files[0];
+      if (selected.type === "text/csv" || selected.name.toLowerCase().endsWith(".csv") || isBackupFile(selected)) {
+        setFile(selected);
+        setImportResults(null);
+        setBackupSummary(null);
         setTotalLines(0);
         setProcessedLines(0);
       } else {
@@ -43,11 +61,58 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
     }
   };
 
-  const handleImport = async () => {
+  const resetFileInput = () => {
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setFile(null);
+  };
+
+  /** JSON backup: shelf, watch history and ignored preview entries (src/lib/backup.ts). */
+  const importBackupFile = async (selected: File, mode: ImportMode) => {
+    setIsImporting(true);
+    setImportResults(null);
+    setBackupSummary(null);
+    try {
+      const parsed = parseBackup(await selected.text());
+      if (!parsed.ok) {
+        toast({ title: t('io.import.toast.errorTitle'), description: t(BACKUP_ERROR_KEYS[parsed.error]), variant: "destructive" });
+        return;
+      }
+      const { backup, invalid } = parsed.result;
+      const result = await importBackup(backup, mode);
+      setBackupSummary({ result, invalid: invalid.shelf + invalid.watchHistory + invalid.ignoredPreview });
+      toast({
+        title: t('io.import.toast.backupSuccessTitle'),
+        description: t('io.import.toast.backupSuccessDescription', {
+          shelf: result.shelf.successCount, history: result.watchHistory.added, ignored: result.ignoredPreviewAdded,
+        }),
+        variant: result.shelf.errors.length > 0 ? "destructive" : "default",
+      });
+      onImported();
+    } catch (error) {
+      rendererLogger.error('Backup import failed.', { category: 'user-action-error', action: 'import-backup', error: String(error) });
+      toast({ title: t('io.import.toast.errorTitle'), description: t('io.import.toast.backupFailed'), variant: "destructive" });
+    } finally {
+      setIsImporting(false);
+      resetFileInput();
+    }
+  };
+
+  const handleImportClick = () => {
     if (!file) {
       toast({ title: t('io.import.toast.errorTitle'), description: t('io.import.toast.noFile'), variant: "destructive" });
       return;
     }
+    setIsModeDialogOpen(true);
+  };
+
+  const handleImport = async (mode: ImportMode) => {
+    setIsModeDialogOpen(false);
+    if (!file) return;
+    if (isBackupFile(file)) {
+      await importBackupFile(file, mode);
+      return;
+    }
+    setBackupSummary(null);
     setIsImporting(true);
     setImportResults(null);
     setProcessedLines(0);
@@ -94,6 +159,7 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
       setTotalLines(lines.length -1); // -1 for header row
       const importedAnimeList: UserAnime[] = [];
       const processingErrors: Array<{ animeTitle?: string; malId?: number; error: string }> = [];
+      let skippedExisting = 0;
 
       for (let i = 1; i < lines.length; i++) {
         setProcessedLines(i); // Update processed lines count (i is 1-based for data rows)
@@ -124,6 +190,12 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
                  processingErrors.push({ animeTitle: row.title?.trim() || t('io.import.row', { row: i + 1 }), error: t('io.import.errors.invalidMalId', { value: mal_id_csv_str }) });
                  continue;
             }
+        }
+
+        // Extend mode keeps existing anime unchanged, so don't spend API requests on them.
+        if (mode === 'extend' && mal_id && isAnimeOnShelf(mal_id)) {
+            skippedExisting++;
+            continue;
         }
 
         const title_csv = row.title?.trim();
@@ -254,9 +326,10 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
       }
 
       // Await the database operation
-      const dbResults = await importAnimeBatch(importedAnimeList);
+      const dbResults = await importAnimeBatch(importedAnimeList, mode);
       const finalResults = {
         successCount: dbResults.successCount,
+        skippedCount: dbResults.skippedCount + skippedExisting,
         errors: [...processingErrors, ...dbResults.errors] 
       };
       console.log(finalResults.successCount+"successes to "+finalResults.errors.length+" errors");
@@ -293,7 +366,12 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
   return (
     <div className="space-y-4 py-4 grow">
       <div>
-        <h4 className="font-medium mb-1 text-sm">{t('io.import.formatTitle')}</h4>
+        <h4 className="font-medium mb-1 text-sm">{t('io.import.backupTitle')}</h4>
+        <p className="text-xs text-muted-foreground">{t('io.import.backupDescription')}</p>
+      </div>
+      <div>
+        <h4 className="font-medium mb-1 text-sm">{t('io.import.csvTitle')}</h4>
+        <h5 className="font-medium mb-1 text-xs">{t('io.import.formatTitle')}</h5>
         <p className="text-xs text-muted-foreground">
           {t('io.import.formatHeader')}{' '}
           {t('io.import.requiredColumns')} (<code className="text-xs bg-muted/50 px-1 rounded">mal_id</code> {t('io.import.or')} <code className="text-xs bg-muted/50 px-1 rounded">title</code>), <code className="text-xs bg-muted/50 px-1 rounded">user_status</code>, <code className="text-xs bg-muted/50 px-1 rounded">current_episode</code>.
@@ -312,16 +390,63 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
       </div>
       <div className="space-y-1">
         <Label htmlFor="csv-file" className="text-sm">{t('io.import.selectFile')}</Label>
-        <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} ref={fileInputRef} className="text-sm" />
+        <Input id="csv-file" type="file" accept=".json,.csv" onChange={handleFileChange} ref={fileInputRef} className="text-sm" />
       </div>
-      <Button onClick={handleImport} disabled={!file || isImporting || !isElectronStoreReady} className="w-full">
+      <Button onClick={handleImportClick} disabled={!file || isImporting || !isElectronStoreReady} className="w-full">
         {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4" />}
         {t('io.import.button')}
       </Button>
 
+      <Dialog open={isModeDialogOpen} onOpenChange={setIsModeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('io.import.modeDialog.title')}</DialogTitle>
+            <DialogDescription>{t('io.import.modeDialog.description')}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <Button variant="outline" onClick={() => void handleImport('extend')} className="h-auto min-h-9 whitespace-normal py-3 flex-col items-start text-left">
+              <span className="font-semibold">{t('io.import.modeDialog.extend')}</span>
+              <span className="text-xs font-normal text-muted-foreground">{t('io.import.modeDialog.extendHint')}</span>
+            </Button>
+            <Button variant="outline" onClick={() => void handleImport('overwrite')} className="h-auto min-h-9 whitespace-normal py-3 flex-col items-start text-left">
+              <span className="font-semibold">{t('io.import.modeDialog.overwrite')}</span>
+              <span className="text-xs font-normal text-muted-foreground">{t('io.import.modeDialog.overwriteHint')}</span>
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsModeDialogOpen(false)}>{t('common.cancel')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {isImporting && totalLines > 0 && (
         <div className="text-sm text-muted-foreground text-center mt-2">
           {t('io.import.processing', { current: processedLines, total: totalLines })}
+        </div>
+      )}
+
+      {backupSummary && (
+        <div className="mt-4">
+          <h4 className="font-medium mb-2 text-sm">{t('io.import.resultsTitle')}</h4>
+          <Alert variant={backupSummary.result.shelf.errors.length > 0 ? "destructive" : "default"}>
+            {backupSummary.result.shelf.errors.length > 0 ? <Info className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+            <AlertTitle className="text-sm">{t('io.import.backupShelf', { count: backupSummary.result.shelf.successCount })}</AlertTitle>
+            <AlertDescription className="text-xs space-y-1">
+              {backupSummary.result.shelf.skippedCount > 0 && <p>{t('io.import.skippedExisting', { count: backupSummary.result.shelf.skippedCount })}</p>}
+              <p>{t('io.import.backupHistory', { added: backupSummary.result.watchHistory.added, skipped: backupSummary.result.watchHistory.skipped })}</p>
+              <p>{t('io.import.backupIgnored', { count: backupSummary.result.ignoredPreviewAdded })}</p>
+              {backupSummary.invalid > 0 && <p>{t('io.import.backupInvalid', { count: backupSummary.invalid })}</p>}
+            </AlertDescription>
+          </Alert>
+          {backupSummary.result.shelf.errors.length > 0 && (
+            <ul className="text-xs space-y-1 mt-2 max-h-32 overflow-y-auto border rounded-md p-2 bg-muted/30">
+              {backupSummary.result.shelf.errors.map((err, index) => (
+                <li key={index} className="text-destructive dark:text-red-400">
+                  <strong>{err.animeTitle || (err.malId ? t('io.import.malId', { id: err.malId }) : t('io.import.row', { row: index + 1 }))}:</strong> {err.error}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -337,6 +462,9 @@ const { importAnimeBatch, isElectronStoreReady } = useAnimeShelf();
               {importResults.successCount > 0 ? t('io.import.resultSuccess', { count: importResults.successCount }) : (importResults.errors.length > 0 ? t('io.import.resultWithErrors') : t('io.import.resultProcessed'))}
               {importResults.errors.length > 0 && t('io.import.resultErrorCount', { count: importResults.errors.length })}
             </AlertTitle>
+            {importResults.skippedCount > 0 && (
+              <AlertDescription className="text-xs">{t('io.import.skippedExisting', { count: importResults.skippedCount })}</AlertDescription>
+            )}
             {(importResults.errors.length > 0 || (importResults.successCount === 0 && importResults.errors.length === 0 && totalLines > 0)) && (
                  <AlertDescription className="text-xs">
                     {importResults.errors.length > 0 ? t('io.import.seeDetails') : (importResults.successCount === 0 && totalLines > 0 ? t('io.import.noValidData') : t('io.import.noData'))}

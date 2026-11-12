@@ -184,6 +184,18 @@ export interface JikanAPIRelationsResponse {
   data: JikanAnimeRelation[];
 }
 
+/** Import of a file into an existing shelf: 'extend' only adds anime that are not on the shelf yet, 'overwrite' also
+ *  replaces existing anime with the imported values. Neither deletes anything. */
+export type ImportMode = 'extend' | 'overwrite';
+
+export interface AnimeImportResult {
+  /** Anime added or (in 'overwrite' mode) updated. */
+  successCount: number;
+  /** Anime already on the shelf and left unchanged ('extend' mode). */
+  skippedCount: number;
+  errors: Array<{ animeTitle?: string; malId?: number; error: string }>;
+}
+
 export interface EpisodeWatchEvent {
   mal_id: number;
   episode_number_watched: number; 

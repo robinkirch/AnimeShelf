@@ -122,7 +122,9 @@ app.on('ready', async () => {
   ipcMain.handle('db:getIgnoredPreviewMalIds', async () => { mainLogger.debug('IPC: db:getIgnoredPreviewMalIds invoked'); return database.getIgnoredPreviewMalIds(); });
   ipcMain.handle('db:addIgnoredPreviewMalId', async (event, mal_id) => { mainLogger.debug('IPC: db:addIgnoredPreviewMalId invoked', { mal_id }); return database.addIgnoredPreviewMalId(mal_id); });
   ipcMain.handle('db:removeIgnoredPreviewMalId', async (event, mal_id) => { mainLogger.debug('IPC: db:removeIgnoredPreviewMalId invoked', { mal_id }); return database.removeIgnoredPreviewMalId(mal_id); });
-  ipcMain.handle('db:importAnimeBatch', async(event, animeList) => { mainLogger.debug('IPC: db:importAnimeBatch invoked', { animeListCount: animeList?.length }); return database.importAnimeBatch(animeList); });
+  ipcMain.handle('db:importAnimeBatch', async(event, animeList, mode) => { mainLogger.debug('IPC: db:importAnimeBatch invoked', { animeListCount: animeList?.length, mode }); return database.importAnimeBatch(animeList, mode === 'extend' ? 'extend' : 'overwrite'); });
+  ipcMain.handle('db:importWatchHistory', async (event, events) => { mainLogger.debug('IPC: db:importWatchHistory invoked', { eventsCount: events?.length }); return database.importWatchHistory(events); });
+  ipcMain.handle('db:importIgnoredPreviewMalIds', async (event, malIds) => { mainLogger.debug('IPC: db:importIgnoredPreviewMalIds invoked', { count: malIds?.length }); return database.importIgnoredPreviewMalIds(malIds); });
   ipcMain.handle('db:getUserProfile', async () => { mainLogger.debug('IPC: db:getUserProfile invoked'); return database.getUserProfile(); });
   ipcMain.handle('db:updateUserProfile', async (event, profile) => { mainLogger.debug('IPC: db:updateUserProfile invoked for user', { username: profile?.username } ); return database.updateUserProfile(profile); });
 
