@@ -70,8 +70,9 @@ export function setupAutoUpdater(getWindow: () => BrowserWindow | null, options:
     }
     mainLogger.info('Update downloaded, installing.', { version: info.version });
     setStatus({ state: 'installing', version: info.version });
-    // Silent NSIS install, then start the new version.
-    autoUpdater.quitAndInstall(true, true);
+    // Not silent: the NSIS progress window stays visible while the old version is removed and the new one is
+    // extracted (~33k files, several minutes), otherwise the app just seems to be gone. Starts the new version after.
+    autoUpdater.quitAndInstall(false, true);
   });
   autoUpdater.on('error', error => {
     // Offline or GitHub not reachable: only shown in the settings, the next start tries again.
